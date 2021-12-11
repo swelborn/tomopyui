@@ -4,7 +4,7 @@
 from ipywidgets import *
 
 
-def create_user_info_box(generalmetadata):
+def create_user_info_box(metadata):
     extend_description_style = {"description_width": "auto"}
     collection_date = DatePicker(
         description="Date that you collected your data:",
@@ -75,31 +75,31 @@ def create_user_info_box(generalmetadata):
     )
 
     def update_collection_date(change):
-        generalmetadata["collection_date"] = change.new
-        generalmetadata["collection_date"] = str(
-            generalmetadata["collection_date"]
+        metadata["collection_date"] = change.new
+        metadata["collection_date"] = str(
+            metadata["collection_date"]
         ).replace("-", "")
 
     def update_analysis_date(change):
-        generalmetadata["analysis_date"] = change.new
-        generalmetadata["analysis_date"] = str(
-            generalmetadata["analysis_date"]
+        metadata["analysis_date"] = change.new
+        metadata["analysis_date"] = str(
+            metadata["analysis_date"]
         ).replace("-", "")
 
     def update_user_name(change):
-        generalmetadata["user_name"] = change.new
+        metadata["user_name"] = change.new
 
     def update_user_institution(change):
-        generalmetadata["user_institution"] = change.new
+        metadata["user_institution"] = change.new
 
     def update_phone_number(change):
-        generalmetadata["phone_number"] = change.new
+        metadata["phone_number"] = change.new
 
     def update_email(change):
-        generalmetadata["email"] = change.new
+        metadata["email"] = change.new
 
     def update_carrier(change):
-        generalmetadata["carrier"] = change.new
+        metadata["carrier"] = change.new
 
     user_name.observe(update_analysis_date, names="value")
     user_institution.observe(update_analysis_date, names="value")
@@ -123,4 +123,4 @@ def create_user_info_box(generalmetadata):
         layout=box_layout,
     )
 
-    return generalmetadata, infobox
+    return metadata, infobox

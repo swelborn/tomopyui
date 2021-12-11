@@ -6,7 +6,7 @@ import functools
 import json
 
 
-def generate_recon_box(recon_tomo_metadata):
+def make_recon_tab(recon_tomo_metadata):
 
     extend_description_style = {"description_width": "auto"}
     fpath = recon_tomo_metadata["fpath"]
@@ -455,10 +455,10 @@ def generate_recon_box(recon_tomo_metadata):
         ),
     )
 
-    recon_box = VBox([recon_initialization_box,options_accordion, methods_accordion,
+    recon_dashboard = VBox([recon_initialization_box,options_accordion, methods_accordion,
         save_options_accordion])
 
 
 
 
-    return recon_box
+    return recon_dashboard

@@ -17,13 +17,13 @@ import dxchange
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from tomopy.sim.project import angles as angle_maker
 import smtplib
 import time
 import os
 import tifffile as tf
 import glob
 
+from tomopy.sim.project import angles as angle_maker
 from matplotlib import animation, rc, colors
 from matplotlib.widgets import Slider
 

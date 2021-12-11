@@ -3,9 +3,17 @@ from ipywidgets import *
 import functools
 
 
-def file_chooser_recon(reconmetadata, generalmetadata):
+# will create one file uploader, given a specific working directory and a title 
+# for the uploader
+def create_file_uploader(wd, title)
+        
+
+
+    return 
+
+
+def file_chooser_recon(reconmetadata):
     extend_description_style = {"description_width": "auto"}
-    cwd = generalmetadata["starting_wd"]
     uploader_no = 10
     uploaders = [FileChooser(path=cwd, title=f"tomo_{i}") for i in range(uploader_no)]
 

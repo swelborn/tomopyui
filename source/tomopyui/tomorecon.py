@@ -24,7 +24,7 @@ import tomopy
 import numpy as np
 
 
-class TomoRecon:
+class TomoRecon(td.TomoData):
     """
     Class for performing reconstructions.
 
@@ -39,7 +39,7 @@ class TomoRecon:
     def __init__(self, metadata, callbacks=None, recon=None, tomo=None):
 
         self.metadata = metadata
-        self.tomo = td.TomoData(metadata=self.metadata)
+        self.tomo = super().__init__(metadata=self.metadata)
         if self.metadata["partial"]:
             self.prj_range_x = self.metadata["prj_range_x"]
             self.prj_range_y = self.metadata["prj_range_y"]

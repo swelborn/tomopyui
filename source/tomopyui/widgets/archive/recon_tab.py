@@ -6,7 +6,7 @@ import functools
 import json
 
 
-def generate_alignment_box(recon_tomo_metadata):
+def make_recon_tab(recon_tomo_metadata):
 
     extend_description_style = {"description_width": "auto"}
     fpath = recon_tomo_metadata["fpath"]
@@ -17,14 +17,14 @@ def generate_alignment_box(recon_tomo_metadata):
 
     #tomo_number = int(filter(str.isdigit, box_title))
 
-    radio_alignment = RadioButtons(
+    radio_recon = RadioButtons(
         options=["Yes", "No"],
         style=extend_description_style,
         layout=Layout(width="20%"),
         value="No",
     )
 
-    radio_alignment_fulldataset = RadioButtons(
+    radio_recon_fulldataset = RadioButtons(
         options=["Full", "Partial"],
         style=extend_description_style,
         layout=Layout(width="20%"),
@@ -64,7 +64,7 @@ def generate_alignment_box(recon_tomo_metadata):
 
     def activate_box(change):
         if change.new == 0:
-            radio_alignment_fulldataset.disabled = False
+            radio_recon_fulldataset.disabled = False
             recon_tomo_metadata["reconstruct"] = True
             recon_tomo_metadata["opts"] = {}
             recon_tomo_metadata["methods"] = {}
@@ -74,7 +74,7 @@ def generate_alignment_box(recon_tomo_metadata):
             options_accordion.selected_index = 0
             methods_accordion.selected_index = 0
         elif change.new == 1:
-            radio_alignment_fulldataset.disabled = True
+            radio_recon_fulldataset.disabled = True
             projection_range_x_recon.disabled = True
             projection_range_y_recon.disabled = True
             recon_tomo_metadata["reconstruct"] = False
@@ -149,8 +149,8 @@ def generate_alignment_box(recon_tomo_metadata):
             #projection_range_z_recon.disabled = True
 
     recon_tomo_metadata["partial"] = False
-    radio_alignment.observe(activate_box, names="index")
-    radio_alignment_fulldataset.observe(activate_full_partial, names="index")
+    radio_recon.observe(activate_box, names="index")
+    radio_recon_fulldataset.observe(activate_full_partial, names="index")
 
     #### callbacks for projection range sliders
 
@@ -442,9 +442,9 @@ def generate_alignment_box(recon_tomo_metadata):
     recon_initialization_box = HBox(
         [
             radio_description,
-            radio_alignment,
+            radio_recon,
             partial_radio_description,
-            radio_alignment_fulldataset,
+            radio_recon_fulldataset,
             sliders_box,
         ],
         layout=Layout(
@@ -455,10 +455,7 @@ def generate_alignment_box(recon_tomo_metadata):
         ),
     )
 
-    recon_box = VBox([recon_initialization_box,options_accordion, methods_accordion,
+    recon_tab = VBox([recon_initialization_box,options_accordion, methods_accordion,
         save_options_accordion])
 
-
-
-
-    return recon_box
+    return recon_tab

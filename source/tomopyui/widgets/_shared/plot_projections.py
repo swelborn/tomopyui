@@ -8,7 +8,7 @@ from tomopy.widgets.file_chooser_recon import file_chooser_recon
 import tomopy.data.tomodata as td
 
 
-def plot_aligned_data(
+def plot_projections(
     reconmetadata,
     alignmentmetadata,
     importmetadata,

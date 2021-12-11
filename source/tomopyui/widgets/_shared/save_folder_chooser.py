@@ -105,7 +105,7 @@ def save_file_location(importmetadata, generalmetadata, tomodata):
     mkdir_button.on_click(mkdir_on_button_click)
     overwrite_button.on_click(overwrite_button_on_click)
 
-    recon_box_layout = Layout(
+    recon_dashboard_layout = Layout(
         border="3px solid blue",
         width="50%",
         height="auto",
@@ -144,7 +144,7 @@ def save_file_location(importmetadata, generalmetadata, tomodata):
             overwrite_button,
             save_tomo_data_button,
         ],
-        layout=recon_box_layout,
+        layout=recon_dashboard_layout,
     )
 
     return save_data_box
