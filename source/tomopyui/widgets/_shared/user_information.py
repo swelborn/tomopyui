@@ -76,15 +76,11 @@ def create_user_info_box(metadata):
 
     def update_collection_date(change):
         metadata["collection_date"] = change.new
-        metadata["collection_date"] = str(
-            metadata["collection_date"]
-        ).replace("-", "")
+        metadata["collection_date"] = str(metadata["collection_date"]).replace("-", "")
 
     def update_analysis_date(change):
         metadata["analysis_date"] = change.new
-        metadata["analysis_date"] = str(
-            metadata["analysis_date"]
-        ).replace("-", "")
+        metadata["analysis_date"] = str(metadata["analysis_date"]).replace("-", "")
 
     def update_user_name(change):
         metadata["user_name"] = change.new

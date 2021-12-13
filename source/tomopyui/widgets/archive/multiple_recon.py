@@ -15,7 +15,7 @@ def make_recon_tab(recon_tomo_metadata):
     recon_tomo_metadata["methods"] = {}
     recon_tomo_metadata["save_opts"] = {}
 
-    #tomo_number = int(filter(str.isdigit, box_title))
+    # tomo_number = int(filter(str.isdigit, box_title))
 
     radio_recon = RadioButtons(
         options=["Yes", "No"],
@@ -102,7 +102,7 @@ def make_recon_tab(recon_tomo_metadata):
         if folder_import:
             _tomo = td.TomoData(metadata=recon_tomo_metadata)
             size = _tomo.prj_imgs.shape
-            #sizeZ = size[0]
+            # sizeZ = size[0]
             sizeY = size[1]
             sizeX = size[2]
             set_projection_ranges(sizeY, sizeX)
@@ -112,7 +112,7 @@ def make_recon_tab(recon_tomo_metadata):
                 if tiff_count_in_folder > 50:
                     sizeX = tif.pages[0].tags["ImageWidth"].value
                     sizeY = tif.pages[0].tags["ImageLength"].value
-                    #sizeZ = tiff_count_in_folder # can maybe use this later
+                    # sizeZ = tiff_count_in_folder # can maybe use this later
                 else:
                     imagesize = tif.pages[0].tags["ImageDescription"]
                     size = json.loads(imagesize.value)["shape"]
@@ -133,7 +133,7 @@ def make_recon_tab(recon_tomo_metadata):
             recon_tomo_metadata["partial"] = True
             projection_range_x_recon.disabled = False
             projection_range_y_recon.disabled = False
-            #projection_range_z_recon.disabled = False
+            # projection_range_z_recon.disabled = False
             if fname != "":
                 if fname.__contains__(".tif"):
                     load_tif_shape_tag()
@@ -146,7 +146,7 @@ def make_recon_tab(recon_tomo_metadata):
             set_projection_ranges(sizeY, sizeX)
             projection_range_x_recon.disabled = True
             projection_range_y_recon.disabled = True
-            #projection_range_z_recon.disabled = True
+            # projection_range_z_recon.disabled = True
 
     recon_tomo_metadata["partial"] = False
     radio_recon.observe(activate_box, names="index")
@@ -157,20 +157,25 @@ def make_recon_tab(recon_tomo_metadata):
     @debounce(0.2)
     def projection_range_x_update_dict(change):
         recon_tomo_metadata["prj_range_x"] = change.new
-    projection_range_x_recon.observe(projection_range_x_update_dict, 'value')
+
+    projection_range_x_recon.observe(projection_range_x_update_dict, "value")
 
     @debounce(0.2)
     def projection_range_y_update_dict(change):
         recon_tomo_metadata["prj_range_y"] = change.new
-    projection_range_y_recon.observe(projection_range_y_update_dict, 'value')
+
+    projection_range_y_recon.observe(projection_range_y_update_dict, "value")
 
     #### downsampling
     recon_tomo_metadata["opts"]["downsample"] = False
     recon_tomo_metadata["opts"]["downsample_factor"] = 1
+
     def downsample_turn_on(change):
         if change.new == 1:
             recon_tomo_metadata["opts"]["downsample"] = True
-            recon_tomo_metadata["opts"]["downsample_factor"] = downsample_factor_text.value
+            recon_tomo_metadata["opts"][
+                "downsample_factor"
+            ] = downsample_factor_text.value
             downsample_factor_text.disabled = False
         if change.new == 0:
             recon_tomo_metadata["opts"]["downsample"] = False
@@ -185,18 +190,19 @@ def make_recon_tab(recon_tomo_metadata):
         recon_tomo_metadata["opts"]["downsample_factor"] = change.new
 
     downsample_factor_text = BoundedFloatText(
-        value=1, min=0.001, max=1.0, description="Downsampling factor:", disabled=True,
-        style=extend_description_style
+        value=1,
+        min=0.001,
+        max=1.0,
+        description="Downsampling factor:",
+        disabled=True,
+        style=extend_description_style,
     )
 
-    downsample_factor_text.observe(downsample_factor_update_dict, names='value')
-
+    downsample_factor_text.observe(downsample_factor_update_dict, names="value")
 
     #### radio descriptions
 
-    radio_description = (
-        "Would you like to reconstruct this dataset?"
-    )
+    radio_description = "Would you like to reconstruct this dataset?"
     partial_radio_description = (
         "Would you like to use the full dataset, or a partial dataset?"
     )
@@ -221,15 +227,11 @@ def make_recon_tab(recon_tomo_metadata):
         recon_tomo_metadata["save_opts"] = create_option_dictionary(opt_list)
 
     save_opts = ["tomo_before", "recon", "tiff", "npy"]
-    recon_tomo_metadata["save_opts"] = {key:None for key in save_opts}
+    recon_tomo_metadata["save_opts"] = {key: None for key in save_opts}
 
     def create_save_checkboxes(opts):
         checkboxes = [
-            Checkbox(
-                description=opt,
-                style=extend_description_style,
-            )
-            for opt in opts
+            Checkbox(description=opt, style=extend_description_style,) for opt in opts
         ]
         return checkboxes
 
@@ -239,8 +241,7 @@ def make_recon_tab(recon_tomo_metadata):
         (
             opt.observe(
                 functools.partial(
-                    create_save_dict_on_checkmark,
-                    opt_list=save_checkboxes,
+                    create_save_dict_on_checkmark, opt_list=save_checkboxes,
                 ),
                 names=["value"],
             )
@@ -324,7 +325,10 @@ def make_recon_tab(recon_tomo_metadata):
         if change.new == False:
             recon_tomo_metadata["methods"].pop(change.owner.description)
 
-    [checkbox.observe(create_dict_on_checkmark_no_options) for checkbox in recon_method_list]
+    [
+        checkbox.observe(create_dict_on_checkmark_no_options)
+        for checkbox in recon_method_list
+    ]
     # Makes generator for mapping of options to observe functions.
     # If other options needed for other reconstruction methods, use similar
 
@@ -373,55 +377,57 @@ def make_recon_tab(recon_tomo_metadata):
 
     # number of iterations
     recon_tomo_metadata["opts"]["num_iter"] = 20
+
     def update_num_iter_dict(change):
         recon_tomo_metadata["opts"]["num_iter"] = change.new
-    number_of_recon_iterations = IntText(
-        description="Number of Iterations: ",
-        style=extend_description_style,
-        value=20,
-    )
-    number_of_recon_iterations.observe(update_num_iter_dict, names='value')
 
-    #center of rotation
+    number_of_recon_iterations = IntText(
+        description="Number of Iterations: ", style=extend_description_style, value=20,
+    )
+    number_of_recon_iterations.observe(update_num_iter_dict, names="value")
+
+    # center of rotation
     recon_tomo_metadata["opts"]["center"] = 0
+
     def update_center_of_ration_dict(change):
         recon_tomo_metadata["opts"]["center"] = change.new
+
     center_of_rotation = IntText(
         description="Center of Rotation: ",
         style=extend_description_style,
-        value=recon_tomo_metadata["opts"]["center"]
+        value=recon_tomo_metadata["opts"]["center"],
     )
-    center_of_rotation.observe(update_center_of_ration_dict, names='value')
+    center_of_rotation.observe(update_center_of_ration_dict, names="value")
 
     recon_tomo_metadata["opts"]["extra_options"] = None
+
     def update_extra_options_dict(change):
         recon_tomo_metadata["opts"]["extra_options"] = change.new
+
     extra_options = Text(
         description="Extra options: ",
         placeholder='{"MinConstraint": 0}',
         style=extend_description_style,
     )
-    extra_options.observe(update_extra_options_dict, names='value')
+    extra_options.observe(update_extra_options_dict, names="value")
 
-    downsample_hb = HBox([downsample_checkbox,downsample_factor_text],
+    downsample_hb = HBox(
+        [downsample_checkbox, downsample_factor_text],
         layout=Layout(flex_wrap="wrap", justify_content="space-between"),
-        )
+    )
 
     options_accordion = Accordion(
         children=[
-                    HBox(
-                        [
-                            number_of_recon_iterations,
-                            center_of_rotation,
-                            downsample_checkbox,
-                            downsample_factor_text,
-                            extra_options,
-                        ],
-                        layout=Layout(
-                            flex_flow="row wrap", justify_content="space-between"
-                        ),
-                    ),
-                    
+            HBox(
+                [
+                    number_of_recon_iterations,
+                    center_of_rotation,
+                    downsample_checkbox,
+                    downsample_factor_text,
+                    extra_options,
+                ],
+                layout=Layout(flex_flow="row wrap", justify_content="space-between"),
+            ),
         ],
         selected_index=None,
         layout=Layout(width="100%"),
@@ -430,10 +436,7 @@ def make_recon_tab(recon_tomo_metadata):
 
     #### putting it all together
     sliders_box = VBox(
-        [
-            projection_range_x_recon,
-            projection_range_y_recon,
-        ],
+        [projection_range_x_recon, projection_range_y_recon,],
         layout=Layout(width="30%"),
         justify_content="center",
         align_items="space-between",
@@ -455,10 +458,13 @@ def make_recon_tab(recon_tomo_metadata):
         ),
     )
 
-    recon_dashboard = VBox([recon_initialization_box,options_accordion, methods_accordion,
-        save_options_accordion])
-
-
-
+    recon_dashboard = VBox(
+        [
+            recon_initialization_box,
+            options_accordion,
+            methods_accordion,
+            save_options_accordion,
+        ]
+    )
 
     return recon_dashboard

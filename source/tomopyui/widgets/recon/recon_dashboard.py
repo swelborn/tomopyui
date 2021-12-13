@@ -4,6 +4,7 @@ import tomopy.data.tomodata as td
 from .plot_aligned_data import plot_aligned_data
 from .multiple_recon import make_recon_tab
 
+
 def make_recon_dashboard(
     reconmetadata,
     generalmetadata,
@@ -47,6 +48,7 @@ def make_recon_dashboard(
         self.button_style = "success"
         self.description = "Make your edits to the reconstruction options below. Click this again to upload more data."
         recon_tab_vbox.children = recon_tab_vbox.children + (start_recon_button,)
+
     make_recon_tabs_button = Button(
         description="Press this button after you finish uploading.",
         disabled=False,
@@ -79,9 +81,6 @@ def make_recon_dashboard(
             self.icon = "exclamation-triangle"
             self.description = "Something went wrong."
 
-
-
-
     start_recon_button = Button(
         description="After finishing your edits above, click here to start reconstruction.",
         disabled=False,
@@ -93,7 +92,7 @@ def make_recon_dashboard(
     recon_tab = Tab()
     recon_tab_vbox = VBox([make_recon_tabs_button, recon_tab])
     recon_dashboard_tabs = [recon_files, plot_vbox, recon_tab_vbox, main_handler.out]
-    recon_dashboard_titles = ['Upload', 'Plot', 'Reconstruction','Log']
+    recon_dashboard_titles = ["Upload", "Plot", "Reconstruction", "Log"]
     recon_dashboard = Tab(titles=recon_dashboard_titles)
     recon_dashboard.children = recon_dashboard_tabs
 
