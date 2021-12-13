@@ -9,7 +9,7 @@ setuptools.setup(
     description="GUI for tomopy built with ipywidgets",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=["tomopyui", "tomocupy"],
+    packages=setuptools.find_packages(where='source'),
     package_dir={"": "source"},
     author='Sam Welborn',
     author_email='swelborn@slac.stanford.edu',

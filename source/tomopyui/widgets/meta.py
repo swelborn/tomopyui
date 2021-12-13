@@ -1,11 +1,20 @@
 from ipywidgets import *
 from ipyfilechooser import FileChooser
-import tomopy.prep normalize
+import tomopy.prep.normalize
 
 import os
 import functools
 # fix where this is coming from:
 from .. import tomodata as td
+
+# for alignment box
+import tifffile as tf
+from ipywidgets import *
+import glob
+from .debouncer import debounce
+import functools
+import json
+
 
 class Import():
 
@@ -122,7 +131,7 @@ class Import():
 
 class Prep():
 
-        def __init__(self, Import):
+    def __init__(self, Import):
         self.tomo = Import.tomo
         self.dark = None
         self.flat = None
@@ -177,6 +186,12 @@ class Prep():
             )
             tomo_norm_mlog.prj_imgs[tomo_norm_mlog.prj_imgs == np.inf] = 0
         self.tomo = tomo_norm_mlog
+
+class Align():
+
+    def __init__(self, Import, Prep=None, Recon=None):
+        print("hello")
+
 
 
 class Recon():
