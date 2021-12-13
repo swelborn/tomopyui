@@ -20,6 +20,8 @@ import json
 import tomopy.data.tomodata as td
 from tomopy.data.tomoalign import TomoAlign, init_new_from_prior
 
+import logging
+
 
 class Import:
     def __init__(self):
@@ -41,7 +43,9 @@ class Import:
         self.filechooser = FileChooser()
         self.filechooser.register_callback(self.set_fpath)
         self.metadata = {}
-        self.log_handler, self.log = output_handler.return_handler()
+        self.log = logging.getLogger(__name__)
+        self.log_handler, self.log = output_handler.return_handler(self.log,
+            logging_level=20)
         self.set_metadata()  # init metadata
 
     def set_metadata(self):
@@ -200,44 +204,59 @@ class Align:
         # if Prep is not None and Align is not None:
         #     self.tomo = Align.tomo
 
-        self.log_handler, self.log = Import.log_handler, Import.log
-        self.metadata = Import.metadata.copy()
-        self.metadata["opts"] = {}
-        self.methods = {}
         self.angle_start = Import.angle_start
         self.angle_end = Import.angle_end
         self.num_theta = Import.num_theta
+        self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
         self.downsample_factor = 0.5
-        self.extra_options = {}
-        self.center = None
-        self.save_opts = {}
         self.num_iter = 1
-        self.reconstruction_output = Output()
-        self.plot_output = Ouput()
-        self.alignbool = False
-        self.metadata["opts"]["downsample"] = False
-        self.metadata["opts"]["downsample_factor"] = 1
-        self.metadata["opts"]["num_iter"] = 20
-        self.metadata["opts"]["center"] = 0
-        self.metadata["opts"]["upsample_factor"] = 1
-        self.metadata["opts"]["batch_size"] = 20
         self.center = 0
+        self.upsample_factor = 1
+        self.extra_options = {}
+        self.batch_size = 20
+        self.prj_range_x = (0, 10)
+        self.prj_range_y = (0, 10)
         self.paddingX = 10
         self.paddingY = 10
-        self.metadata["opts"]["pad"] = (
-            self.paddingX,
-            self.paddingY,
-        )
-        method_output = Output()
-        output0 = Output()
-        output1 = Output()
-        output2 = Output()
+        self.methods = {}
+        self.save_opts = {}
+        self.metadata = Import.metadata.copy()
+        self.accepted_save_opts = ["tomo_after", "tomo_before", "recon", "tiff", "npy"]
+        self.set_metadata()
+
+        self.reconstruction_output = Output()
+        self.plot_output = Output()
+        self.alignbool = False
+
+        self.method_output = Output()
+        self.output0 = Output()
+        self.output1 = Output()
+        self.output2 = Output()
+
         # self.metadata["callbacks"]["methodoutput"] = method_output
         # self.metadata["callbacks"]["output0"] = output0
         # self.metadata["callbacks"]["output1"] = output1
         # self.metadata["callbacks"]["output2"] = output2
         self.make_alignment_tab()
+
+    def set_metadata(self):
+        self.metadata["opts"] = {}
+        self.metadata["opts"]["downsample"] = self.downsample
+        self.metadata["opts"]["downsample_factor"] = self.downsample_factor
+        self.metadata["opts"]["num_iter"] = self.num_iter
+        self.metadata["opts"]["center"] = self.center
+        self.metadata["opts"]["upsample_factor"] = self.upsample_factor
+        self.metadata["opts"]["batch_size"] = self.batch_size
+        self.metadata["opts"]["pad"] = (
+            self.paddingX,
+            self.paddingY,
+        )
+        self.metadata["opts"]["prj_range_x"] = self.prj_range_x
+        self.metadata["opts"]["prj_range_y"] = self.prj_range_y
+        self.metadata["opts"]["extra_options"] = self.extra_options
+        self.metadata["methods"] = self.methods
+        self.metadata["save_opts"] = self.save_opts
 
     def make_alignment_tab(self):
 
@@ -339,17 +358,7 @@ class Align:
             change.description = (
                 "Setting options and loading data into alignment algorithm."
             )
-            self.metadata["opts"]["num_iter"] = number_of_align_iterations.value
-            self.metadata["opts"]["center"] = center_of_rotation.value
-            self.metadata["opts"]["prj_range_x"] = projection_range_x_alignment.value
-            self.metadata["opts"]["prj_range_y"] = projection_range_y_alignment.value
-            self.metadata["opts"]["upsample_factor"] = upsample_factor.value
-            self.metadata["opts"]["pad"] = (
-                paddingX.value,
-                paddingY.value,
-            )
-            self.metadata["opts"]["batch_size"] = batch_size.value
-            self.metadata["opts"]["extra_options"] = extra_options.value
+
             if len(self.metadata["methods"]) > 1:
                 self.metadata["alignmultiple"] = True
             try:
@@ -444,8 +453,7 @@ class Align:
             self.metadata["save_opts"] = create_option_dictionary(opt_list)
             self.save_opts = self.metadata["save_opts"]
 
-        self.accepted_save_opts = ["tomo_after", "tomo_before", "recon", "tiff", "npy"]
-        self.metadata["save_opts"] = {key: None for key in accepted_save_opts}
+        self.metadata["save_opts"] = {key: None for key in self.accepted_save_opts}
         self.save_opts = self.metadata["save_opts"]
 
         def create_save_checkboxes(opts):
@@ -672,7 +680,7 @@ class Align:
         paddingX = IntText(
             description="Padding X (px): ",
             style=extend_description_style,
-            value=self.metadata["opts"]["pad"],
+            value=self.paddingX,
         )
         paddingX.observe(update_x_padding_dict, names="value")
 
@@ -688,7 +696,7 @@ class Align:
         paddingY = IntText(
             description="Padding Y (px): ",
             style=extend_description_style,
-            value=self.metadata["opts"]["pad"],
+            value=self.paddingY,
         )
         paddingY.observe(update_x_padding_dict, names="value")
 
@@ -732,13 +740,13 @@ class Align:
 
         pixel_range_slider_vb = VBox(
             [
-                HBox(
-                    [load_range_from_above],
-                    justify_content="center",
-                    align_content="center",
-                ),
-                projection_range_x_alignment,
-                projection_range_y_alignment,
+                # HBox(
+                #     [load_range_from_above],
+                #     justify_content="center",
+                #     align_content="center",
+                # ),
+                projection_range_x,
+                projection_range_y,
             ],
             layout=Layout(width="30%"),
             justify_content="center",
@@ -763,13 +771,8 @@ class Align:
         hb2 = HBox(
             [align_start_button], layout=Layout(width="auto", justify_content="center")
         )
-        grid_methods_accordion = Accordion(
-            children=[grid_alignment],
-            selected_index=None,
-            titles=("Alignment Methods",),
-        )
 
-        other_options_accordion = Accordion(
+        options_accordion = Accordion(
             children=[
                 VBox(
                     [
@@ -805,21 +808,18 @@ class Align:
             titles=("Other Alignment Options",),
         )
 
-        box = VBox(
+        self.alignment_tab = VBox(
             children=[
                 hb1,
-                grid_methods_accordion,
+                methods_accordion,
                 save_options_accordion,
-                other_options_accordion,
+                options_accordion,
                 hb2,
-                method_output,
-                output1,
-                output2,
+                self.method_output,
+                self.output1,
+                self.output2,
             ]
         )
-
-        return box
-
 
 class Recon:
     def __init__(self, Import, Prep=None, Align=None):
