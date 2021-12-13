@@ -65,11 +65,7 @@ sliders = [
         "x": 0.1,
         "y": 0,
         "steps": [
-            {
-                "args": [[f.name], frame_args(0)],
-                "label": str(k),
-                "method": "animate",
-            }
+            {"args": [[f.name], frame_args(0)], "label": str(k), "method": "animate",}
             for k, f in enumerate(fig.frames)
         ],
     }
@@ -81,8 +77,7 @@ fig.update_layout(
     width=600,
     height=600,
     scene=dict(
-        zaxis=dict(range=[-0.1, 6.8], autorange=False),
-        aspectratio=dict(x=1, y=1, z=1),
+        zaxis=dict(range=[-0.1, 6.8], autorange=False), aspectratio=dict(x=1, y=1, z=1),
     ),
     updatemenus=[
         {

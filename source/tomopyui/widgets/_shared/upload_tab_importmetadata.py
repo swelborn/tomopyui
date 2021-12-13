@@ -3,8 +3,9 @@ from ipywidgets import *
 import functools
 
 
-# will create one file uploader, given a specific working directory and a title 
+# will create one file uploader, given a specific working directory and a title
 # for the uploader
+
 
 def file_chooser_recon(reconmetadata):
     extend_description_style = {"description_width": "auto"}
@@ -46,9 +47,7 @@ def file_chooser_recon(reconmetadata):
         [
             opt.observe(
                 functools.partial(
-                    create_dict_on_checkmark_import,
-                    opt_list=[opt],
-                    dictname=key,
+                    create_dict_on_checkmark_import, opt_list=[opt], dictname=key,
                 ),
                 names=["value"],
             )

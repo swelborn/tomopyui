@@ -3,13 +3,11 @@ from ipywidgets import *
 import functools
 
 
-# will create one file uploader, given a specific working directory and a title 
+# will create one file uploader, given a specific working directory and a title
 # for the uploader
-def create_file_uploader(wd, title)
-        
+def create_file_uploader(wd, title):
 
-
-    return 
+    return
 
 
 def file_chooser_recon(reconmetadata):
@@ -52,9 +50,7 @@ def file_chooser_recon(reconmetadata):
         [
             opt.observe(
                 functools.partial(
-                    create_dict_on_checkmark_import,
-                    opt_list=[opt],
-                    dictname=key,
+                    create_dict_on_checkmark_import, opt_list=[opt], dictname=key,
                 ),
                 names=["value"],
             )
