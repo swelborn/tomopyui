@@ -45,10 +45,10 @@ class TomoRecon(td.TomoData):
             self.prj_range_y = self.metadata["prj_range_y"]
         self.recon = recon
         print(np.mean(self.tomo.prj_imgs))
-        self.make_wd_and_go()
+        self.make_wd()
         self._main()
 
-    def make_wd_and_go(self):
+    def make_wd(self):
         now = datetime.datetime.now()
         os.chdir(self.metadata["fpath"])
         dt_string = now.strftime("%Y%m%d-%H%M-")

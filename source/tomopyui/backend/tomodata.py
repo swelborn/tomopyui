@@ -40,7 +40,6 @@ class TomoData:
         num_theta=None,
         filename=None,
         theta=None,
-        cbarRange=[0, 1],
         verbose_import=False,
         metadata=None,
         # correctionOptions=dict(),

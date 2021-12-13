@@ -64,6 +64,7 @@ class Import:
     def set_fpath(self):
         self.fpath = self.filechooser.selected_path
         self.fname = self.filechooser.selected_filename
+        self.set_wd(self.fpath)
         self.set_metadata()
 
     # Creating options checkboxes and registering their callbacks
@@ -207,6 +208,7 @@ class Align:
         self.angle_start = Import.angle_start
         self.angle_end = Import.angle_end
         self.num_theta = Import.num_theta
+        self.wd = Import.wd
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
         self.downsample_factor = 0.5
@@ -241,6 +243,7 @@ class Align:
         self.make_alignment_tab()
 
     def set_metadata(self):
+
         self.metadata["opts"] = {}
         self.metadata["opts"]["downsample"] = self.downsample
         self.metadata["opts"]["downsample_factor"] = self.downsample_factor
@@ -350,8 +353,6 @@ class Align:
                 projection_range_x.disabled = True
                 projection_range_y.disabled = True
                 # projection_range_z_recon.disabled = True
-
-                # START ALIGNMENT #
 
         def set_options_and_run_align(change):
             change.icon = "fas fa-cog fa-spin fa-lg"
@@ -832,18 +833,23 @@ class Recon:
             self.tomo = Align.tomo
 
         self.metadata = Import.metadata.copy()
-        self.metadata["opts"] = {}
         self.opts = {}
-        self.metadata["methods"] = {}
         self.methods = {}
-        self.metadata["save_opts"] = {}
         self.save_opts = {}
-        self.metadata["opts"]["downsample"] = False
-        self.metadata["opts"]["downsample_factor"] = 1
+        self.downsample = False
+        self.downsample_factor = 1
         self.num_iter = 1
-        self.metadata["partial"] = False
         self.partial = False
+        self.set_metadata()
         self.make_recon_tab()
+
+    def set_metadata():
+        self.metadata["opts"] = self.opts
+        self.metadata["methods"] = self.methods
+        self.metadata["save_opts"] = self.save_opts
+        self.metadata["opts"]["downsample"] = self.downsample 
+        self.metadata["opts"]["downsample_factor"] = self.downsample_factor
+        self.metadata["partial"] = self.partial
 
     def make_recon_tab(self):
 
@@ -1145,13 +1151,17 @@ class Recon:
 
         recon_method_box = VBox(
             [
-                VBox(recon_method_list, layout=widgets.Layout(flex_flow="row wrap")),
+                VBox(recon_method_list, 
+                        layout=widgets.Layout(flex_flow="row wrap")
+                    ),
                 sirt_hbox,
             ]
         )
 
         methods_accordion = Accordion(
-            children=[recon_method_box], selected_index=None, titles=("Methods",)
+            children=[recon_method_box], 
+            selected_index=None, 
+            titles=("Methods",)
         )
 
         # Options

@@ -40,10 +40,24 @@ class TomoAlign:
     metadata : metadata from setup in widget-based notebook.
     """
 
+    # def __init__(
+    #     self,
+    #     tomo,
+    #     metadata,
+    #     alignment_wd=None,
+    #     alignment_wd_child=None,
+    #     prj_aligned=None,
+    #     shift=None,
+    #     sx=None,
+    #     sy=None,
+    #     recon=None,
+    #     callbacks=None
+    # ):
+
     def __init__(
         self,
-        tomo,
-        metadata,
+        Align,
+        tomo=None,
         alignment_wd=None,
         alignment_wd_child=None,
         prj_aligned=None,
@@ -53,31 +67,31 @@ class TomoAlign:
         recon=None,
         callbacks=None
     ):
-
-        self.tomo = tomo  # tomodata object
+        if Align.tomo is None:
+            self.tomo = td.TomoData(Align.metadata)
         self.metadata = metadata
-        self.prj_range_x = metadata["opts"]["prj_range_x"]
-        self.prj_range_y = metadata["opts"]["prj_range_y"]
+        self.prj_range_x = Align.prj_range_x
+        self.prj_range_y = Align.prj_range_y
         self.shift = shift
         self.sx = sx
         self.sy = sy
         self.conv = None
         self.recon = recon
-        self.alignment_wd = alignment_wd
+        self.alignment_wd = Align.wd
         self.alignment_wd_child = alignment_wd_child
 
         # setting up output callback context managers
         if callbacks is not None:
             if "methodoutput" in callbacks:
-                self.method_bar_cm = callbacks["methodoutput"]
+                self.method_bar_cm = Align.method_output
             else:
                 self.method_bar_cm = nullcontext()
             if "output1" in callbacks:
-                self.output1_cm = callbacks["output1"]
+                self.output1_cm = Align.output1
             else:
                 self.output1_cm = nullcontext()
             if "output2" in callbacks:
-                self.output2_cm = callbacks["output2"]
+                self.output2_cm = Align.output2
             else:
                 self.output2_cm = nullcontext()
         else:
@@ -132,7 +146,7 @@ class TomoAlign:
         proj_range_x_low = self.metadata["opts"]["prj_range_x"][0]
         proj_range_x_high = self.metadata["opts"]["prj_range_x"][1]
         proj_range_y_low = self.metadata["opts"]["prj_range_y"][0]
-        proj_range_y_high = self.metadata["opts"]["prj_range_y"][1]
+        proj_range_y_high = Align.metadata["opts"]["prj_range_y"][1]
         self.prj_aligned = self.tomo.prj_imgs[
             :,
             proj_range_y_low:proj_range_y_high:1,
@@ -143,7 +157,7 @@ class TomoAlign:
         self.joint_astra_cupy()
         toc = time.perf_counter()
 
-        self.metadata["alignment_time"] = {
+        Align.metadata["alignment_time"] = {
             "seconds": toc - tic,
             "minutes": (toc - tic) / 60,
             "hours": (toc - tic) / 3600,
