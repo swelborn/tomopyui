@@ -6,7 +6,7 @@ from cupyx.scipy import ndimage as ndi_cp
 from skimage.registration import phase_cross_correlation
 from tomopy.prep.alignment import scale as scale_tomo
 from tomopy.recon import algorithm as tomopy_algorithm
-
+from fastprogress.fastprogress import master_bar, progress_bar
 
 import astra
 import os
@@ -41,23 +41,16 @@ def align_joint(TomoAlign):
     )
 
     # add progress bar for method. roughly a full-loop progress bar.
-    # with TomoAlign.method_bar_cm:
-    #     method_bar = tqdm(
-    #         total=num_iter,
-    #         desc=options["method"],
-    #         display=True,
-    #     )
-
     # Initialize shift arrays
     TomoAlign.sx = np.zeros((init_tomo_shape[0]))
     TomoAlign.sy = np.zeros((init_tomo_shape[0]))
     TomoAlign.conv = np.zeros((num_iter))
-    print(TomoAlign.tomo.prj_imgs.shape)
     # start iterative alignment
     for n in range(num_iter):
+        TomoAlign.Align.progress_shifting.value = 0
+        TomoAlign.Align.progress_reprojection.value = 0
+        TomoAlign.Align.progress_phase_cross_corr.value = 0
         _rec = TomoAlign.recon
-        print("_rec.shape before algorithm")
-        print(_rec.shape)
         if TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]:
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
                 TomoAlign.prj_for_alignment, 
@@ -91,9 +84,9 @@ def align_joint(TomoAlign):
                 ncore=None,
                 **kwargs,
             )
+        TomoAlign.Align.progress_total.value = n + 1
         # update progress bar
         # method_bar.update()
-        print(TomoAlign.recon.shape)
         # break up reconstruction into batches along z axis
         TomoAlign.recon = np.array_split(TomoAlign.recon, num_batches, axis=0)
         # may not need a copy.
@@ -106,9 +99,8 @@ def align_joint(TomoAlign):
         # this could probably be made more efficient, right now I am not 
         # certain if I need to be deleting every time.
         
-        # with TomoAlign.output1_cm:
-        # TomoAlign.output1_cm.clear_output()
-        simulate_projections(_rec, sim, center, TomoAlign.tomo.theta)
+        simulate_projections(_rec, sim, center, TomoAlign.tomo.theta,
+            progress=TomoAlign.Align.progress_reprojection)
         # del _rec
         sim = np.concatenate(sim, axis=1)
         # only flip the simulated datasets if using normal tomopy algorithm
@@ -129,7 +121,8 @@ def align_joint(TomoAlign):
             upsample_factor,
             subset_correlation=False,
             blur=False,
-            pad=TomoAlign.pad_ds
+            pad=TomoAlign.pad_ds,
+            progress=TomoAlign.Align.progress_phase_cross_corr
         )
         TomoAlign.shift = np.concatenate(shift_cpu, axis=1)
 
@@ -148,19 +141,21 @@ def align_joint(TomoAlign):
             num_batches,
             TomoAlign.pad_ds,
             center,
-            downsample_factor=TomoAlign.downsample_factor
+            downsample_factor=TomoAlign.downsample_factor,
+            progress=TomoAlign.Align.progress_shifting
         )
         TomoAlign.conv[n] = np.linalg.norm(err)
-        with TomoAlign.output2_cm:
-            TomoAlign.output2_cm.clear_output(wait=True)
+        with TomoAlign.plot_output1:
+            TomoAlign.plot_output1.clear_output(wait=True)
             plotIm(TomoAlign, sim)
-            plotSxSy(TomoAlign, TomoAlign.downsample_factor)
             print(f"Error = {np.linalg.norm(err):3.3f}.")
+        with TomoAlign.plot_output2:
+            TomoAlign.plot_output2.clear_output(wait=True)
+            plotSxSy(TomoAlign)
 
         TomoAlign.recon = np.concatenate(TomoAlign.recon, axis=0)
         mempool = cp.get_default_memory_pool()
         mempool.free_all_blocks()
-
     # TomoAlign.recon = np.concatenate(TomoAlign.recon, axis=0)
     # Re-normalize data
     # method_bar.close()
@@ -186,20 +181,20 @@ def plotIm(TomoAlign, sim, projection_num=50):
     ax2.set_title("Re-projected Image")
     plt.show()
 
-def plotSxSy(TomoAlign, downsample_factor):
+def plotSxSy(TomoAlign):
     plotrange = range(TomoAlign.prj_for_alignment.shape[0])
-    fig = plt.figure(figsize=(8, 8))
-    ax1 = plt.subplot(2, 1, 1)
-    ax2 = plt.subplot(2, 1, 2)
+    figsxsy = plt.figure(figsize=(8, 4))
+    ax1 = plt.subplot(1, 2, 1)
+    ax2 = plt.subplot(1, 2, 2)
     ax1.set(xlabel= "Projection number",ylabel="Pixel shift (not downsampled)")
-    ax1.plot(plotrange, TomoAlign.sx/downsample_factor)
+    ax1.plot(plotrange, TomoAlign.sx/TomoAlign.downsample_factor)
     ax1.set_title("Sx")
-    ax2.plot(plotrange, TomoAlign.sy/downsample_factor)
+    ax2.plot(plotrange, TomoAlign.sy/TomoAlign.downsample_factor)
     ax2.set_title("Sy")
     ax2.set(xlabel= "Projection number",ylabel="Pixel shift (not downsampled)")
     plt.show()
 
-def simulate_projections(rec, sim, center, theta):
+def simulate_projections(rec, sim, center, theta, progress=None):
     for batch in range(len(rec)):
     # for batch in tnrange(len(rec), desc="Re-projection", leave=True):
         _rec = rec[batch]
@@ -225,10 +220,11 @@ def simulate_projections(rec, sim, center, theta):
         sim.append(_sim)
         astra.data3d.delete(projections_id)
         astra.data3d.delete(phantom_id)
+        if progress is not None: progress.value += 1
 
 def batch_cross_correlation(prj, sim, shift_cpu, num_batches, upsample_factor, 
                         blur=True, rin=0.5, rout=0.8, subset_correlation=False,
-                        mask_sim=True, pad=(0,0)):
+                        mask_sim=True, pad=(0,0), progress=None):
     # TODO: the sign convention for shifting is bad here. 
     # To fix this, change to 
     # shift_gpu = phase_cross_correlation(_sim_gpu, _prj_gpu...)
@@ -281,6 +277,7 @@ def batch_cross_correlation(prj, sim, shift_cpu, num_batches, upsample_factor,
             return_error=False,
         )
         shift_cpu.append(cp.asnumpy(shift_gpu))
+        if progress is not None: progress.value += 1
     # shift_cpu = np.concatenate(shift_cpu, axis=1)
 
 def blur_edges_cp(prj, low=0, high=0.8):
@@ -348,7 +345,7 @@ def shift_prj_cp(prj, sx, sy, num_batches, pad, use_corr_prj_gpu=False):
     return prj_cpu
 
 def shift_prj_update_shift_cp(prj, sx, sy, shift, num_batches, pad, center, 
-    downsample_factor=1, smart_shift=True, smart_pad=True):
+    downsample_factor=1, smart_shift=True, smart_pad=True, progress=None):
     # Why is the error calculated in such a strange way?
     # Will use the standard used in tomopy here, but think of different way to
     # calculate error.
@@ -425,6 +422,7 @@ def shift_prj_update_shift_cp(prj, sx, sy, shift, num_batches, pad, center,
                 _prj_gpu[image] = ndi_cp.shift(_prj_gpu[image], shift_tuple, order=5)
 
         prj_cpu[batch] = cp.asnumpy(_prj_gpu)
+        if progress is not None: progress.value += 1
 
     # concatenate the final list and return
     prj_cpu = np.concatenate(prj_cpu, axis=0)

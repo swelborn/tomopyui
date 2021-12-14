@@ -226,19 +226,20 @@ class Align:
         self.prj_range_y = (0, 10)
         self.paddingX = 10
         self.paddingY = 10
+        self.partial = False
         self.methods = {}
         self.save_opts = {}
         self.metadata = {}
         self.accepted_save_opts = ["tomo_after", "tomo_before", "recon", "tiff", "npy"]
         self.set_metadata()
 
-        self.reconstruction_output = Output()
-        self.plot_output = Output()
         self.alignbool = False
-        self.method_output = Output()
-        self.output0 = Output()
-        self.output1 = Output()
-        self.output2 = Output()
+        self.progress_total = IntProgress(description="Recon: ", value=0, min=0, max=1)
+        self.progress_reprojection = IntProgress(description="Reproj: ",value=0, min=0, max=1)
+        self.progress_phase_cross_corr = IntProgress(description="Phase Corr: ",value=0, min=0, max=1)
+        self.progress_shifting = IntProgress(description="Shifting: ",value=0, min=0, max=1)
+        self.plot_output1 = Output()
+        self.plot_output2 = Output()
 
         # self.metadata["callbacks"]["methodoutput"] = method_output
         # self.metadata["callbacks"]["output0"] = output0
@@ -276,6 +277,7 @@ class Align:
         self.metadata["save_opts"] = self.save_opts
         self.metadata["prj_range_x"] = self.prj_range_x
         self.metadata["prj_range_y"] = self.prj_range_y
+        self.metadata["partial"] = self.partial
         self.log.info(f"Set alignment metadata to {self.metadata}")
 
     def make_alignment_tab(self):
@@ -598,6 +600,7 @@ class Align:
         def update_num_iter_dict(change):
             self.metadata["opts"]["num_iter"] = change.new
             self.num_iter = change.new
+            self.progress_total.max = change.new
 
         number_of_align_iterations = IntText(
             description="Number of Iterations: ",
@@ -669,6 +672,9 @@ class Align:
         def update_batch_size_dict(change):
             self.metadata["opts"]["batch_size"] = change.new
             self.batch_size = change.new
+            self.progress_phase_cross_corr.max = change.new
+            self.progress_shifting.max = change.new
+            self.progress_reprojection.max = change.new
 
         batch_size = IntText(
             description="Batch size (for GPU): ",
@@ -817,6 +823,11 @@ class Align:
             titles=("Other Alignment Options",),
         )
 
+        progress_vbox = VBox([self.progress_total,
+                self.progress_reprojection,
+                self.progress_phase_cross_corr,
+                self.progress_shifting,])
+
         self.alignment_tab = VBox(
             children=[
                 hb1,
@@ -824,9 +835,9 @@ class Align:
                 save_options_accordion,
                 options_accordion,
                 hb2,
-                self.method_output,
-                self.output1,
-                self.output2,
+                HBox([progress_vbox,
+                self.plot_output1, self.plot_output2], layout=Layout(flex_wrap="wrap",
+                    justify_content="center"))
             ]
         )
 

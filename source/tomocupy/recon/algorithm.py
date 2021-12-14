@@ -26,8 +26,6 @@ def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
 def recon_sirt_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     # Todo: allow this to handle batches.
     # Init tomo in sinogram order
-    print("prj_sirt")
-    print(prj.shape)
     sinograms = tomopy_algorithm.init_tomo(prj, 0)
     num_proj = sinograms.shape[1]
     num_y = sinograms.shape[0]
@@ -53,7 +51,5 @@ def recon_sirt_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     astra.algorithm.delete(alg_id)
     astra.data3d.delete(rec_id)
     astra.data3d.delete(sinograms_id)
-    print("rec_sirt")
-    print(rec_sirt.shape)
     return rec_sirt
 

@@ -49,9 +49,8 @@ class TomoAlign:
         self.pad_ds = tuple([int(self.downsample_factor*x) for x in self.pad])
         self.center = self.Align.center*self.downsample_factor + self.pad_ds[0]
         self.wd_parent = Align.Import.wd
-        self.method_bar_cm = Align.method_output
-        self.output1_cm = Align.output1
-        self.output2_cm = Align.output2
+        self.plot_output1 = Align.plot_output1
+        self.plot_output2 = Align.plot_output2
         self.make_wd()
         self._main()
 
@@ -104,12 +103,10 @@ class TomoAlign:
                 (1, self.downsample_factor, self.downsample_factor),
                 anti_aliasing=True,
             )
-            print(self.prj_for_alignment.shape)
         # Pad
         self.prj_for_alignment, self.pad_ds = pad_projections(
             self.prj_for_alignment, self.pad_ds, 1
         )
-        print(self.prj_for_alignment.shape)
     def align(self):
         """
         Aligns a TomoData object using options in GUI.
@@ -167,8 +164,6 @@ class TomoAlign:
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
             self.init_prj()
-            print("prj_for_alignment")
-            print(self.prj_for_alignment.shape)
             tic = perf_counter()
             self.align()
             # make new dataset and pad/shift it
@@ -181,9 +176,7 @@ class TomoAlign:
                 self.num_batches,
                 self.pad,
                 use_corr_prj_gpu=False)
-            print(new_prj_imgs.shape)
             new_prj_imgs = trim_padding(new_prj_imgs)
-            print(new_prj_imgs.shape)
             self.tomo = td.TomoData(
                             prj_imgs=new_prj_imgs, 
                             metadata=self.Align.Import.metadata
