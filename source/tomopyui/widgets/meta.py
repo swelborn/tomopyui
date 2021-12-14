@@ -21,6 +21,7 @@ import json
 # for alignment box
 import tomopyui.backend.tomodata as td
 from tomopyui.backend.tomoalign import TomoAlign
+from tomopyui.backend.tomorecon import TomoRecon
 
 import logging
 
@@ -859,6 +860,8 @@ class Recon:
         self.downsample_factor = 1
         self.num_iter = 1
         self.partial = False
+        self.center = 0
+        self.num_iter = 1
         self.set_metadata()
         self.make_recon_tab()
 
@@ -1282,6 +1285,21 @@ class Recon:
             titles=("Options",),
         )
 
+        def set_options_and_run_recon(change):
+            change.icon = "fas fa-cog fa-spin fa-lg"
+            change.description = (
+                "Setting options and loading data into reconstruction algorithm(s)."
+            )
+            try:
+                a = TomoRecon(self)
+                change.button_style = "success"
+                change.icon = "fa-check-square"
+                change.description = "Finished alignment."
+            except:
+                with self.output0:
+                    change.button_style = "warning"
+                    change.icon = "exclamation-triangle"
+                    change.description = "Something went wrong."
 
         recon_start_button = Button(
             description="After choosing all of the options above, click this button to start the reconstruction.",
