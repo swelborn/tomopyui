@@ -60,9 +60,10 @@ class TomoAlign:
         dt_string = now.strftime("%Y%m%d-%H%M-")
         try:
             os.mkdir(dt_string + "alignment")
+            os.chdir(dt_string + "alignment")
         except:
             os.mkdir(dt_string + "alignment-1")
-        os.chdir(dt_string + "alignment")
+            os.chdir(dt_string + "alignment-1")
         save_metadata("overall_alignment_metadata.json", self.metadata)
         #!!!!!!!!!! make option for tiff file save
         if self.metadata["save_opts"]["tomo_before"]:
