@@ -1,6 +1,8 @@
+#!/usr/bin/env python
 
 # center needs to be fixed for this method
 # rec needs to be fixed for this method
+
 def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
     # Init tomo in sinogram order
     sinograms = algorithm.init_tomo(prj, 0)
@@ -20,6 +22,7 @@ def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
     return rec_sirt
 
 def recon_sirt_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
+    # Todo: allow this to handle batches.
     # Init tomo in sinogram order
     sinograms = algorithm.init_tomo(prj, 0)
     num_proj = sinograms.shape[1]
@@ -47,3 +50,4 @@ def recon_sirt_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     astra.data3d.delete(rec_id)
     astra.data3d.delete(sinograms_id)
     return rec_sirt
+

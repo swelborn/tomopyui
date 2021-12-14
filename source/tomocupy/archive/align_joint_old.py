@@ -333,6 +333,7 @@ def batch_cross_correlation(prj, sim, shift_cpu, num_batches, upsample_factor,
 # split into arrays for batch.
 _prj = np.array_split(prj, num_batches, axis=0)
 _sim = np.array_split(sim, num_batches, axis=0)
+
 for batch in range(len(_prj)):
 # for batch in tnrange(len(_prj), desc="Cross-correlation", leave=True):
     # projection images have been shifted. mask also shifts.
@@ -418,157 +419,45 @@ return prj_gpu
 
 
 
-def warp_prj_shift_cp(prj, sx, sy, shift, num_batches, pad, center, 
-downsample_factor=1, smart_shift=True, smart_pad=True):
-# Why is the error calculated in such a strange way?
-# Will use the standard used in tomopy here, but think of different way to
-# calculate error.
-# TODO: add checks for sx, sy having the same dimension as prj
-#
-# If the shift starts to get larger than the padding in one direction,
-# shift it to the center of the sx values. This should help to avoid 
-average_sx = None
-average_sy = None
-if smart_shift:
-    cond1 = sx.max() > 0.95*pad[0]
-    cond2 = sy.max() > 0.95*pad[1]
-    cond3 = np.absolute(sx.min()) > 0.95*pad[0]
-    cond4 = np.absolute(sy.min()) > 0.95*pad[1]
-    if cond1 or cond2 or cond3 or cond4:
-        print("applying smart shift")
-        print(f"sx max: {sx.max()}")    
-        print(f"sx min: {sx.min()}")
-        average_sx = (sx.max() + sx.min())/2
-        average_sy = (sy.max() + sy.min())/2
-        sx_smart_shift = average_sx*np.ones_like(sx)
-        sy_smart_shift = average_sy*np.ones_like(sy)
-        sx -= sx_smart_shift
-        sy -= sy_smart_shift
-        print(f"sx max after shift: {sx.max()}")
-        print(f"sx min after shift: {sx.min()}")
-        center = center + average_sx
-        if smart_pad:
-            if average_sx < 1 and cond1 and cond3:
-                extra_pad = tuple([0.2*pad[0], 0])
-                center = center + extra_pad[0]
-                pad = np.array(extra_pad) + np.array(pad)
-                prj, extra_pad = pad_projections(prj, extra_pad, 1)
-            if average_sy < 1 and cond2 and cond4:
-                extra_pad = tuple([0, 0.2*pad[1]])
-                pad = np.array(extra_pad) + np.array(pad)
-                prj, extra_pad = pad_projections(prj, extra_pad, 1)
 
 
 
-num_theta = prj.shape[0]
-# TODO: why +1??
-err = np.zeros((num_theta + 1, 1))
-shifted_bool = np.zeros((num_theta + 1, 1))
 
-# split all arrays up into batches. 
-err = np.array_split(err, num_batches)
-prj_cpu = np.array_split(prj, num_batches, axis=0)
-sx = np.array_split(sx, num_batches, axis=0)
-sy = np.array_split(sy, num_batches, axis=0)
-shift = np.array_split(shift, num_batches, axis=1)
-shifted_bool = np.array_split(shifted_bool, num_batches, axis=0)
-for batch in range(len(prj_cpu)):
-# for batch in tnrange(len(prj_cpu), desc="Shifting", leave=True):
-    _prj_gpu = cp.array(prj_cpu[batch], dtype=cp.float32)
-
-    for image in range(_prj_gpu.shape[0]):
-        # err calc before if - 
-        err[batch][image] = np.sqrt(
-            shift[batch][0,image] * shift[batch][0,image] + 
-            shift[batch][1,image] * shift[batch][1,image]
-        )
-        if (
-            np.absolute(sx[batch][image] + 
-                shift[batch][1,image]) < pad[0]
-            and 
-            np.absolute(sy[batch][image] + 
-                shift[batch][0,image]) < pad[1]
-        ):
-            shifted_bool[batch][image] = 1
-            sx[batch][image] += shift[batch][1,image]
-            sy[batch][image] += shift[batch][0,image]
-            shift_tuple = (shift[batch][0,image], shift[batch][1,image])
-            _prj_gpu[image] = ndi_cp.shift(_prj_gpu[image], shift_tuple, order=5)
-
-    prj_cpu[batch] = cp.asnumpy(_prj_gpu)
-
-# concatenate the final list and return
-prj_cpu = np.concatenate(prj_cpu, axis=0)
-err = np.concatenate(err)
-shifted_bool = np.concatenate(shifted_bool)
-sx = np.concatenate(sx, axis=0)
-sy = np.concatenate(sy, axis=0)
-shift = np.concatenate(shift, axis=1)
-return prj_cpu, sx, sy, shift, err, pad, center
-
-def warp_prj_cp(prj, sx, sy, num_batches, pad, use_corr_prj_gpu=False):
-# add checks for sx, sy having the same dimension as prj
-prj_cpu = np.array_split(prj, num_batches, axis=0)
-_sx = np.array_split(sx, num_batches, axis=0)
-_sy = np.array_split(sy, num_batches, axis=0)
-for batch in range(len(prj_cpu)):
-# for batch in tnrange(len(prj_cpu), desc="Shifting", leave=True):
-    _prj_gpu = cp.array(prj_cpu[batch], dtype=cp.float32)
-    num_theta = _prj_gpu.shape[0]
+    # warning I don't think I fixed sign convention here.
+    def transform_parallel(prj, sx, sy, shift, metadata):
+    num_theta = prj.shape[0]
+    err = np.zeros((num_theta + 1, 1))
     shift_y_condition = (
-        pad[1]
+        metadata["opts"]["pad"][1] * metadata["opts"]["downsample_factor"]
     )
     shift_x_condition = (
-        pad[0]
+        metadata["opts"]["pad"][0] * metadata["opts"]["downsample_factor"]
     )
 
-    for image in range(_prj_gpu.shape[0]):  
+    def transform_algorithm(prj, shift, sx, sy, m):
+        shiftm = shift[:, m]
+        # don't let it shift if the value is larger than padding
         if (
-            np.absolute(_sx[batch][image]) < shift_x_condition
-            and np.absolute(_sy[batch][image]) < shift_y_condition
+            np.absolute(sx[m] + shiftm[1]) < shift_x_condition
+            and np.absolute(sy[m] + shiftm[0]) < shift_y_condition
         ):
-            shift_tuple = (_sy[batch][image], _sx[batch][image])
-            _prj_gpu[image] = ndi_cp.shift(_prj_gpu[image], shift_tuple, order=5)
+            sx[m] += shiftm[1]
+            sy[m] += shiftm[0]
+            err[m] = np.sqrt(shiftm[0] * shiftm[0] + shiftm[1] * shiftm[1])
 
-    prj_cpu[batch] = cp.asnumpy(_prj_gpu)
-prj_cpu = np.concatenate(prj_cpu, axis=0)
-return prj_cpu
+            # similarity transform shifts in (x, y)
+            # tform = transform.SimilarityTransform(translation=(shiftm[1], shiftm[0]))
+            # prj[m] = transform.warp(prj[m], tform, order=5)
 
-# warning I don't think I fixed sign convention here.
-def transform_parallel(prj, sx, sy, shift, metadata):
-num_theta = prj.shape[0]
-err = np.zeros((num_theta + 1, 1))
-shift_y_condition = (
-    metadata["opts"]["pad"][1] * metadata["opts"]["downsample_factor"]
-)
-shift_x_condition = (
-    metadata["opts"]["pad"][0] * metadata["opts"]["downsample_factor"]
-)
+            # found that ndi is much faster than the above warp
+            # uses opposite convention
+            shift_tuple = (shiftm[0], shiftm[1])
+            shift_tuple = tuple([-1*x for x in shift_tuple])
+            prj[m] = ndi.shift(prj[m], shift_tuple, order=5)
 
-def transform_algorithm(prj, shift, sx, sy, m):
-    shiftm = shift[:, m]
-    # don't let it shift if the value is larger than padding
-    if (
-        np.absolute(sx[m] + shiftm[1]) < shift_x_condition
-        and np.absolute(sy[m] + shiftm[0]) < shift_y_condition
-    ):
-        sx[m] += shiftm[1]
-        sy[m] += shiftm[0]
-        err[m] = np.sqrt(shiftm[0] * shiftm[0] + shiftm[1] * shiftm[1])
-
-        # similarity transform shifts in (x, y)
-        # tform = transform.SimilarityTransform(translation=(shiftm[1], shiftm[0]))
-        # prj[m] = transform.warp(prj[m], tform, order=5)
-
-        # found that ndi is much faster than the above warp
-        # uses opposite convention
-        shift_tuple = (shiftm[0], shiftm[1])
-        shift_tuple = tuple([-1*x for x in shift_tuple])
-        prj[m] = ndi.shift(prj[m], shift_tuple, order=5)
-
-Parallel(n_jobs=-1, require="sharedmem")(
-    delayed(transform_algorithm)(prj, shift, sx, sy, m)
-    for m in range(num_theta)
-    # for m in tnrange(num_theta, desc="Transformation", leave=True)
-)
-return prj, sx, sy, err
+    Parallel(n_jobs=-1, require="sharedmem")(
+        delayed(transform_algorithm)(prj, shift, sx, sy, m)
+        for m in range(num_theta)
+        # for m in tnrange(num_theta, desc="Transformation", leave=True)
+    )
+    return prj, sx, sy, err

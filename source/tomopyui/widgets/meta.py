@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from ipywidgets import *
 from ipyfilechooser import FileChooser
 import tomopy.prep.normalize
@@ -64,8 +66,9 @@ class Import:
     def set_fpath(self):
         self.fpath = self.filechooser.selected_path
         self.fname = self.filechooser.selected_filename
-        self.set_wd(self.fpath)
+        self.set_wd(wd=self.fpath)
         self.set_metadata()
+        
 
     # Creating options checkboxes and registering their callbacks
     def create_opts_checkboxes(self):

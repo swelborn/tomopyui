@@ -1,34 +1,19 @@
-from tqdm.notebook import tnrange, tqdm
-from joblib import Parallel, delayed
-from time import process_time, perf_counter, sleep
-from skimage.registration import phase_cross_correlation
-#from skimage import transform
-# removed because slower than ndi
-from scipy import ndimage as ndi
-from cupyx.scipy import ndimage as ndi_cp
-from tomopy.recon import wrappers
-from contextlib import nullcontext
-from tomopy.recon import algorithm
-from skimage.transform import rescale
-from tomopy.misc.corr import circ_mask
-from copy import deepcopy, copy
-from tomopy.recon.rotation import find_center, find_center_vo
+#!/usr/bin/env python
+
+from copy import copy, deepcopy
+from skimage.transform import rescale #look for better option
+from time import perf_counter
+from tomocupy.prep.alignment import shift_prj_cp
+from tomocupy.prep.alignment import align_joint
 from .util.save_metadata import save_metadata
 from .util.pad_projections import pad_projections
+from .util.trim_padding import trim_padding
+# from tqdm.notebook import tnrange, tqdm 
 
-from tomocupy.align_joint import align_joint
-
-import tomopy.data.tomodata as td
-import matplotlib.pyplot as plt
 import datetime
-import time
 import json
-import astra
-import os
 import tifffile as tf
-import cupy as cp
-import tomopy
-import numpy as np
+import tomopy.data.tomodata as td
 
 class TomoAlign(td.TomoData):
     """
@@ -41,8 +26,9 @@ class TomoAlign(td.TomoData):
 
     def __init__(self, Align):
 
-        self.tomo = super().__init__(Align.metadata)
-        self.metadata = Align.metadata
+        self.Align = Align
+        self.metadata = Align.metadata.copy()
+        self.tomo = super().__init__(metadata=self.metadata)
         if self.metadata["partial"]:
             self.prj_range_x = self.metadata["prj_range_x"]
             self.prj_range_y = self.metadata["prj_range_y"]
@@ -53,7 +39,7 @@ class TomoAlign(td.TomoData):
         self.recon = None
         self.pad = Align.metadata["opts"]["pad"]
         self.downsample = Align.metadata["downsample"]
-        if downsample:
+        if self.downsample:
             self.downsample_factor = self.metadata["opts"]["downsample_factor"]
         else:
             self.downsample_factor = 1
@@ -75,7 +61,7 @@ class TomoAlign(td.TomoData):
             np.save("projections_before_alignment", self.tomo.prj_imgs)
         self.wd = os.getcwd()
 
-    def align_multiple(self):
+    def make_metadata_list(self):
         metadata_list = []
         for key in self.metadata["methods"]:
             d = self.metadata["methods"]
@@ -168,14 +154,30 @@ class TomoAlign(td.TomoData):
         Reconstructs a TomoData object using options in GUI.
         """
 
-        metadata_list = self.recon_multiple()
+        metadata_list = self.make_metadata_list()
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
             self.init_prj()
-            tic = time.perf_counter()
+            tic = perf_counter()
             self.align()
-            toc = time.perf_counter()
-            self.metadata["reconstruction_time"] = {
+            # make new dataset and pad/shift it
+            new_prj_imgs = deepcopy(TomoAlign.tomo.prj_imgs)
+            new_prj_imgs, pad = pad_projections(new_prj_imgs, pad, 1)
+            new_prj_imgs = shift_prj_cp(
+                new_prj_imgs, 
+                TomoAlign.sx, 
+                TomoAlign.sy, 
+                num_batches, 
+                pad,
+                use_corr_prj_gpu=False)
+            
+            new_prj_imgs = trim_padding(new_prj_imgs)
+            TomoAlign.tomo = td.TomoData(
+                            prj_imgs=new_prj_imgs, 
+                            metadata=TomoAlign.metadata
+            )
+            toc = perf_counter()
+            self.metadata["alignment_time"] = {
                 "seconds": toc - tic,
                 "minutes": (toc - tic) / 60,
                 "hours": (toc - tic) / 3600,
