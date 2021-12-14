@@ -1184,7 +1184,6 @@ class Recon:
         )
 
         # Options
-
         # number of iterations
         self.metadata["opts"]["num_iter"] = 20
         self.num_iter = 20
@@ -1282,6 +1281,18 @@ class Recon:
             layout=Layout(width="100%"),
             titles=("Options",),
         )
+
+
+        recon_start_button = Button(
+            description="After choosing all of the options above, click this button to start the reconstruction.",
+            disabled=True,
+            button_style="info",  # 'success', 'info', 'warning', 'danger' or ''
+            tooltip="Start reconstruction with this button.",
+            icon="",
+            layout=Layout(width="auto", justify_content="center"),
+        )
+        recon_start_button.on_click(set_options_and_run_recon)
+
 
         #### putting it all together
         sliders_box = VBox(
