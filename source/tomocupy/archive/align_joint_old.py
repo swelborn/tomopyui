@@ -99,8 +99,8 @@ def align_joint(TomoAlign, Align=None):
             # only flip the simulated datasets if using normal tomopy algorithm
             # can remove if it is flipped in the algorithm
             if (
-                TomoAlign.metadata["methods"]["SIRT_CUDA"]["Faster"] == False
-                and TomoAlign.metadata["methods"]["SIRT_CUDA"]["Fastest"] == False
+                TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"] == False
+                and TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"] == False
             ):
                 sim = np.flip(sim, axis=0)
 

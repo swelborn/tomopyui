@@ -29,7 +29,7 @@ def align_joint(TomoAlign):
     method_str = list(TomoAlign.metadata["methods"].keys())[0]
     upsample_factor = TomoAlign.metadata["opts"]["upsample_factor"]
     num_batches = TomoAlign.metadata["opts"]["batch_size"] # change to num_batches
-    center = TomoAlign.metadata["center"]
+    center = TomoAlign.center
 
     # Needs scaling for skimage float operations.
     TomoAlign.prj_for_alignment, scl = scale_tomo(TomoAlign.prj_for_alignment)
@@ -52,19 +52,20 @@ def align_joint(TomoAlign):
     TomoAlign.sx = np.zeros((init_tomo_shape[0]))
     TomoAlign.sy = np.zeros((init_tomo_shape[0]))
     TomoAlign.conv = np.zeros((num_iter))
-
+    print(TomoAlign.tomo.prj_imgs.shape)
     # start iterative alignment
     for n in range(num_iter):
         _rec = TomoAlign.recon
-
-        if TomoAlign.metadata["methods"]["SIRT_CUDA"]["Faster"]:
+        print("_rec.shape before algorithm")
+        print(_rec.shape)
+        if TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]:
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
                 TomoAlign.prj_for_alignment, 
                 TomoAlign.tomo.theta,
                 num_iter=1,
                 rec=_rec,
                 center=center)
-        elif TomoAlign.metadata["methods"]["SIRT_CUDA"]["Fastest"]:
+        elif TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]:
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D_allgpu(
                 TomoAlign.prj_for_alignment, 
                 TomoAlign.tomo.theta, 
@@ -92,12 +93,12 @@ def align_joint(TomoAlign):
             )
         # update progress bar
         # method_bar.update()
-
+        print(TomoAlign.recon.shape)
         # break up reconstruction into batches along z axis
         TomoAlign.recon = np.array_split(TomoAlign.recon, num_batches, axis=0)
         # may not need a copy.
         _rec = TomoAlign.recon.copy()
-        
+
         # initialize simulated projection cpu array
         sim = []
 
@@ -105,55 +106,55 @@ def align_joint(TomoAlign):
         # this could probably be made more efficient, right now I am not 
         # certain if I need to be deleting every time.
         
-        with TomoAlign.output1_cm:
-            TomoAlign.output1_cm.clear_output()
-            simulate_projections(_rec, sim, center, TomoAlign.tomo.theta)
-            # del _rec
-            sim = np.concatenate(sim, axis=1)
+        # with TomoAlign.output1_cm:
+        # TomoAlign.output1_cm.clear_output()
+        simulate_projections(_rec, sim, center, TomoAlign.tomo.theta)
+        # del _rec
+        sim = np.concatenate(sim, axis=1)
+        # only flip the simulated datasets if using normal tomopy algorithm
+        # can remove if it is flipped in the algorithm
+        if (
+            TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"] == False
+            and TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"] == False
+        ):
+            sim = np.flip(sim, axis=0)
 
-            # only flip the simulated datasets if using normal tomopy algorithm
-            # can remove if it is flipped in the algorithm
-            if (
-                TomoAlign.metadata["methods"]["SIRT_CUDA"]["Faster"] == False
-                and TomoAlign.metadata["methods"]["SIRT_CUDA"]["Fastest"] == False
-            ):
-                sim = np.flip(sim, axis=0)
+        # Cross correlation
+        shift_cpu = []
+        batch_cross_correlation(
+            TomoAlign.prj_for_alignment,
+            sim,
+            shift_cpu,
+            num_batches,
+            upsample_factor,
+            subset_correlation=False,
+            blur=False,
+            pad=TomoAlign.pad_ds
+        )
+        TomoAlign.shift = np.concatenate(shift_cpu, axis=1)
 
-            # Cross correlation
-            shift_cpu = []
-            batch_cross_correlation(
-                TomoAlign.prj_for_alignment, 
-                sim, shift_cpu,
-                num_batches, 
-                upsample_factor, 
-                subset_correlation=False, 
-                blur=False, 
-                pad=pad_ds
-            )
-            TomoAlign.shift = np.concatenate(shift_cpu, axis=1)
-
-            # Shifting.
-            (TomoAlign.prj_for_alignment, 
-            TomoAlign.sx, 
-            TomoAlign.sy, 
-            TomoAlign.shift, 
-            err, 
-            pad_ds, 
-            center) = shift_prj_update_shift_cp(
-                TomoAlign.prj_for_alignment, 
-                TomoAlign.sx, 
-                TomoAlign.sy, 
-                TomoAlign.shift, 
-                num_batches,
-                pad_ds,
-                center, 
-                downsample_factor=downsample_factor   
-            )
-            TomoAlign.conv[n] = np.linalg.norm(err)
+        # Shifting.
+        (TomoAlign.prj_for_alignment,
+        TomoAlign.sx,
+        TomoAlign.sy,
+        TomoAlign.shift,
+        err,
+        TomoAlign.pad_ds,
+        center) = shift_prj_update_shift_cp(
+            TomoAlign.prj_for_alignment,
+            TomoAlign.sx,
+            TomoAlign.sy,
+            TomoAlign.shift,
+            num_batches,
+            TomoAlign.pad_ds,
+            center,
+            downsample_factor=TomoAlign.downsample_factor
+        )
+        TomoAlign.conv[n] = np.linalg.norm(err)
         with TomoAlign.output2_cm:
             TomoAlign.output2_cm.clear_output(wait=True)
-            TomoAlign.plotIm(sim)
-            TomoAlign.plotSxSy(downsample_factor)
+            plotIm(TomoAlign, sim)
+            plotSxSy(TomoAlign, TomoAlign.downsample_factor)
             print(f"Error = {np.linalg.norm(err):3.3f}.")
 
         TomoAlign.recon = np.concatenate(TomoAlign.recon, axis=0)
@@ -166,11 +167,11 @@ def align_joint(TomoAlign):
     TomoAlign.prj_for_alignment *= scl
     TomoAlign.recon = circ_mask(TomoAlign.recon, 0)
     if downsample:
-        TomoAlign.sx /= downsample_factor
-        TomoAlign.sy /= downsample_factor
-        TomoAlign.shift /= downsample_factor
+        TomoAlign.sx /= TomoAlign.downsample_factor
+        TomoAlign.sy /= TomoAlign.downsample_factor
+        TomoAlign.shift /= TomoAlign.downsample_factor
     
-    TomoAlign.pad = tuple([x / downsample_factor for x in pad_ds])
+    TomoAlign.pad = tuple([x / TomoAlign.downsample_factor for x in TomoAlign.pad_ds])
     return TomoAlign
 
 def plotIm(TomoAlign, sim, projection_num=50):
@@ -269,7 +270,6 @@ def batch_cross_correlation(prj, sim, shift_cpu, num_batches, upsample_factor,
         if blur:
             _prj_gpu = blur_edges_cp(_prj_gpu, rin, rout)
             _sim_gpu = blur_edges_cp(_sim_gpu, rin, rout)
-
         # e.g. lets say sim is (-50, 0) wrt prj. This would correspond to
         # a shift of [+50, 0]
         # In the warping section, we have to now warp prj by (-50, 0), so the 

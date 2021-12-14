@@ -2,26 +2,23 @@ import tomopyui.widgets.meta as meta
 import functools
 from ipywidgets import *
 
-file_import = meta.Import()
+def create_dashboard():
 
-import_widgets = [  
-                    file_import.filechooser, 
-                    file_import.angles_textboxes,
-                    file_import.opts_checkboxes
-                ]
+    file_import = meta.Import()
+    import_widgets = [[file_import.filechooser], file_import.angles_textboxes, file_import.opts_checkboxes]
+    import_widgets = [item for sublist in import_widgets for item in sublist]
+    import_tab = HBox(import_widgets)
 
-import_tab = HBox([import_widgets])
+    prep_tab_obj = meta.Prep(file_import)
+    recon_tab_obj = meta.Recon(file_import)
+    align_tab_obj = meta.Align(file_import)
 
-prep_tab = meta.Prep(a)
-recon_tab = meta.Recon(a)
-align_tab = meta.Align(a)
+    dashboard_tabs = [import_tab, align_tab_obj.alignment_tab, recon_tab_obj.recon_tab, file_import.log_handler.out]
+    dashboard_titles = ["Import", "Align", "Reconstruct", "Log"]
+    dashboard = Tab(titles=dashboard_titles)
+    dashboard.children = dashboard_tabs
+    return dashboard, file_import, prep_tab_obj, align_tab_obj, recon_tab_obj
 
-dashboard_tabs = [import_tab, prep_tab, align_tab, recon_tab, file_import.log_handler.out]
-recon_dashboard_titles = ["Import", "Prep", "Align", "Reconstruct", "Log"]
-recon_dashboard = Tab(titles=recon_dashboard_titles)
-recon_dashboard.children = recon_dashboard_tabs
-
-recon_dashboard
 # def make_prep_tab(self):
 #     self.icon = "fas fa-cog fa-spin fa-lg"
 #     self.button_style = "info"

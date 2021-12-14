@@ -8,7 +8,7 @@ import os
 import functools
 
 # fix where this is coming from:
-import tomopyui.tomodata as td
+import tomopyui.backend.tomodata as td
 
 # for alignment box
 import tifffile as tf
@@ -19,8 +19,8 @@ from ._shared import output_handler
 import json
 
 # for alignment box
-import tomopy.data.tomodata as td
-from tomopy.data.tomoalign import TomoAlign, init_new_from_prior
+import tomopyui.backend.tomodata as td
+from tomopyui.backend.tomoalign import TomoAlign
 
 import logging
 
@@ -48,6 +48,7 @@ class Import:
         self.log = logging.getLogger(__name__)
         self.log_handler, self.log = output_handler.return_handler(self.log,
             logging_level=20)
+        self.set_wd()
         self.set_metadata()  # init metadata
 
     def set_metadata(self):
@@ -58,6 +59,7 @@ class Import:
             "angle_start": self.angle_start,
             "angle_end": self.angle_end,
             "num_theta": self.num_theta,
+            "rotate": self.rotate
         }
 
     def set_wd(self, wd=None):
@@ -69,7 +71,6 @@ class Import:
         self.set_wd(wd=self.fpath)
         self.set_metadata()
         
-
     # Creating options checkboxes and registering their callbacks
     def create_opts_checkboxes(self):
         def create_opt_dict_on_checkmark(change, opt_list):
@@ -144,13 +145,14 @@ class Import:
 
 class Prep:
     def __init__(self, Import):
+
         self.tomo = Import.tomo
         self.dark = None
         self.flat = None
         self.darkfc = FileChooser()
-        self.darkfc.register_callback(set_fpath_dark)
+        self.darkfc.register_callback(self.set_fpath_dark)
         self.flatfc = FileChooser()
-        self.flatfc.register_callback(set_fpath_flat)
+        self.flatfc.register_callback(self.set_fpath_flat)
         self.fpathdark = None
         self.fnamedark = None
         self.fpathflat = None
@@ -207,7 +209,7 @@ class Align:
         #     self.tomo = Prep.tomo
         # if Prep is not None and Align is not None:
         #     self.tomo = Align.tomo
-
+        self.Import =  Import
         self.angle_start = Import.angle_start
         self.angle_end = Import.angle_end
         self.num_theta = Import.num_theta
@@ -226,14 +228,13 @@ class Align:
         self.paddingY = 10
         self.methods = {}
         self.save_opts = {}
-        self.metadata = Import.metadata.copy()
+        self.metadata = {}
         self.accepted_save_opts = ["tomo_after", "tomo_before", "recon", "tiff", "npy"]
         self.set_metadata()
 
         self.reconstruction_output = Output()
         self.plot_output = Output()
         self.alignbool = False
-
         self.method_output = Output()
         self.output0 = Output()
         self.output1 = Output()
@@ -244,6 +245,18 @@ class Align:
         # self.metadata["callbacks"]["output1"] = output1
         # self.metadata["callbacks"]["output2"] = output2
         self.make_alignment_tab()
+
+    # def update_import_metadata(self):
+    #     self.angle_start = self.Import.angle_start
+    #     self.angle_end = self.Import.angle_end
+    #     self.num_theta = self.Import.num_theta
+    #     self.fname = self.Import.fname
+    #     self.fpath = self.Import.fpath
+    #     self.ftype = self.Import.ftype
+    #     self.wd = self.Import.wd
+    #     self.rotate = self.Import.rotate
+    #     self.set_metadata()
+
 
     def set_metadata(self):
 
@@ -258,55 +271,52 @@ class Align:
             self.paddingX,
             self.paddingY,
         )
-        self.metadata["opts"]["prj_range_x"] = self.prj_range_x
-        self.metadata["opts"]["prj_range_y"] = self.prj_range_y
         self.metadata["opts"]["extra_options"] = self.extra_options
         self.metadata["methods"] = self.methods
         self.metadata["save_opts"] = self.save_opts
+        self.metadata["prj_range_x"] = self.prj_range_x
+        self.metadata["prj_range_y"] = self.prj_range_y
+        self.log.info(f"Set alignment metadata to {self.metadata}")
 
     def make_alignment_tab(self):
 
         extend_description_style = {"description_width": "auto"}
-        fpath = self.metadata["fpath"]
-        fname = self.metadata["fname"]
 
         def activate_box(change):
             if change.new == 0:
                 radio_align_fulldataset.disabled = False
                 self.alignbool = True
-                self.metadata["opts"] = {}
-                self.metadata["methods"] = {}
-                self.metadata["save_opts"] = {}
                 save_options_accordion.selected_index = 0
                 options_accordion.selected_index = 0
                 methods_accordion.selected_index = 0
+                align_start_button.disabled = False
+                self.log.info("Activated alignment.")
             elif change.new == 1:
                 radio_align_fulldataset.disabled = True
-                projection_range_x.disabled = True
-                projection_range_y.disabled = True
+                self.projection_range_x_slider.disabled = True
+                self.projection_range_y_slider.disabled = True
                 self.alignbool = False
-                self.metadata.pop("opts")
-                self.metadata.pop("methods")
-                self.metadata.pop("save_opts")
                 save_options_accordion.selected_index = None
                 options_accordion.selected_index = None
                 methods_accordion.selected_index = None
+                align_start_button.disabled = True
+                self.log.info("Deactivated alignment.")
 
         def set_projection_ranges(sizeY, sizeX):
-            projection_range_x.max = sizeX - 1
-            projection_range_y.max = sizeY - 1
+            self.projection_range_x_slider.max = sizeX - 1
+            self.projection_range_y_slider.max = sizeY - 1
             # projection_range_z_recon.max = sizeZ-1
-            projection_range_x.value = [0, sizeX - 1]
-            projection_range_y.value = [0, sizeY - 1]
+            self.projection_range_x_slider.value = [0, sizeX - 1]
+            self.projection_range_y_slider.value = [0, sizeY - 1]
             # projection_range_z_recon.value = [0, sizeZ-1]
-            self.metadata["prj_range_x"] = projection_range_x.value
-            self.metadata["prj_range_y"] = projection_range_y.value
+            self.metadata["prj_range_x"] = self.projection_range_x_slider.value
+            self.metadata["prj_range_y"] = self.projection_range_y_slider.value
             self.prj_range_x = self.metadata["prj_range_x"]
             self.prj_range_y = self.metadata["prj_range_y"]
 
         def load_tif_shape_tag(folder_import=False):
-            os.chdir(fpath)
-            tiff_count_in_folder = len(glob.glob1(fpath, "*.tif"))
+            os.chdir(self.Import.fpath)
+            tiff_count_in_folder = len(glob.glob1(self.Import.fpath, "*.tif"))
             global sizeY, sizeX
             if folder_import:
                 _tomo = td.TomoData(metadata=self.metadata)
@@ -315,9 +325,8 @@ class Align:
                 sizeY = size[1]
                 sizeX = size[2]
                 set_projection_ranges(sizeY, sizeX)
-
             else:
-                with tf.TiffFile(fname) as tif:
+                with tf.TiffFile(self.Import.fname) as tif:
                     if tiff_count_in_folder > 50:
                         sizeX = tif.pages[0].tags["ImageWidth"].value
                         sizeY = tif.pages[0].tags["ImageLength"].value
@@ -330,8 +339,8 @@ class Align:
                     set_projection_ranges(sizeY, sizeX)
 
         def load_npy_shape():
-            os.chdir(fpath)
-            size = np.load(fname, mmap_mode="r").shape
+            os.chdir(self.Import.fpath)
+            size = np.load(self.Import.fname, mmap_mode="r").shape
             global sizeY, sizeX
             sizeY = size[1]
             sizeX = size[2]
@@ -340,21 +349,21 @@ class Align:
         def activate_full_partial(change):
             if change.new == 1:
                 self.metadata["partial"] = True
-                projection_range_x.disabled = False
-                projection_range_y.disabled = False
+                self.projection_range_x_slider.disabled = False
+                self.projection_range_y_slider.disabled = False
                 # projection_range_z_recon.disabled = False
-                if fname != "":
-                    if fname.__contains__(".tif"):
+                if self.Import.fname != "":
+                    if self.Import.fname.__contains__(".tif"):
                         load_tif_shape_tag()
-                    elif self.metadata["fname"].__contains__(".npy"):
+                    elif self.Import.fname.__contains__(".npy"):
                         load_npy_shape()
                     else:
                         load_tif_shape_tag(folder_import=True)
             elif change.new == 0:
                 self.metadata["partial"] = False
                 set_projection_ranges(sizeY, sizeX)
-                projection_range_x.disabled = True
-                projection_range_y.disabled = True
+                self.projection_range_x_slider.disabled = True
+                self.projection_range_y_slider.disabled = True
                 # projection_range_z_recon.disabled = True
 
         def set_options_and_run_align(change):
@@ -362,29 +371,16 @@ class Align:
             change.description = (
                 "Setting options and loading data into alignment algorithm."
             )
-
-            if len(self.metadata["methods"]) > 1:
-                self.metadata["alignmultiple"] = True
             try:
-                self.description = "Aligning your data."
-                align_number = self.metadata["align_number"]
-                if align_number == 0:
-                    a = TomoAlign(tomo, self.metadata)
-                else:
-                    aligned_tomo_list.append(
-                        init_new_from_prior(
-                            aligned_tomo_list[align_number - 1], self.metadata
-                        )
-                    )
-                self.button_style = "success"
-                self.icon = "fa-check-square"
-                self.description = "Finished alignment. Click to run second alignment with updated parameters."
-                self.metadata["align_number"] += 1
+                a = TomoAlign(self)
+                change.button_style = "success"
+                change.icon = "fa-check-square"
+                change.description = "Finished alignment."
             except:
-                with output0:
-                    self.button_style = "warning"
-                    self.icon = "exclamation-triangle"
-                    self.description = "Something went wrong."
+                with self.output0:
+                    change.button_style = "warning"
+                    change.icon = "exclamation-triangle"
+                    change.description = "Something went wrong."
 
         radio_align = RadioButtons(
             options=["Yes", "No"],
@@ -403,7 +399,10 @@ class Align:
         )
         radio_align_fulldataset.observe(activate_full_partial, names="index")
 
-        projection_range_x = IntRangeSlider(
+        @debounce(0.2)
+        def projection_range_x_update_dict(change):
+            self.metadata["prj_range_x"] = change.new
+        self.projection_range_x_slider = IntRangeSlider(
             value=[0, 10],
             min=0,
             max=10,
@@ -417,7 +416,12 @@ class Align:
             layout=Layout(width="100%"),
             style=extend_description_style,
         )
-        projection_range_y = IntRangeSlider(
+        self.projection_range_x_slider.observe(projection_range_x_update_dict, names="value")
+
+        @debounce(0.2)
+        def projection_range_y_update_dict(change):
+            self.metadata["prj_range_y"] = change.new
+        self.projection_range_y_slider = IntRangeSlider(
             value=[0, 10],
             min=0,
             max=10,
@@ -431,6 +435,7 @@ class Align:
             layout=Layout(width="100%"),
             style=extend_description_style,
         )
+        self.projection_range_y_slider.observe(projection_range_y_update_dict, names="value")
 
         # Radio descriptions
         radio_description = "Would you like to align this dataset?"
@@ -749,8 +754,8 @@ class Align:
                 #     justify_content="center",
                 #     align_content="center",
                 # ),
-                projection_range_x,
-                projection_range_y,
+                self.projection_range_x_slider,
+                self.projection_range_y_slider,
             ],
             layout=Layout(width="30%"),
             justify_content="center",
@@ -834,7 +839,7 @@ class Recon:
             self.tomo = Prep.tomo
         if Prep is not None and Align is not None:
             self.tomo = Align.tomo
-
+        self.Import = Import
         self.metadata = Import.metadata.copy()
         self.opts = {}
         self.methods = {}
@@ -846,7 +851,7 @@ class Recon:
         self.set_metadata()
         self.make_recon_tab()
 
-    def set_metadata():
+    def set_metadata(self):
         self.metadata["opts"] = self.opts
         self.metadata["methods"] = self.methods
         self.metadata["save_opts"] = self.save_opts
@@ -857,8 +862,8 @@ class Recon:
     def make_recon_tab(self):
 
         extend_description_style = {"description_width": "auto"}
-        fpath = self.metadata["fpath"]
-        fname = self.metadata["fname"]
+        fpath = self.Import.fpath
+        fname = self.Import.fname
 
         def activate_box(change):
             if change.new == 0:
@@ -872,8 +877,8 @@ class Recon:
                 methods_accordion.selected_index = 0
             elif change.new == 1:
                 radio_recon_fulldataset.disabled = True
-                projection_range_x.disabled = True
-                projection_range_y.disabled = True
+                self.projection_range_x_slider.disabled = True
+                self.projection_range_y_slider.disabled = True
                 self.metadata["reconstruct"] = False
                 self.metadata.pop("opts")
                 self.metadata.pop("methods")
@@ -883,19 +888,19 @@ class Recon:
                 methods_accordion.selected_index = None
 
         def set_projection_ranges(sizeY, sizeX):
-            projection_range_x.max = sizeX - 1
-            projection_range_y.max = sizeY - 1
+            self.projection_range_x_slider.max = sizeX - 1
+            self.projection_range_y_slider.max = sizeY - 1
             # projection_range_z_recon.max = sizeZ-1
-            projection_range_x.value = [0, sizeX - 1]
-            projection_range_y.value = [0, sizeY - 1]
+            self.projection_range_x_slider.value = [0, sizeX - 1]
+            self.projection_range_y_slider.value = [0, sizeY - 1]
             # projection_range_z_recon.value = [0, sizeZ-1]
-            self.metadata["prj_range_x"] = projection_range_x.value
-            self.metadata["prj_range_y"] = projection_range_y.value
+            self.metadata["prj_range_x"] = self.projection_range_x_slider.value
+            self.metadata["prj_range_y"] = self.projection_range_y_slider.value
             self.prj_range_x = self.metadata["prj_range_x"]
             self.prj_range_y = self.metadata["prj_range_y"]
 
         def load_tif_shape_tag(folder_import=False):
-            os.chdir(fpath)
+            os.chdir(self.Import.fpath)
             tiff_count_in_folder = len(glob.glob1(fpath, "*.tif"))
             global sizeY, sizeX
             if folder_import:
@@ -907,7 +912,7 @@ class Recon:
                 set_projection_ranges(sizeY, sizeX)
 
             else:
-                with tf.TiffFile(fname) as tif:
+                with tf.TiffFile(self.Import.fname) as tif:
                     if tiff_count_in_folder > 50:
                         sizeX = tif.pages[0].tags["ImageWidth"].value
                         sizeY = tif.pages[0].tags["ImageLength"].value
@@ -921,7 +926,7 @@ class Recon:
 
         def load_npy_shape():
             os.chdir(fpath)
-            size = np.load(fname, mmap_mode="r").shape
+            size = np.load(self.Import.fname, mmap_mode="r").shape
             global sizeY, sizeX
             sizeY = size[1]
             sizeX = size[2]
@@ -930,21 +935,21 @@ class Recon:
         def activate_full_partial(change):
             if change.new == 1:
                 self.metadata["partial"] = True
-                projection_range_x.disabled = False
-                projection_range_y.disabled = False
+                self.projection_range_x_slider.disabled = False
+                self.projection_range_y_slider.disabled = False
                 # projection_range_z_recon.disabled = False
-                if fname != "":
-                    if fname.__contains__(".tif"):
+                if self.Import.fname != "":
+                    if self.Import.fname.__contains__(".tif"):
                         load_tif_shape_tag()
-                    elif self.metadata["fname"].__contains__(".npy"):
+                    elif self.Import.fname.__contains__(".npy"):
                         load_npy_shape()
                     else:
                         load_tif_shape_tag(folder_import=True)
             elif change.new == 0:
                 self.metadata["partial"] = False
                 set_projection_ranges(sizeY, sizeX)
-                projection_range_x.disabled = True
-                projection_range_y.disabled = True
+                self.projection_range_x_slider.disabled = True
+                self.projection_range_y_slider.disabled = True
                 # projection_range_z_recon.disabled = True
 
         radio_recon = RadioButtons(
@@ -969,7 +974,7 @@ class Recon:
         def projection_range_x_update_dict(change):
             self.metadata["prj_range_x"] = change.new
 
-        projection_range_x = IntRangeSlider(
+        self.projection_range_x_slider = IntRangeSlider(
             value=[0, 10],
             min=0,
             max=10,
@@ -983,13 +988,13 @@ class Recon:
             layout=Layout(width="100%"),
             style=extend_description_style,
         )
-        projection_range_x.observe(projection_range_x_update_dict, "value")
+        self.projection_range_x_slider.observe(projection_range_x_update_dict, "value")
 
         @debounce(0.2)
         def projection_range_y_update_dict(change):
             self.metadata["prj_range_y"] = change.new
 
-        projection_range_y = IntRangeSlider(
+        self.projection_range_y_slider = IntRangeSlider(
             value=[0, 10],
             min=0,
             max=10,
@@ -1003,7 +1008,7 @@ class Recon:
             layout=Layout(width="100%"),
             style=extend_description_style,
         )
-        projection_range_y.observe(projection_range_y_update_dict, "value")
+        self.projection_range_y_slider.observe(projection_range_y_update_dict, "value")
 
         # Radio descriptions
         radio_description = "Would you like to reconstruct this dataset?"
@@ -1269,7 +1274,7 @@ class Recon:
 
         #### putting it all together
         sliders_box = VBox(
-            [projection_range_x, projection_range_y,],
+            [self.projection_range_x_slider, self.projection_range_y_slider,],
             layout=Layout(width="30%"),
             justify_content="center",
             align_items="space-between",
@@ -1291,7 +1296,7 @@ class Recon:
             ),
         )
 
-        recon_tab = VBox(
+        self.recon_tab = VBox(
             [
                 recon_initialization_box,
                 options_accordion,
@@ -1299,5 +1304,3 @@ class Recon:
                 save_options_accordion,
             ]
         )
-
-        return recon_tab

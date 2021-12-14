@@ -52,7 +52,6 @@ class TomoData:
         self.theta = theta
         self.verbose_import = verbose_import
         self.filename = filename
-        self.cbarRange = cbarRange
 
         if self.verbose_import == True:
             logging.getLogger("dxchange").setLevel(logging.INFO)
@@ -75,7 +74,7 @@ class TomoData:
         # input is only for storing metadata, maybe better that way.
         if self.theta is None and self.num_theta is not None:
             self.theta = angle_maker(
-                self.num_theta, self.metadata["start_angle"], self.metadata["end_angle"]
+                self.num_theta, self.metadata["angle_start"], self.metadata["angle_end"]
             )
 
         if self.prj_imgs is None:

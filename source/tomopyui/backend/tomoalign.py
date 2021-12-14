@@ -12,10 +12,12 @@ from .util.trim_padding import trim_padding
 
 import datetime
 import json
+import os
 import tifffile as tf
-import tomopy.data.tomodata as td
+import tomopyui.backend.tomodata as td
+import numpy as np
 
-class TomoAlign(td.TomoData):
+class TomoAlign:
     """
     Class for performing alignments.
 
@@ -28,7 +30,7 @@ class TomoAlign(td.TomoData):
 
         self.Align = Align
         self.metadata = Align.metadata.copy()
-        self.tomo = super().__init__(metadata=self.metadata)
+        self.tomo = td.TomoData(metadata=Align.Import.metadata)
         if self.metadata["partial"]:
             self.prj_range_x = self.metadata["prj_range_x"]
             self.prj_range_y = self.metadata["prj_range_y"]
@@ -38,14 +40,18 @@ class TomoAlign(td.TomoData):
         self.conv = None
         self.recon = None
         self.pad = Align.metadata["opts"]["pad"]
-        self.downsample = Align.metadata["downsample"]
+        self.downsample = Align.metadata["opts"]["downsample"]
+        self.num_batches = Align.metadata["opts"]["batch_size"]
         if self.downsample:
             self.downsample_factor = self.metadata["opts"]["downsample_factor"]
         else:
             self.downsample_factor = 1
-        self.pad_ds = tuple([int(self.downsample_factor*x) for x in pad])
-        self.center = self.center*self.downsample_factor + self.pad_ds[0]
-        self.wd_parent = Align.wd
+        self.pad_ds = tuple([int(self.downsample_factor*x) for x in self.pad])
+        self.center = self.Align.center*self.downsample_factor + self.pad_ds[0]
+        self.wd_parent = Align.Import.wd
+        self.method_bar_cm = Align.method_output
+        self.output1_cm = Align.output1
+        self.output2_cm = Align.output2
         self.make_wd()
         self._main()
 
@@ -53,7 +59,10 @@ class TomoAlign(td.TomoData):
         now = datetime.datetime.now()
         os.chdir(self.wd_parent)
         dt_string = now.strftime("%Y%m%d-%H%M-")
-        os.mkdir(dt_string + "alignment")
+        try:
+            os.mkdir(dt_string + "alignment")
+        except:
+            os.mkdir(dt_string + "alignment-1")
         os.chdir(dt_string + "alignment")
         save_metadata("overall_alignment_metadata.json", self.metadata)
         #!!!!!!!!!! make option for tiff file save
@@ -92,15 +101,15 @@ class TomoAlign(td.TomoData):
             # downsample images in stack
             self.prj_for_alignment = rescale(
                 self.prj_for_alignment,
-                (1, downsample_factor, downsample_factor),
+                (1, self.downsample_factor, self.downsample_factor),
                 anti_aliasing=True,
             )
-
+            print(self.prj_for_alignment.shape)
         # Pad
         self.prj_for_alignment, self.pad_ds = pad_projections(
             self.prj_for_alignment, self.pad_ds, 1
         )
-
+        print(self.prj_for_alignment.shape)
     def align(self):
         """
         Aligns a TomoData object using options in GUI.
@@ -158,23 +167,26 @@ class TomoAlign(td.TomoData):
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
             self.init_prj()
+            print("prj_for_alignment")
+            print(self.prj_for_alignment.shape)
             tic = perf_counter()
             self.align()
             # make new dataset and pad/shift it
-            new_prj_imgs = deepcopy(TomoAlign.tomo.prj_imgs)
-            new_prj_imgs, pad = pad_projections(new_prj_imgs, pad, 1)
+            new_prj_imgs = deepcopy(self.tomo.prj_imgs)
+            new_prj_imgs, self.pad = pad_projections(new_prj_imgs, self.pad, 1)
             new_prj_imgs = shift_prj_cp(
                 new_prj_imgs, 
-                TomoAlign.sx, 
-                TomoAlign.sy, 
-                num_batches, 
-                pad,
+                self.sx,
+                self.sy,
+                self.num_batches,
+                self.pad,
                 use_corr_prj_gpu=False)
-            
+            print(new_prj_imgs.shape)
             new_prj_imgs = trim_padding(new_prj_imgs)
-            TomoAlign.tomo = td.TomoData(
+            print(new_prj_imgs.shape)
+            self.tomo = td.TomoData(
                             prj_imgs=new_prj_imgs, 
-                            metadata=TomoAlign.metadata
+                            metadata=self.Align.Import.metadata
             )
             toc = perf_counter()
             self.metadata["alignment_time"] = {
