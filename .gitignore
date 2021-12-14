@@ -117,3 +117,6 @@ dmypy.json
 # Sublime Text
 *.sublime-project
 *.sublime-workspace
+
+# Data folder
+data/
