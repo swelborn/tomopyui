@@ -10,8 +10,11 @@ from tomopy.recon import algorithm
 from tomopy.misc.corr import circ_mask
 from skimage.transform import rescale
 from .util.save_metadata import save_metadata
+from tomopy.recon import algorithm as tomopy_algorithm
 
-import tomopy.data.tomodata as td
+
+import tomocupy.recon.algorithm as tomocupy_algorithm
+import tomopyui.backend.tomodata as td
 import matplotlib.pyplot as plt
 import datetime
 import time
@@ -24,7 +27,7 @@ import tomopy
 import numpy as np
 
 
-class TomoRecon(td.TomoData):
+class TomoRecon:
     """
     Class for performing reconstructions.
 
@@ -40,16 +43,16 @@ class TomoRecon(td.TomoData):
 
         self.Recon = Recon
         self.metadata = Recon.metadata.copy()
-        self.tomo = super().__init__(metadata=Recon.Import.metadata)
+        self.tomo = td.TomoData(metadata=Recon.Import.metadata)
         self.partial = Recon.partial
         if self.partial:
             self.prj_range_x = self.metadata["prj_range_x"]
             self.prj_range_y = self.metadata["prj_range_y"]
         self.recon = None
-        self.center = self.Recon.center*self.downsample_factor # add padding?
-        self.wd_parent = Recon.Import.wd
         self.downsample = Recon.downsample
         self.downsample_factor = Recon.downsample_factor
+        self.center = self.Recon.center*self.downsample_factor # add padding?
+        self.wd_parent = Recon.Import.wd
         self.num_iter = Recon.num_iter
         self.make_wd()
         self._main()
@@ -81,7 +84,7 @@ class TomoRecon(td.TomoData):
 
     def init_prj(self):
         # Take away part of it, if desired.
-        if self.metadata["partial"]:
+        if self.partial:
             proj_range_x_low = self.prj_range_x[0]
             proj_range_x_high = self.prj_range_x[1]
             proj_range_y_low = self.prj_range_y[0]
@@ -161,26 +164,30 @@ class TomoRecon(td.TomoData):
         self.recon = np.empty(
             (tomo_shape[1], tomo_shape[2], tomo_shape[2]), dtype=np.float32
         )
-
+        self.Recon.log.info("Starting" + method_str)
         # Options go into kwargs which go into recon()
         # center = find_center_vo(self.prj_for_recon)
         # print(center)
         center = self.center
 
-        if self.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]:
-            self.recon = tomocupy_algorithm.recon_sirt_3D(
-                self.prj_for_alignment, 
-                self.tomo.theta,
-                num_iter=num_iter,
-                rec=self.recon,
-                center=center)
-        elif self.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]:
-            self.recon = tomocupy_algorithm.recon_sirt_3D_allgpu(
-                self.prj_for_alignment, 
-                self.tomo.theta, 
-                num_iter=num_iter,
-                rec=self.recon, 
-                center=center)
+        if (
+            "SIRT_CUDA" in self.metadata["methods"]
+            and "SIRT Plugin-Faster" in self.metadata["methods"]["SIRT_CUDA"]
+        ):
+            if self.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]:
+                self.recon = tomocupy_algorithm.recon_sirt_3D(
+                    self.prj_for_recon,
+                    self.tomo.theta,
+                    num_iter=num_iter,
+                    rec=self.recon,
+                    center=center)
+            elif self.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]:
+                self.recon = tomocupy_algorithm.recon_sirt_3D_allgpu(
+                    self.prj_for_recon,
+                    self.tomo.theta,
+                    num_iter=num_iter,
+                    rec=self.recon,
+                    center=center)
         else:
             # Options go into kwargs which go into recon()
             kwargs = {}
@@ -192,7 +199,7 @@ class TomoRecon(td.TomoData):
             kwargs["options"] = options
 
             self.recon = tomopy_algorithm.recon(
-                self.prj_for_alignment,
+                self.prj_for_recon,
                 self.tomo.theta,
                 algorithm=wrappers.astra,
                 init_recon=self.recon,

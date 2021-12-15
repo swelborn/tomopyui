@@ -27,6 +27,8 @@ def align_joint(TomoAlign):
     downsample = TomoAlign.metadata["opts"]["downsample"]            
     pad = TomoAlign.metadata["opts"]["pad"]
     method_str = list(TomoAlign.metadata["methods"].keys())[0]
+    if method_str == "MLEM_CUDA":
+        method_str = "EM_CUDA"
     upsample_factor = TomoAlign.metadata["opts"]["upsample_factor"]
     num_batches = TomoAlign.metadata["opts"]["batch_size"] # change to num_batches
     center = TomoAlign.center
@@ -36,14 +38,14 @@ def align_joint(TomoAlign):
 
     # Initialization of reconstruction dataset
     tomo_shape = TomoAlign.prj_for_alignment.shape
-    TomoAlign.recon = np.empty(
+    TomoAlign.recon = np.mean(TomoAlign.prj_for_alignment)*np.empty(
         (tomo_shape[1], tomo_shape[2], tomo_shape[2]), dtype=np.float32
     )
 
     # add progress bar for method. roughly a full-loop progress bar.
     # Initialize shift arrays
-    TomoAlign.sx = np.zeros((init_tomo_shape[0]))
-    TomoAlign.sy = np.zeros((init_tomo_shape[0]))
+    TomoAlign.sx = np.zeros((tomo_shape[0]))
+    TomoAlign.sy = np.zeros((tomo_shape[0]))
     TomoAlign.conv = np.zeros((num_iter))
     # start iterative alignment
     for n in range(num_iter):
@@ -51,43 +53,66 @@ def align_joint(TomoAlign):
         TomoAlign.Align.progress_reprojection.value = 0
         TomoAlign.Align.progress_phase_cross_corr.value = 0
         _rec = TomoAlign.recon
-        if TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]:
-            TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
-                TomoAlign.prj_for_alignment, 
-                TomoAlign.tomo.theta,
-                num_iter=1,
-                rec=_rec,
-                center=center)
-        elif TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]:
-            TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D_allgpu(
-                TomoAlign.prj_for_alignment, 
-                TomoAlign.tomo.theta, 
-                num_iter=1,
-                rec=_rec, 
-                center=center)
+        if (
+            "SIRT_CUDA" in TomoAlign.metadata["methods"]
+            and "SIRT Plugin-Faster" in TomoAlign.metadata["methods"]["SIRT_CUDA"]
+        ):
+            if TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]:
+                TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
+                    TomoAlign.prj_for_alignment,
+                    TomoAlign.tomo.theta,
+                    num_iter=1,
+                    rec=_rec,
+                    center=center)
+            elif TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]:
+                TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D_allgpu(
+                    TomoAlign.prj_for_alignment,
+                    TomoAlign.tomo.theta,
+                    num_iter=1,
+                    rec=_rec,
+                    center=center)
+        elif "CGLS_CUDA" in TomoAlign.metadata["methods"]:
+            TomoAlign.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
+                    TomoAlign.prj_for_alignment,
+                    TomoAlign.tomo.theta,
+                    num_iter=1,
+                    rec=_rec,
+                    center=center)
         else:
             # Options go into kwargs which go into recon()
             kwargs = {}
             options = {
                 "proj_type": "cuda",
                 "method": method_str,
-                "num_iter": 1
-                }
+                "num_iter": 5,
+                "extra_options": {"MinConstraint":0}}
             kwargs["options"] = options
-
-            TomoAlign.recon = tomopy_algorithm.recon(
-                TomoAlign.prj_for_alignment,
-                TomoAlign.tomo.theta,
-                algorithm=wrappers.astra,
-                init_recon=_rec,
-                center=center,
-                ncore=None,
-                **kwargs,
-            )
+            print(np.mean(TomoAlign.prj_for_alignment))
+            if n == 0:
+                TomoAlign.recon = tomopy_algorithm.recon(
+                    TomoAlign.prj_for_alignment,
+                    TomoAlign.tomo.theta,
+                    algorithm=wrappers.astra,
+                    center=center,
+                    ncore=1,
+                    **kwargs,
+                    )
+            else:
+                TomoAlign.recon = tomopy_algorithm.recon(
+                    TomoAlign.prj_for_alignment,
+                    TomoAlign.tomo.theta,
+                    algorithm=wrappers.astra,
+                    init_recon=_rec,
+                    center=center,
+                    ncore=1,
+                    **kwargs,
+                    )
         TomoAlign.Align.progress_total.value = n + 1
         # update progress bar
         # method_bar.update()
         # break up reconstruction into batches along z axis
+        print(TomoAlign.recon.shape)
+        print(np.mean(TomoAlign.recon))
         TomoAlign.recon = np.array_split(TomoAlign.recon, num_batches, axis=0)
         # may not need a copy.
         _rec = TomoAlign.recon.copy()
@@ -101,16 +126,24 @@ def align_joint(TomoAlign):
         
         simulate_projections(_rec, sim, center, TomoAlign.tomo.theta,
             progress=TomoAlign.Align.progress_reprojection)
-        # del _rec
         sim = np.concatenate(sim, axis=1)
         # only flip the simulated datasets if using normal tomopy algorithm
         # can remove if it is flipped in the algorithm
-        if (
-            TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"] == False
-            and TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"] == False
-        ):
-            sim = np.flip(sim, axis=0)
 
+        # TODO: this is a messy way to do this...
+        if (
+            "SIRT_CUDA" in TomoAlign.metadata["methods"]
+            and "SIRT Plugin-Faster" in TomoAlign.metadata["methods"]["SIRT_CUDA"]
+        ):
+
+            if (
+                not TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]
+                and not TomoAlign.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]
+            ):
+
+                sim = np.flip(sim, axis=0)
+        elif "CGLS_CUDA" in TomoAlign.metadata["methods"]: pass
+        else: sim = np.flip(sim, axis=0)
         # Cross correlation
         shift_cpu = []
         batch_cross_correlation(
