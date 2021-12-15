@@ -380,10 +380,9 @@ class Align:
                 change.icon = "fa-check-square"
                 change.description = "Finished alignment."
             except:
-                with self.output0:
-                    change.button_style = "warning"
-                    change.icon = "exclamation-triangle"
-                    change.description = "Something went wrong."
+                change.button_style = "warning"
+                change.icon = "exclamation-triangle"
+                change.description = "Something went wrong."
 
         radio_align = RadioButtons(
             options=["Yes", "No"],
@@ -515,8 +514,6 @@ class Align:
             if change.new == False:
                 self.metadata["methods"].pop(change.owner.description)
 
-        recon_FP_CUDA = Checkbox(description="FP_CUDA")
-        recon_BP_CUDA = Checkbox(description="BP_CUDA")
         recon_FBP_CUDA = Checkbox(description="FBP_CUDA")
         ### !!!!!!!! sirt cuda has options - maybe make them into a radio chooser
         recon_SIRT_CUDA = Checkbox(description="SIRT_CUDA")
@@ -539,8 +536,6 @@ class Align:
         recon_CGLS_CUDA = Checkbox(description="CGLS_CUDA")
         recon_MLEM_CUDA = Checkbox(description="MLEM_CUDA")
         recon_method_list = [
-            recon_FP_CUDA,
-            recon_BP_CUDA,
             recon_FBP_CUDA,
             recon_SART_CUDA,
             recon_CGLS_CUDA,
@@ -862,6 +857,10 @@ class Recon:
         self.partial = False
         self.center = 0
         self.num_iter = 1
+        self.log_handler, self.log = Import.log_handler, Import.log
+        self.prj_range_x = (0, 10)
+        self.prj_range_y = (0, 10)
+        self.reconbool = False
         self.set_metadata()
         self.make_recon_tab()
 
@@ -876,30 +875,26 @@ class Recon:
     def make_recon_tab(self):
 
         extend_description_style = {"description_width": "auto"}
-        fpath = self.Import.fpath
-        fname = self.Import.fname
 
         def activate_box(change):
             if change.new == 0:
                 radio_recon_fulldataset.disabled = False
                 self.metadata["reconstruct"] = True
-                self.metadata["opts"] = {}
-                self.metadata["methods"] = {}
-                self.metadata["save_opts"] = {}
                 save_options_accordion.selected_index = 0
                 options_accordion.selected_index = 0
                 methods_accordion.selected_index = 0
+                recon_start_button.disabled = False
+                self.log.info("Activated reconstruction.")
             elif change.new == 1:
                 radio_recon_fulldataset.disabled = True
                 self.projection_range_x_slider.disabled = True
                 self.projection_range_y_slider.disabled = True
                 self.metadata["reconstruct"] = False
-                self.metadata.pop("opts")
-                self.metadata.pop("methods")
-                self.metadata.pop("save_opts")
                 save_options_accordion.selected_index = None
                 options_accordion.selected_index = None
                 methods_accordion.selected_index = None
+                recon_start_button.disabled = True
+                self.log.info("Deactivated reconstruction.")
 
         def set_projection_ranges(sizeY, sizeX):
             self.projection_range_x_slider.max = sizeX - 1
@@ -915,7 +910,7 @@ class Recon:
 
         def load_tif_shape_tag(folder_import=False):
             os.chdir(self.Import.fpath)
-            tiff_count_in_folder = len(glob.glob1(fpath, "*.tif"))
+            tiff_count_in_folder = len(glob.glob1(self.Import.fpath, "*.tif"))
             global sizeY, sizeX
             if folder_import:
                 _tomo = td.TomoData(metadata=self.metadata)
@@ -939,7 +934,7 @@ class Recon:
                     set_projection_ranges(sizeY, sizeX)
 
         def load_npy_shape():
-            os.chdir(fpath)
+            os.chdir(self.Import.fpath)
             size = np.load(self.Import.fname, mmap_mode="r").shape
             global sizeY, sizeX
             sizeY = size[1]
@@ -1098,8 +1093,6 @@ class Recon:
             if change.new == False:
                 self.metadata["methods"].pop(change.owner.description)
 
-        recon_FP_CUDA = Checkbox(description="FP_CUDA")
-        recon_BP_CUDA = Checkbox(description="BP_CUDA")
         recon_FBP_CUDA = Checkbox(description="FBP_CUDA")
         ### !!!!!!!! sirt cuda has options - maybe make them into a radio chooser
         recon_SIRT_CUDA = Checkbox(description="SIRT_CUDA")
@@ -1122,8 +1115,6 @@ class Recon:
         recon_CGLS_CUDA = Checkbox(description="CGLS_CUDA")
         recon_MLEM_CUDA = Checkbox(description="MLEM_CUDA")
         recon_method_list = [
-            recon_FP_CUDA,
-            recon_BP_CUDA,
             recon_FBP_CUDA,
             recon_SART_CUDA,
             recon_CGLS_CUDA,
@@ -1296,10 +1287,9 @@ class Recon:
                 change.icon = "fa-check-square"
                 change.description = "Finished alignment."
             except:
-                with self.output0:
-                    change.button_style = "warning"
-                    change.icon = "exclamation-triangle"
-                    change.description = "Something went wrong."
+                change.button_style = "warning"
+                change.icon = "exclamation-triangle"
+                change.description = "Something went wrong."
 
         recon_start_button = Button(
             description="After choosing all of the options above, click this button to start the reconstruction.",
@@ -1342,5 +1332,6 @@ class Recon:
                 options_accordion,
                 methods_accordion,
                 save_options_accordion,
+                recon_start_button
             ]
         )
