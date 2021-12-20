@@ -231,7 +231,11 @@ def generate_alignment_box(recon_tomo_metadata):
 
     def create_save_checkboxes(opts):
         checkboxes = [
-            Checkbox(description=opt, style=extend_description_style,) for opt in opts
+            Checkbox(
+                description=opt,
+                style=extend_description_style,
+            )
+            for opt in opts
         ]
         return checkboxes
 
@@ -241,7 +245,8 @@ def generate_alignment_box(recon_tomo_metadata):
         (
             opt.observe(
                 functools.partial(
-                    create_save_dict_on_checkmark, opt_list=save_checkboxes,
+                    create_save_dict_on_checkmark,
+                    opt_list=save_checkboxes,
                 ),
                 names=["value"],
             )
@@ -382,7 +387,9 @@ def generate_alignment_box(recon_tomo_metadata):
         recon_tomo_metadata["opts"]["num_iter"] = change.new
 
     number_of_recon_iterations = IntText(
-        description="Number of Iterations: ", style=extend_description_style, value=20,
+        description="Number of Iterations: ",
+        style=extend_description_style,
+        value=20,
     )
     number_of_recon_iterations.observe(update_num_iter_dict, names="value")
 
@@ -436,7 +443,10 @@ def generate_alignment_box(recon_tomo_metadata):
 
     #### putting it all together
     sliders_box = VBox(
-        [projection_range_x_recon, projection_range_y_recon,],
+        [
+            projection_range_x_recon,
+            projection_range_y_recon,
+        ],
         layout=Layout(width="30%"),
         justify_content="center",
         align_items="space-between",

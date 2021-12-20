@@ -51,7 +51,7 @@ class TomoRecon:
         self.recon = None
         self.downsample = Recon.downsample
         self.downsample_factor = Recon.downsample_factor
-        self.center = self.Recon.center*self.downsample_factor # add padding?
+        self.center = self.Recon.center * self.downsample_factor  # add padding?
         self.wd_parent = Recon.Import.wd
         self.num_iter = Recon.num_iter
         self.make_wd()
@@ -158,7 +158,7 @@ class TomoRecon:
         if method_str == "MLEM_CUDA":
             method_str = "EM_CUDA"
         # num_batches = self.metadata["opts"]["batch_size"]  # change to num_batches
-        
+
         # Initialization of reconstruction dataset
         tomo_shape = self.prj_for_recon.shape
         self.recon = np.empty(
@@ -180,22 +180,20 @@ class TomoRecon:
                     self.tomo.theta,
                     num_iter=num_iter,
                     rec=self.recon,
-                    center=center)
+                    center=center,
+                )
             elif self.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]:
                 self.recon = tomocupy_algorithm.recon_sirt_3D_allgpu(
                     self.prj_for_recon,
                     self.tomo.theta,
                     num_iter=num_iter,
                     rec=self.recon,
-                    center=center)
+                    center=center,
+                )
         else:
             # Options go into kwargs which go into recon()
             kwargs = {}
-            options = {
-                "proj_type": "cuda",
-                "method": method_str,
-                "num_iter": num_iter
-                }
+            options = {"proj_type": "cuda", "method": method_str, "num_iter": num_iter}
             kwargs["options"] = options
 
             self.recon = tomopy_algorithm.recon(

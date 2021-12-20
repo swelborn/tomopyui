@@ -47,7 +47,9 @@ def file_chooser_recon(reconmetadata):
         [
             opt.observe(
                 functools.partial(
-                    create_dict_on_checkmark_import, opt_list=[opt], dictname=key,
+                    create_dict_on_checkmark_import,
+                    opt_list=[opt],
+                    dictname=key,
                 ),
                 names=["value"],
             )

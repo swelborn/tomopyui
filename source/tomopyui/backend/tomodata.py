@@ -74,7 +74,9 @@ class TomoData:
         # input is only for storing metadata, maybe better that way.
         if self.theta is None and self.num_theta is not None:
             self.theta = angle_maker(
-                self.num_theta, self.metadata["angle_start"], self.metadata["angle_end"]
+                self.num_theta,
+                ang1=self.metadata["angle_start"],
+                ang2=self.metadata["angle_end"],
             )
 
         if self.prj_imgs is None:

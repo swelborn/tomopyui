@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 
 from copy import copy, deepcopy
-from skimage.transform import rescale #look for better option
+from skimage.transform import rescale  # look for better option
 from time import perf_counter
 from tomocupy.prep.alignment import shift_prj_cp
 from tomocupy.prep.alignment import align_joint
 from .util.save_metadata import save_metadata
 from .util.pad_projections import pad_projections
 from .util.trim_padding import trim_padding
-# from tqdm.notebook import tnrange, tqdm 
+
+# from tqdm.notebook import tnrange, tqdm
 
 import datetime
 import json
@@ -16,6 +17,7 @@ import os
 import tifffile as tf
 import tomopyui.backend.tomodata as td
 import numpy as np
+
 
 class TomoAlign:
     """
@@ -46,8 +48,8 @@ class TomoAlign:
             self.downsample_factor = self.metadata["opts"]["downsample_factor"]
         else:
             self.downsample_factor = 1
-        self.pad_ds = tuple([int(self.downsample_factor*x) for x in self.pad])
-        self.center = self.Align.center*self.downsample_factor + self.pad_ds[0]
+        self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
+        self.center = self.Align.center * self.downsample_factor + self.pad_ds[0]
         self.wd_parent = Align.Import.wd
         self.plot_output1 = Align.plot_output1
         self.plot_output2 = Align.plot_output2
@@ -108,15 +110,16 @@ class TomoAlign:
         self.prj_for_alignment, self.pad_ds = pad_projections(
             self.prj_for_alignment, self.pad_ds, 1
         )
+
     def align(self):
         """
         Aligns a TomoData object using options in GUI.
         """
-        # This will contain more options later, as of now it only accepts 
+        # This will contain more options later, as of now it only accepts
         # align_joint from tomocupy
 
         align_joint(self)
-        
+
     def save_align_data(self):
 
         # if on the second alignment, go into the directory most recently saved
@@ -142,14 +145,20 @@ class TomoAlign:
                 np.save("projections_after_alignment", self.tomo.prj_imgs)
             if self.metadata["save_opts"]["tiff"]:
                 tf.imwrite("projections_after_alignment.tif", self.tomo.prj_imgs)
-            if not self.metadata["save_opts"]["tiff"] and not self.metadata["save_opts"]["npy"]:
+            if (
+                not self.metadata["save_opts"]["tiff"]
+                and not self.metadata["save_opts"]["npy"]
+            ):
                 tf.imwrite("projections_after_alignment.tif", self.tomo.prj_imgs)
         if self.metadata["save_opts"]["recon"]:
             if self.metadata["save_opts"]["npy"]:
                 np.save("last_recon", self.recon)
             if self.metadata["save_opts"]["tiff"]:
                 tf.imwrite("last_recon.tif", self.recon)
-            if not self.metadata["save_opts"]["tiff"] and not self.metadata["save_opts"]["npy"]:
+            if (
+                not self.metadata["save_opts"]["tiff"]
+                and not self.metadata["save_opts"]["npy"]
+            ):
                 tf.imwrite("last_recon.tif", self.recon)
 
         np.save("sx", self.sx)
@@ -171,16 +180,16 @@ class TomoAlign:
             new_prj_imgs = deepcopy(self.tomo.prj_imgs)
             new_prj_imgs, self.pad = pad_projections(new_prj_imgs, self.pad, 1)
             new_prj_imgs = shift_prj_cp(
-                new_prj_imgs, 
+                new_prj_imgs,
                 self.sx,
                 self.sy,
                 self.num_batches,
                 self.pad,
-                use_corr_prj_gpu=False)
+                use_corr_prj_gpu=False,
+            )
             new_prj_imgs = trim_padding(new_prj_imgs)
             self.tomo = td.TomoData(
-                            prj_imgs=new_prj_imgs, 
-                            metadata=self.Align.Import.metadata
+                prj_imgs=new_prj_imgs, metadata=self.Align.Import.metadata
             )
             toc = perf_counter()
             self.metadata["alignment_time"] = {

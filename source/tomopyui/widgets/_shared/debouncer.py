@@ -18,9 +18,9 @@ class Timer:
 
 
 def debounce(wait):
-    """ Decorator that will postpone a function's
-        execution until after `wait` seconds
-        have elapsed since the last time it was invoked. """
+    """Decorator that will postpone a function's
+    execution until after `wait` seconds
+    have elapsed since the last time it was invoked."""
 
     def decorator(fn):
         timer = None

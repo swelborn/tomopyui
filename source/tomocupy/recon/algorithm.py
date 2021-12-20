@@ -5,6 +5,7 @@
 from tomopy.recon import algorithm as tomopy_algorithm
 import astra
 
+
 def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
     # Init tomo in sinogram order
     sinograms = tomopy_algorithm.init_tomo(prj, 0)
@@ -14,7 +15,7 @@ def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
     # assume angles used are the same as parent tomography
     proj_geom = astra.create_proj_geom("parallel3d", 1, 1, num_y, num_x, angles)
     if center is not None:
-        center_shift = -(center - num_x/2)
+        center_shift = -(center - num_x / 2)
         proj_geom = astra.geom_postalignment(proj_geom, (center_shift,))
     vol_geom = astra.create_vol_geom(num_x, num_x, num_y)
     projector = astra.create_projector("cuda3d", proj_geom, vol_geom)
@@ -22,6 +23,7 @@ def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
     W = astra.OpTomo(projector)
     rec_sirt = W.reconstruct("SIRT-PLUGIN", sinograms, num_iter)
     return rec_sirt
+
 
 def recon_sirt_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     # Todo: allow this to handle batches.
@@ -31,12 +33,12 @@ def recon_sirt_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     num_y = sinograms.shape[0]
     num_x = sinograms.shape[2]
     # assume angles used are the same as parent tomography
-    # create projection geometry with shape of 
+    # create projection geometry with shape of
     proj_geom = astra.create_proj_geom("parallel3d", 1, 1, num_y, num_x, angles)
-    # shifts the projection geometry so that it will reconstruct using the 
+    # shifts the projection geometry so that it will reconstruct using the
     # correct center.
     if center is not None:
-        center_shift = -(center - num_x/2)
+        center_shift = -(center - num_x / 2)
         proj_geom = astra.geom_postalignment(proj_geom, (center_shift,))
     vol_geom = astra.create_vol_geom(num_x, num_x, num_y)
     sinograms_id = astra.data3d.create("-sino", proj_geom, sinograms)
@@ -53,6 +55,7 @@ def recon_sirt_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     astra.data3d.delete(sinograms_id)
     return rec_sirt
 
+
 def recon_cgls_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     # Todo: allow this to handle batches.
     # Init tomo in sinogram order
@@ -66,7 +69,7 @@ def recon_cgls_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     # shifts the projection geometry so that it will reconstruct using the
     # correct center.
     if center is not None:
-        center_shift = -(center - num_x/2)
+        center_shift = -(center - num_x / 2)
         proj_geom = astra.geom_postalignment(proj_geom, (center_shift,))
     vol_geom = astra.create_vol_geom(num_x, num_x, num_y)
     sinograms_id = astra.data3d.create("-sino", proj_geom, sinograms)
@@ -82,4 +85,3 @@ def recon_cgls_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     astra.data3d.delete(rec_id)
     astra.data3d.delete(sinograms_id)
     return rec_sirt
-

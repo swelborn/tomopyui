@@ -91,7 +91,9 @@ def recon_dashboard(
     )
 
     number_of_recon_iterations = IntText(
-        description="Number of Iterations: ", style=extend_description_style, value=20,
+        description="Number of Iterations: ",
+        style=extend_description_style,
+        value=20,
     )
     center_of_rotation = IntText(
         description="Center of Rotation: ",
@@ -335,7 +337,11 @@ def recon_dashboard(
 
     def create_save_checkboxes(opts):
         checkboxes = [
-            Checkbox(description=opt, style=extend_description_style,) for opt in opts
+            Checkbox(
+                description=opt,
+                style=extend_description_style,
+            )
+            for opt in opts
         ]
         return checkboxes
 
@@ -345,7 +351,8 @@ def recon_dashboard(
         (
             opt.observe(
                 functools.partial(
-                    create_save_dict_on_checkmark, opt_list=save_checkboxes,
+                    create_save_dict_on_checkmark,
+                    opt_list=save_checkboxes,
                 ),
                 names=["value"],
             )
@@ -433,7 +440,10 @@ def recon_dashboard(
                         ),
                     ),
                     HBox(
-                        [downsample_checkbox, downsample_factor_text,],
+                        [
+                            downsample_checkbox,
+                            downsample_factor_text,
+                        ],
                         layout=Layout(
                             flex_wrap="wrap", justify_content="space-between"
                         ),
