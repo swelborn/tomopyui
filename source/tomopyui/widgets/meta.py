@@ -22,7 +22,7 @@ import json
 
 # for alignment box
 import tomopyui.backend.tomodata as td
-from tomopyui.widgets.align._init_widgets import _init_widgets as init_widgets_Align
+from tomopyui.widgets._shared._init_widgets import _init_widgets
 import logging
 
 # for center box
@@ -182,30 +182,6 @@ class Plotter:
         self.link_ranges_button_recon = None
         self.save_animation_button = None
 
-    # some stuff here for linking ranges, will become important later:
-    # def load_range_from_above_onclick(self):
-    #     if self.button_style == "info":
-    #         global range_y_link, range_x_link
-    #         range_y_link = link(
-    #             (prj_range_y_movie, "value"),
-    #             (prj_range_y_alignment, "value"),
-    #         )
-    #         range_x_link = link(
-    #             (prj_range_x_movie, "value"),
-    #             (prj_range_x_alignment, "value"),
-    #         )
-    #         self.button_style = "success"
-    #         self.description = "Linked ranges. Click again to unlink."
-    #         self.icon = "link"
-    #     elif self.button_style == "success":
-    #         range_y_link.unlink()
-    #         range_x_link.unlink()
-    #         prj_range_x_alignment.value = [0, tomo.prj_imgs.shape[2] - 1]
-    #         prj_range_y_alignment.value = [0, tomo.prj_imgs.shape[1] - 1]
-    #         self.button_style = "info"
-    #         self.description = "Unlinked ranges. Click again to link."
-    #         self.icon = "unlink"
-
     def create_slicer_with_hist(
         self, plot_type="prj", imagestack=None, Center=None
     ):
@@ -230,7 +206,7 @@ class Plotter:
             theta = self.Import.tomo.theta
             slider_linsp = theta * 180 / np.pi
             slider_str = "Image No:"
-            ax1.set_title("prj Images")
+            ax1.set_title("Projection Images")
         if plot_type == "center":
             imagestack = imagestack
             slider_linsp = (0, imagestack.shape[0])
@@ -349,7 +325,7 @@ class Plotter:
             self.save_prj_animation_button.icon = "fas fa-cog fa-spin fa-lg"
             self.save_prj_animation_button.description = "Making a movie."
             anim = self.threshold_control.save_animation(
-                "prjs_animation.mp4",
+                "projections_animation.mp4",
                 self.slicer_with_hist_fig,
                 "Angle",
                 interval=35,
@@ -728,7 +704,7 @@ class Center:
             self.index_to_try = change.new
 
         index_to_try_textbox = IntText(
-            description="prj image to use for auto:",
+            description="Projection image to use for auto:",
             disabled=False,
             style=extend_description_style,
             value=self.index_to_try,
@@ -788,8 +764,20 @@ class Center:
 
 class Align:
 
-    def __init__(self, Import, Prep=None, Recon=None):
+    def __init__(self, Import):
 
+        self.init_attributes(Import)
+        self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", 
+                                "npy"]
+        self.widget_type = "Align"
+        _init_widgets(self) # initialization of many widgets/some attributes
+        self.set_metadata()
+        self.set_metadata_obj_specific()
+        self.set_observes()
+        self.set_observes_obj_specific()
+        self.make_tab()
+
+    def init_attributes(self, Import):
         self.Import = Import
         self.image_shape = Import.image_shape
         self.angle_start = Import.angle_start # TODO
@@ -811,15 +799,9 @@ class Align:
         self.partial = False
         self.methods_list = ["FBP_CUDA", "SIRT_CUDA", "SART_CUDA", "CGLS_CUDA",
                             "MLEM_CUDA","SIRT Plugin-Faster","SIRT 3D-Fastest"]
-        self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", 
-                                "npy"]
         self.prj_plotter = Plotter(self.Import)
         self.metadata = {}
         self.metadata["opts"] = {}
-        self.alignbool = False
-        init_widgets_Align(self) # initialization of many widgets/some attributes
-        self.set_metadata()
-        self.make_alignment_tab()
 
     def set_metadata(self):
 
@@ -827,7 +809,6 @@ class Align:
         self.metadata["opts"]["downsample_factor"] = self.downsample_factor
         self.metadata["opts"]["num_iter"] = self.num_iter
         self.metadata["opts"]["center"] = self.center
-        self.metadata["opts"]["upsample_factor"] = self.upsample_factor
         self.metadata["opts"]["batch_size"] = self.batch_size
         self.metadata["opts"]["pad"] = (
             self.paddingX,
@@ -840,6 +821,9 @@ class Align:
         self.metadata["prj_range_y"] = self.prj_range_y
         self.metadata["partial"] = self.partial
 
+    def set_metadata_obj_specific(self):
+        self.metadata["opts"]["upsample_factor"] = self.upsample_factor
+
     def set_prj_ranges_full(self):
 
         self.prj_range_x = (0, self.image_shape[2]-1)
@@ -851,126 +835,196 @@ class Align:
         self.prj_range_y_slider.value = self.prj_range_y
         self.set_metadata()
 
-    def make_alignment_tab(self):
+    # -- Radio to turn on tab ---------------------------------------------
+    def activate_tab(self, change):
+        if change.new == 0:
+            self.radio_fulldataset.disabled = False
+            self.image_shape = self.Import.image_shape
+            self.plotter_accordion.selected_index = 0
+            self.start_button.disabled = False
+            self.save_options_accordion.selected_index = 0
+            self.options_accordion.selected_index = 0
+            self.methods_accordion.selected_index = 0
+            self.set_prj_ranges_full()
+            self.log.info("Activated alignment.")
+        elif change.new == 1:
+            self.radio_fulldataset.disabled = True
+            self.prj_range_x_slider.disabled = True
+            self.prj_range_y_slider.disabled = True
+            self.plotter_accordion.selected_index = None
+            self.start_button.disabled = True
+            self.save_options_accordion.selected_index = None
+            self.options_accordion.selected_index = None
+            self.methods_accordion.selected_index = None
+            self.log.info("Deactivated alignment.")
+
+    # -- Radio to turn on partial dataset ---------------------------------
+    def activate_full_partial(self, change):
+        if change.new == 1:
+            self.partial = True
+            self.prj_range_x_slider.disabled = False
+            self.prj_range_y_slider.disabled = False
+            self.set_metadata()
+
+        elif change.new == 0:
+            self.partial = False
+            self.set_prj_ranges_full()
+            self.prj_range_x_slider.disabled = True
+            self.prj_range_y_slider.disabled = True
+            self.set_metadata()
+
+    # -- Plot projections button ------------------------------------------
+    def plot_prjs_on_click(self, change):
+        self.plot_prj_images_button.button_style = "info"
+        self.plot_prj_images_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.plot_prj_images_button.description = "Importing data."
+        self.prj_plotter.create_slicer_with_hist()
+        self.plot_prj_images_button.button_style = "success"
+        self.plot_prj_images_button.icon = "fa-check-square"
+        self.plot_prj_images_button.description = "Finished Import."
+        self.prj_plotter.set_range_button.description = "Click to set projection range to current plot range"
+        self.make_prj_plot()
+
+    def make_prj_plot(self):
+        # Make VBox inside alignment tab into the plot
+        self.tab.children[1].children[0].children[1].children = [
+            HBox([self.prj_plotter.slicer_with_hist_fig.canvas]),
+            HBox(self.prj_plotter.threshold_control_list),
+        ]
+
+    # -- Button to start alignment ----------------------------------------
+    def set_options_and_run(self, change):
+        change.icon = "fas fa-cog fa-spin fa-lg"
+        change.description = (
+            "Setting options and loading data into alignment algorithm."
+        )
+        try:
+            from tomopyui.backend.tomoalign import TomoAlign
+            a = TomoAlign(self)
+            change.button_style = "success"
+            change.icon = "fa-check-square"
+            change.description = "Finished alignment."
+        except:
+            change.button_style = "warning"
+            change.icon = "exclamation-triangle"
+            change.description = "Something went wrong."
+
+    # -- Sliders ----------------------------------------------------------
+    @debounce(0.2)
+    def prj_range_x_update(self, change):
+        self.prj_range_x = change.new
+        self.set_metadata()
+
+    @debounce(0.2)
+    def prj_range_y_update(self, change):
+        self.prj_range_y = change.new
+        self.set_metadata()
+    
+    # -- Options ---------------------------------------------------------- 
+
+    # Number of iterations
+    def update_num_iter(self, change):
+        self.num_iter = change.new
+        self.progress_total.max = change.new
+        self.set_metadata()
+
+    # Center of rotation
+    def update_center_of_rotation(self, change):
+        self.center = change.new
+        self.set_metadata()
+
+    # Downsampling
+    def downsample_turn_on(self, change):
+        if change.new == True:
+            self.downsample = True
+            self.downsample_factor = self.downsample_factor_textbox.value
+            self.downsample_factor_textbox.disabled = False
+            self.set_metadata()
+        if change.new == False:
+            self.downsample = False
+            self.downsample_factor = 1
+            self.downsample_factor_textbox.value = 1
+            self.downsample_factor_textbox.disabled = True
+            self.set_metadata()
+
+    def update_downsample_factor_dict(self, change):
+        self.downsample_factor = change.new
+        self.set_metadata()
+
+    # Upsampling
+    def update_upsample_factor(self, change):
+        self.upsample_factor = change.new
+        self.set_metadata_obj_specific()
+
+    # Batch size
+    def update_batch_size(self, change):
+        self.batch_size = change.new
+        self.progress_phase_cross_corr.max = change.new
+        self.progress_shifting.max = change.new
+        self.progress_reprj.max = change.new
+        self.set_metadata()
+
+    # X Padding
+    def update_x_padding(self, change):
+        self.paddingX = change.new
+        self.set_metadata()
+
+    # Y Padding
+    def update_y_padding(self, change):
+        self.paddingY = change.new
+        self.set_metadata()
+
+    # Extra options
+    def update_extra_options(self, change):
+        self.extra_options = change.new
+        self.set_metadata()
+
+    def set_observes(self):
 
         # -- Radio to turn on tab ---------------------------------------------
-        def activate_tab(change):
-            if change.new == 0:
-                self.radio_align_fulldataset.disabled = False
-                self.alignbool = True
-                self.image_shape = self.Import.image_shape
-                self.plotter_accordion.selected_index = 0
-                save_options_accordion.selected_index = 0
-                options_accordion.selected_index = 0
-                methods_accordion.selected_index = 0
-                self.align_start_button.disabled = False
-                self.set_prj_ranges_full()
-                self.log.info("Activated alignment.")
-            elif change.new == 1:
-                self.radio_align_fulldataset.disabled = True
-                self.prj_range_x_slider.disabled = True
-                self.prj_range_y_slider.disabled = True
-                self.alignbool = False
-                self.plotter_accordion.selected_index = None
-                save_options_accordion.selected_index = None
-                options_accordion.selected_index = None
-                methods_accordion.selected_index = None
-                self.align_start_button.disabled = True
-                self.log.info("Deactivated alignment.")
-        
-        radio_align = RadioButtons(
-            options=["Yes", "No"],
-            style=extend_description_style,
-            layout=Layout(width="20%"),
-            value="No",
-        )
-        radio_align.observe(activate_tab, names="index")
+        self.radio_tab.observe(self.activate_tab, names="index")
 
         # -- Plot projections button ------------------------------------------
-        def plot_prjs_on_click(change):
-            self.plot_prj_images_button.button_style = "info"
-            self.plot_prj_images_button.icon = "fas fa-cog fa-spin fa-lg"
-            self.plot_prj_images_button.description = "Importing data."
-            self.prj_plotter.create_slicer_with_hist()
-            self.plot_prj_images_button.button_style = "success"
-            self.plot_prj_images_button.icon = "fa-check-square"
-            self.plot_prj_images_button.description = "Finished Import."
-            self.prj_plotter.set_range_button.description = "Click to set projection range to current plot range"
-            
-            # Make VBox inside alignment tab into the plot
-            self.alignment_tab.children[1].children[0].children[1].children = [
-                HBox([self.prj_plotter.slicer_with_hist_fig.canvas]),
-                HBox(self.prj_plotter.threshold_control_list),
-            ]
-        self.plot_prj_images_button.on_click(plot_prjs_on_click)
+        self.plot_prj_images_button.on_click(self.plot_prjs_on_click)
 
-        # -- Radio to turn on partial dataset alignment -----------------------
-        def activate_full_partial(change):
-            if change.new == 1:
-                self.partial = True
-                self.prj_range_x_slider.disabled = False
-                self.prj_range_y_slider.disabled = False
-                self.set_metadata()
-
-            elif change.new == 0:
-                self.partial = False
-                self.set_prj_ranges_full()
-                self.prj_range_x_slider.disabled = True
-                self.prj_range_y_slider.disabled = True
-                self.set_metadata()
-
-        self.radio_align_fulldataset.observe(activate_full_partial, names="index")
-
-        # -- Button to start alignment ----------------------------------------
-        def set_options_and_run_align(change):
-            change.icon = "fas fa-cog fa-spin fa-lg"
-            change.description = (
-                "Setting options and loading data into alignment algorithm."
-            )
-            try:
-                from tomopyui.backend.tomoalign import TomoAlign
-                a = TomoAlign(self)
-                change.button_style = "success"
-                change.icon = "fa-check-square"
-                change.description = "Finished alignment."
-            except:
-                change.button_style = "warning"
-                change.icon = "exclamation-triangle"
-                change.description = "Something went wrong."
-
-        self.align_start_button.on_click(set_options_and_run_align)
+        # -- Radio to turn on partial dataset ---------------------------------
+        self.radio_fulldataset.observe(self.activate_full_partial, names="index")
 
         # -- Sliders ----------------------------------------------------------
-        @debounce(0.2)
-        def prj_range_x_update(change):
-            self.metadata["prj_range_x"] = change.new
-
         self.prj_range_x_slider.observe(
-            prj_range_x_update, names="value"
+            self.prj_range_x_update, names="value"
         )
 
-        @debounce(0.2)
-        def prj_range_y_update(change):
-            self.metadata["prj_range_y"] = change.new
         self.prj_range_y_slider.observe(
-            prj_range_y_update, names="value"
+            self.prj_range_y_update, names="value"
         )
+        # -- Options ----------------------------------------------------------
 
-        # -- Radio descriptions -----------------------------------------------
-        radio_description = "Would you like to align this dataset?"
-        partial_radio_description = (
-            "Would you like to use the full dataset, or a partial dataset?"
-        )
-        radio_description = HTML(
-            value="<style>p{word-wrap: break-word}</style> <p>"
-            + radio_description
-            + " </p>"
-        )
-        partial_radio_description = HTML(
-            value="<style>p{word-wrap: break-word}</style> <p>"
-            + partial_radio_description
-            + " </p>"
-        )
+        # Center 
+        self.center_of_rotation.observe(self.update_center_of_rotation, names="value")
+
+        # Downsampling
+        self.downsample_checkbox.observe(self.downsample_turn_on)
+        self.downsample_factor_textbox.observe(self.update_downsample_factor_dict, names="value")
+
+        # X Padding
+        self.paddingX_textbox.observe(self.update_x_padding, names="value")
+
+        # Y Padding
+        self.paddingY_textbox.observe(self.update_y_padding, names="value")
+
+        # Extra options
+        self.extra_options_textbox.observe(self.update_extra_options, names="value")
+
+    def set_observes_obj_specific(self):
+
+        # -- Set observes only for alignment ----------------------------------
+        self.num_iterations_textbox.observe(self.update_num_iter, names="value")
+        self.batch_size.observe(self.update_batch_size, names="value")
+        self.start_button.on_click(self.set_options_and_run)
+        self.upsample_factor_textbox.observe(self.update_upsample_factor, names="value")
+        
+    def make_tab(self):
 
         # -- Saving ----------------------------------------------------------- 
         save_hbox = HBox(
@@ -978,7 +1032,7 @@ class Align:
             layout=Layout(flex_wrap="wrap", justify_content="space-between"),
         )
 
-        save_options_accordion = Accordion(
+        self.save_options_accordion = Accordion(
             children=[save_hbox],
             selected_index=None,
             layout=Layout(width="100%"),
@@ -989,148 +1043,11 @@ class Align:
         recon_method_box = VBox(self.methods_checkboxes, layout=widgets.Layout(
                     flex_flow="row wrap")
                 )
-        methods_accordion = Accordion(
+        self.methods_accordion = Accordion(
             children=[recon_method_box], selected_index=None, titles=("Methods",)
         )
 
-        # -- Options ---------------------------------------------------------- 
-        
-        # Number of iterations
-        def update_num_iter_dict(change):
-            self.num_iter = change.new
-            self.progress_total.max = change.new
-            self.set_metadata()
-
-        number_of_align_iterations = IntText(
-            description="Number of Iterations: ",
-            style=extend_description_style,
-            value=20,
-        )
-        number_of_align_iterations.observe(update_num_iter_dict, names="value")
-
-        # Center of rotation
-        def update_center_of_rotation_dict(change):
-            self.center = change.new
-            self.set_metadata()
-
-        center_of_rotation = FloatText(
-            description="Center of Rotation: ",
-            style=extend_description_style,
-            value=self.center,
-        )
-        center_of_rotation.observe(update_center_of_rotation_dict, names="value")
-
-        # Downsampling
-        def downsample_turn_on(change):
-            if change.new == True:
-                self.downsample = True
-                self.downsample_factor = downsample_factor_text.value
-                downsample_factor_text.disabled = False
-                self.set_metadata()
-            if change.new == False:
-                self.downsample = False
-                self.downsample_factor = 1
-                downsample_factor_text.value = 1
-                downsample_factor_text.disabled = True
-                self.set_metadata()
-
-        downsample_checkbox = Checkbox(description="Downsample?", value=False)
-        downsample_checkbox.observe(downsample_turn_on)
-
-        def update_downsample_factor_dict(change):
-            self.downsample_factor = change.new
-            self.set_metadata()
-
-        downsample_factor_text = BoundedFloatText(
-            value=self.downsample_factor,
-            min=0.001,
-            max=1.0,
-            description="Downsample factor:",
-            disabled=True,
-            style=extend_description_style,
-        )
-        downsample_factor_text.observe(update_downsample_factor_dict, names="value")
-
-        # Upsample factor
-        def update_upsample_factor(change):
-            self.upsample_factor = change.new
-            self.set_metadata()
-
-        upsample_factor = FloatText(
-            description="Upsample Factor: ",
-            style=extend_description_style,
-            value=self.upsample_factor,
-        )
-        upsample_factor.observe(update_upsample_factor, names="value")
-
-        # Batch size
-        def update_batch_size(change):
-            self.batch_size = change.new
-            self.progress_phase_cross_corr.max = change.new
-            self.progress_shifting.max = change.new
-            self.progress_reprj.max = change.new
-            self.set_metadata()
-
-        batch_size = IntText(
-            description="Batch size (for GPU): ",
-            style=extend_description_style,
-            value=self.metadata["opts"]["batch_size"],
-        )
-        batch_size.observe(update_batch_size, names="value")
-
-        # X Padding
-        def update_x_padding(change):
-            self.paddingX = change.new
-            self.set_metadata()
-
-        paddingX = IntText(
-            description="Padding X (px): ",
-            style=extend_description_style,
-            value=self.paddingX,
-        )
-        paddingX.observe(update_x_padding, names="value")
-
-        # Y Padding
-        def update_y_padding(change):
-            self.paddingY = change.new
-            self.set_metadata()
-
-        paddingY = IntText(
-            description="Padding Y (px): ",
-            style=extend_description_style,
-            value=self.paddingY,
-        )
-        paddingY.observe(update_y_padding, names="value")
-
-        # Extra options
-        def update_extra_options_dict(change):
-            self.extra_options = change.new
-            self.set_metadata()
-
-        extra_options = Text(
-            description="Extra options: ",
-            placeholder='{"MinConstraint": 0}',
-            style=extend_description_style,
-        )
-        extra_options.observe(update_extra_options_dict, names="value")
-
         # -- Box organization ------------------------------------------------- 
-        radio_description = (
-            "Would you like to try automatic alignment before reconstruction?"
-        )
-        partial_radio_description = (
-            "Would you like to use the full dataset, or a partial dataset?"
-        )
-        radio_description = HTML(
-            value="<style>p{word-wrap: break-word}</style> <p>"
-            + radio_description
-            + " </p>"
-        )
-        partial_radio_description = HTML(
-            value="<style>p{word-wrap: break-word}</style> <p>"
-            + partial_radio_description
-            + " </p>"
-        )
 
         pixel_range_slider_vb = VBox(
             [
@@ -1144,10 +1061,10 @@ class Align:
 
         top_of_box_hb = HBox(
             [
-                radio_description,
-                radio_align,
-                partial_radio_description,
-                self.radio_align_fulldataset,
+                self.radio_description,
+                self.radio_tab,
+                self.partial_radio_description,
+                self.radio_fulldataset,
                 pixel_range_slider_vb,
             ],
             layout=Layout(
@@ -1157,19 +1074,19 @@ class Align:
                 flex="flex-grow",
             ),
         )
-        align_start_button_hb = HBox(
-            [self.align_start_button], layout=Layout(width="auto", justify_content="center")
+        start_button_hb = HBox(
+            [self.start_button], layout=Layout(width="auto", justify_content="center")
         )
 
-        options_accordion = Accordion(
+        self.options_accordion = Accordion(
             children=[
                 VBox(
                     [
                         HBox(
                             [
-                                number_of_align_iterations,
-                                center_of_rotation,
-                                upsample_factor,
+                                self.num_iterations_textbox,
+                                self.center_of_rotation,
+                                self.upsample_factor_textbox,
                             ],
                             layout=Layout(
                                 flex_wrap="wrap", justify_content="space-between"
@@ -1177,24 +1094,24 @@ class Align:
                         ),
                         HBox(
                             [
-                                batch_size,
-                                paddingX,
-                                paddingY,
-                                downsample_checkbox,
-                                downsample_factor_text,
+                                self.batch_size,
+                                self.paddingX_textbox,
+                                self.paddingY_textbox,
+                                self.downsample_checkbox,
+                                self.downsample_factor_textbox,
                             ],
                             layout=Layout(
                                 flex_wrap="wrap", justify_content="space-between"
                             ),
                         ),
-                        extra_options,
+                        self.extra_options_textbox,
                     ],
                     layout=Layout(width="100%", height="100%"),
                 )
             ],
             selected_index=None,
             layout=Layout(width="100%"),
-            titles=("Other Alignment Options",),
+            titles=("Alignment Options",),
         )
 
         progress_vbox = VBox(
@@ -1206,14 +1123,14 @@ class Align:
             ]
         )
 
-        self.alignment_tab = VBox(
+        self.tab = VBox(
             children=[
                 top_of_box_hb,
                 self.plotter_accordion,
-                methods_accordion,
-                save_options_accordion,
-                options_accordion,
-                align_start_button_hb,
+                self.methods_accordion,
+                self.save_options_accordion,
+                self.options_accordion,
+                start_button_hb,
                 HBox(
                     [progress_vbox, self.plot_output1, self.plot_output2],
                     layout=Layout(flex_wrap="wrap", justify_content="center"),
@@ -1222,470 +1139,83 @@ class Align:
         )
 
 
-class Recon:
-    def __init__(self, Import, Prep=None, Align=None):
+class Recon(Align):
 
-        if Prep is None and Align is None:
-            self.tomo = Import.tomo
-        if Prep is not None and Align is None:
-            self.tomo = Prep.tomo
-        if Prep is not None and Align is not None:
-            self.tomo = Align.tomo
-        self.Import = Import
-        self.metadata = Import.metadata.copy()
-        self.opts = {}
-        self.methods = {}
-        self.save_opts = {}
-        self.downsample = False
-        self.downsample_factor = 1
-        self.num_iter = 1
-        self.partial = False
-        self.center = 0
-        self.log_handler, self.log = Import.log_handler, Import.log
-        self.prj_range_x = (0, 10)
-        self.prj_range_y = (0, 10)
-        self.reconbool = False
+    def __init__(self, Import):
+
+        super().init_attributes(Import)
+        self.save_opts_list = ["tomo_before", "recon", "tiff", 
+                        "npy"]
+        self.widget_type = "Recon"
+        _init_widgets(self) # initialization of many widgets/some attributes
+        super().set_metadata()
+        super().set_observes()
+        self.set_observes_obj_specific()
+        self.make_tab()
+
+
+    # -- Observe functions for reconstruction ---------------------------------
+
+    # Start button
+    def set_options_and_run(self, change):
+        change.icon = "fas fa-cog fa-spin fa-lg"
+        change.description = (
+            "Setting options and loading data into reconstruction algorithm(s)."
+        )
+        try:
+            from tomopyui.backend.tomorecon import TomoRecon
+            a = TomoRecon(self)
+            change.button_style = "success"
+            change.icon = "fa-check-square"
+            change.description = "Finished alignment."
+        except:
+            change.button_style = "warning"
+            change.icon = "exclamation-triangle"
+            change.description = "Something went wrong."
+
+    # Batch size
+    def update_batch_size(self, change):
+        self.batch_size = change.new
         self.set_metadata()
-        self.make_recon_tab()
 
-    def set_metadata(self):
-        self.metadata["opts"] = self.opts
-        self.metadata["methods"] = self.methods
-        self.metadata["save_opts"] = self.save_opts
-        self.metadata["opts"]["downsample"] = self.downsample
-        self.metadata["opts"]["downsample_factor"] = self.downsample_factor
-        self.metadata["partial"] = self.partial
+    # Number of iterations
+    def update_num_iter(self, change):
+        self.num_iter = change.new
+        self.set_metadata()
 
-    def make_recon_tab(self):
-        def activate_tab(change):
-            if change.new == 0:
-                radio_recon_fulldataset.disabled = False
-                self.metadata["reconstruct"] = True
-                save_options_accordion.selected_index = 0
-                options_accordion.selected_index = 0
-                methods_accordion.selected_index = 0
-                recon_start_button.disabled = False
-                self.log.info("Activated reconstruction.")
-            elif change.new == 1:
-                radio_recon_fulldataset.disabled = True
-                self.prj_range_x_slider.disabled = True
-                self.prj_range_y_slider.disabled = True
-                self.metadata["reconstruct"] = False
-                save_options_accordion.selected_index = None
-                options_accordion.selected_index = None
-                methods_accordion.selected_index = None
-                recon_start_button.disabled = True
-                self.log.info("Deactivated reconstruction.")
+    def set_observes_obj_specific(self):
 
-        def set_prj_ranges(sizeY, sizeX):
-            self.prj_range_x_slider.max = sizeX - 1
-            self.prj_range_y_slider.max = sizeY - 1
-            # prj_range_z_recon.max = sizeZ-1
-            self.prj_range_x_slider.value = [0, sizeX - 1]
-            self.prj_range_y_slider.value = [0, sizeY - 1]
-            # prj_range_z_recon.value = [0, sizeZ-1]
-            self.metadata["prj_range_x"] = self.prj_range_x_slider.value
-            self.metadata["prj_range_y"] = self.prj_range_y_slider.value
-            self.prj_range_x = self.metadata["prj_range_x"]
-            self.prj_range_y = self.metadata["prj_range_y"]
+        self.start_button.on_click(self.set_options_and_run)
+        self.batch_size.observe(self.update_batch_size, names="value")
+        self.num_iterations_textbox.observe(self.update_num_iter, names="value")
 
-        def load_tif_shape_tag(folder_import=False):
-            os.chdir(self.Import.fpath)
-            tiff_count_in_folder = len(glob.glob1(self.Import.fpath, "*.tif"))
-            global sizeY, sizeX
-            if folder_import:
-                _tomo = td.TomoData(metadata=self.metadata)
-                size = _tomo.prj_imgs.shape
-                # sizeZ = size[0]
-                sizeY = size[1]
-                sizeX = size[2]
-                set_prj_ranges(sizeY, sizeX)
+    # -- Create recon tab -----------------------------------------------------
+    def make_tab(self):
 
-            else:
-                with tf.TiffFile(self.Import.fname) as tif:
-                    if tiff_count_in_folder > 50:
-                        sizeX = tif.pages[0].tags["ImageWidth"].value
-                        sizeY = tif.pages[0].tags["ImageLength"].value
-                        # sizeZ = tiff_count_in_folder # can maybe use this later
-                    else:
-                        imagesize = tif.pages[0].tags["ImageDescription"]
-                        size = json.loads(imagesize.value)["shape"]
-                        sizeY = size[1]
-                        sizeX = size[2]
-                    set_prj_ranges(sizeY, sizeX)
-
-        def load_npy_shape():
-            os.chdir(self.Import.fpath)
-            size = np.load(self.Import.fname, mmap_mode="r").shape
-            global sizeY, sizeX
-            sizeY = size[1]
-            sizeX = size[2]
-            set_prj_ranges(sizeY, sizeX)
-
-        def activate_full_partial(change):
-            if change.new == 1:
-                self.metadata["partial"] = True
-                self.prj_range_x_slider.disabled = False
-                self.prj_range_y_slider.disabled = False
-                # prj_range_z_recon.disabled = False
-                if self.Import.fname != "":
-                    if self.Import.fname.__contains__(".tif"):
-                        load_tif_shape_tag()
-                    elif self.Import.fname.__contains__(".npy"):
-                        load_npy_shape()
-                    else:
-                        load_tif_shape_tag(folder_import=True)
-            elif change.new == 0:
-                self.metadata["partial"] = False
-                set_prj_ranges(sizeY, sizeX)
-                self.prj_range_x_slider.disabled = True
-                self.prj_range_y_slider.disabled = True
-                # prj_range_z_recon.disabled = True
-
-        radio_recon = RadioButtons(
-            options=["Yes", "No"],
-            style=extend_description_style,
-            layout=Layout(width="20%"),
-            value="No",
-        )
-        radio_recon.observe(activate_tab, names="index")
-
-        radio_recon_fulldataset = RadioButtons(
-            options=["Full", "Partial"],
-            style=extend_description_style,
-            layout=Layout(width="20%"),
-            disabled=True,
-            value="Full",
-        )
-        radio_recon_fulldataset.observe(activate_full_partial, names="index")
-
-        # Callbacks for prj range sliders
-        @debounce(0.2)
-        def prj_range_x_update_dict(change):
-            self.metadata["prj_range_x"] = change.new
-
-        self.prj_range_x_slider = IntRangeSlider(
-            value=[0, 10],
-            min=0,
-            max=10,
-            step=1,
-            description="prj X Range:",
-            disabled=True,
-            continuous_update=False,
-            orientation="horizontal",
-            readout=True,
-            readout_format="d",
-            layout=Layout(width="100%"),
-            style=extend_description_style,
-        )
-        self.prj_range_x_slider.observe(prj_range_x_update_dict, "value")
-
-        @debounce(0.2)
-        def prj_range_y_update_dict(change):
-            self.metadata["prj_range_y"] = change.new
-
-        self.prj_range_y_slider = IntRangeSlider(
-            value=[0, 10],
-            min=0,
-            max=10,
-            step=1,
-            description="prj Y Range:",
-            disabled=True,
-            continuous_update=False,
-            orientation="horizontal",
-            readout=True,
-            readout_format="d",
-            layout=Layout(width="100%"),
-            style=extend_description_style,
-        )
-        self.prj_range_y_slider.observe(prj_range_y_update_dict, "value")
-
-        # Radio descriptions
-        radio_description = "Would you like to reconstruct this dataset?"
-        partial_radio_description = (
-            "Would you like to use the full dataset, or a partial dataset?"
-        )
-        radio_description = HTML(
-            value="<style>p{word-wrap: break-word}</style> <p>"
-            + radio_description
-            + " </p>"
-        )
-        partial_radio_description = HTML(
-            value="<style>p{word-wrap: break-word}</style> <p>"
-            + partial_radio_description
-            + " </p>"
-        )
-
-        # Saving options
-        def create_option_dictionary(opt_list):
-            opt_dictionary = {opt.description: opt.value for opt in opt_list}
-            return opt_dictionary
-
-        def create_save_dict_on_checkmark(change, opt_list):
-            self.metadata["save_opts"] = create_option_dictionary(opt_list)
-
-        save_opts = ["tomo_before", "recon", "tiff", "npy"]
-        self.metadata["save_opts"] = {key: None for key in save_opts}
-
-        def create_save_checkboxes(opts):
-            checkboxes = [
-                Checkbox(
-                    description=opt,
-                    style=extend_description_style,
-                )
-                for opt in opts
-            ]
-            return checkboxes
-
-        save_checkboxes = create_save_checkboxes(save_opts)
-
-        list(
-            (
-                opt.observe(
-                    functools.partial(
-                        create_save_dict_on_checkmark,
-                        opt_list=save_checkboxes,
-                    ),
-                    names=["value"],
-                )
-                for opt in save_checkboxes
-            )
-        )
-
+        # -- Saving ----------------------------------------------------------- 
         save_hbox = HBox(
-            save_checkboxes,
+            self.save_opts_checkboxes,
             layout=Layout(flex_wrap="wrap", justify_content="space-between"),
         )
 
-        save_options_accordion = Accordion(
+        self.save_options_accordion = Accordion(
             children=[save_hbox],
             selected_index=None,
             layout=Layout(width="100%"),
             titles=("Save Options",),
         )
 
-        # Methods checkboxes
-        def create_option_dictionary(opt_list):
-            opt_dictionary = {opt.description: opt.value for opt in opt_list}
-            return opt_dictionary
-
-        def create_dict_on_checkmark(change, opt_list, dictname):
-            self.metadata["methods"][dictname] = create_option_dictionary(opt_list)
-
-        def create_dict_on_checkmark_no_options(change):
-            if change.new == True:
-                self.metadata["methods"][change.owner.description] = {}
-            if change.new == False:
-                self.metadata["methods"].pop(change.owner.description)
-
-        recon_FBP_CUDA = Checkbox(description="FBP_CUDA")
-        ### !!!!!!!! sirt cuda has options - maybe make them into a radio chooser
-        recon_SIRT_CUDA = Checkbox(description="SIRT_CUDA")
-        recon_SIRT_CUDA_option1 = Checkbox(
-            description="SIRT Plugin-Faster", disabled=False
-        )
-        recon_SIRT_CUDA_option2 = Checkbox(
-            description="SIRT 3D-Fastest", disabled=False
-        )
-        recon_SIRT_CUDA_option_list = [
-            recon_SIRT_CUDA_option1,
-            recon_SIRT_CUDA_option2,
-        ]
-        recon_SIRT_CUDA_checkboxes = [
-            recon_SIRT_CUDA,
-            recon_SIRT_CUDA_option1,
-            recon_SIRT_CUDA_option2,
-        ]
-        recon_SART_CUDA = Checkbox(description="SART_CUDA")
-        recon_CGLS_CUDA = Checkbox(description="CGLS_CUDA")
-        recon_MLEM_CUDA = Checkbox(description="MLEM_CUDA")
-        recon_method_list = [
-            recon_FBP_CUDA,
-            recon_SART_CUDA,
-            recon_CGLS_CUDA,
-            recon_MLEM_CUDA,
-        ]
-        [
-            checkbox.observe(create_dict_on_checkmark_no_options)
-            for checkbox in recon_method_list
-        ]
-
-        # Toggling on other options if you select SIRT. Better to use radio here.
-        def toggle_on(change, opt_list, dictname):
-            if change.new == 1:
-                self.metadata["methods"][dictname] = {}
-                for option in opt_list:
-                    option.disabled = False
-            if change.new == 0:
-                self.metadata["methods"].pop(dictname)
-                for option in opt_list:
-                    option.value = 0
-                    option.disabled = True
-
-        recon_SIRT_CUDA.observe(
-            functools.partial(
-                toggle_on, opt_list=recon_SIRT_CUDA_option_list, dictname="SIRT_CUDA"
-            ),
-            names=["value"],
-        )
-
-        # Maps options to observe functions.
-        # If other options needed for other reconstruction methods, use similar
-        list(
-            (
-                opt.observe(
-                    functools.partial(
-                        create_dict_on_checkmark,
-                        opt_list=recon_SIRT_CUDA_option_list,
-                        dictname="SIRT_CUDA",
-                    ),
-                    names=["value"],
+        # -- Methods ---------------------------------------------------------- 
+        recon_method_box = VBox(self.methods_checkboxes, layout=widgets.Layout(
+                    flex_flow="row wrap")
                 )
-                for opt in recon_SIRT_CUDA_option_list
-            )
-        )
-
-        sirt_hbox = HBox(recon_SIRT_CUDA_checkboxes)
-
-        recon_method_box = VBox(
-            [
-                VBox(recon_method_list, layout=widgets.Layout(flex_flow="row wrap")),
-                sirt_hbox,
-            ]
-        )
-
-        methods_accordion = Accordion(
+        self.methods_accordion = Accordion(
             children=[recon_method_box], selected_index=None, titles=("Methods",)
         )
 
-        # Options
-        # number of iterations
-        self.metadata["opts"]["num_iter"] = 20
-        self.num_iter = 20
+        # -- Box organization ------------------------------------------------- 
 
-        def update_num_iter_dict(change):
-            self.metadata["opts"]["num_iter"] = change.new
-
-        number_of_recon_iterations = IntText(
-            description="Number of Iterations: ",
-            style=extend_description_style,
-            value=20,
-        )
-        number_of_recon_iterations.observe(update_num_iter_dict, names="value")
-
-        # center of rotation
-        self.metadata["opts"]["center"] = 0
-
-        def update_center_of_rotation_dict(change):
-            self.metadata["opts"]["center"] = change.new
-
-        center_of_rotation = FloatText(
-            description="Center of Rotation: ",
-            style=extend_description_style,
-            value=self.metadata["opts"]["center"],
-        )
-        center_of_rotation.observe(update_center_of_rotation_dict, names="value")
-
-        self.metadata["opts"]["extra_options"] = None
-
-        def update_extra_options_dict(change):
-            self.self.metadatadata["opts"]["extra_options"] = change.new
-
-        extra_options = Text(
-            description="Extra options: ",
-            placeholder='{"MinConstraint": 0}',
-            style=extend_description_style,
-        )
-        extra_options.observe(update_extra_options_dict, names="value")
-
-        # Downsampling
-        def downsample_turn_on(change):
-            if change.new == True:
-                self.metadata["opts"]["downsample"] = True
-                self.metadata["opts"][
-                    "downsample_factor"
-                ] = downsample_factor_text.value
-                self.downsample = True
-                self.downsample_factor = downsample_factor_text.value
-                downsample_factor_text.disabled = False
-            if change.new == False:
-                self.metadata["opts"]["downsample"] = False
-                self.metadata["opts"]["downsample_factor"] = 1
-                self.downsample = False
-                self.downsample_factor = 1
-                downsample_factor_text.value = 1
-                downsample_factor_text.disabled = True
-
-        downsample_checkbox = Checkbox(description="Downsample?", value=False)
-        downsample_checkbox.observe(downsample_turn_on)
-
-        def downsample_factor_update_dict(change):
-            self.metadata["opts"]["downsample_factor"] = change.new
-            self.downsample_factor = change.new
-
-        downsample_factor_text = BoundedFloatText(
-            value=1,
-            min=0.001,
-            max=1.0,
-            description="Downsample factor:",
-            disabled=True,
-            style=extend_description_style,
-        )
-        downsample_factor_text.observe(downsample_factor_update_dict, names="value")
-        downsample_hb = HBox(
-            [downsample_checkbox, downsample_factor_text],
-            layout=Layout(flex_wrap="wrap", justify_content="space-between"),
-        )
-
-        options_accordion = Accordion(
-            children=[
-                HBox(
-                    [
-                        number_of_recon_iterations,
-                        center_of_rotation,
-                        downsample_checkbox,
-                        downsample_factor_text,
-                        extra_options,
-                    ],
-                    layout=Layout(
-                        flex_flow="row wrap", justify_content="space-between"
-                    ),
-                ),
-            ],
-            selected_index=None,
-            layout=Layout(width="100%"),
-            titles=("Options",),
-        )
-
-        def set_options_and_run_recon(change):
-            change.icon = "fas fa-cog fa-spin fa-lg"
-            change.description = (
-                "Setting options and loading data into reconstruction algorithm(s)."
-            )
-            try:
-                from tomopyui.backend.tomorecon import TomoRecon
-
-                a = TomoRecon(self)
-                change.button_style = "success"
-                change.icon = "fa-check-square"
-                change.description = "Finished alignment."
-            except:
-                change.button_style = "warning"
-                change.icon = "exclamation-triangle"
-                change.description = "Something went wrong."
-
-        recon_start_button = Button(
-            description="After choosing all of the options above, click this button to start the reconstruction.",
-            disabled=True,
-            button_style="info",  # 'success', 'info', 'warning', 'danger' or ''
-            tooltip="Start reconstruction with this button.",
-            icon="",
-            layout=Layout(width="auto", justify_content="center"),
-        )
-        recon_start_button.on_click(set_options_and_run_recon)
-
-        #### putting it all together
-        sliders_box = VBox(
+        pixel_range_slider_vb = VBox(
             [
                 self.prj_range_x_slider,
                 self.prj_range_y_slider,
@@ -1695,13 +1225,13 @@ class Recon:
             align_items="space-between",
         )
 
-        recon_initialization_box = HBox(
+        top_of_box_hb = HBox(
             [
-                radio_description,
-                radio_recon,
-                partial_radio_description,
-                radio_recon_fulldataset,
-                sliders_box,
+                self.radio_description,
+                self.radio_tab,
+                self.partial_radio_description,
+                self.radio_fulldataset,
+                pixel_range_slider_vb,
             ],
             layout=Layout(
                 width="auto",
@@ -1710,13 +1240,52 @@ class Recon:
                 flex="flex-grow",
             ),
         )
+        start_button_hb = HBox(
+            [self.start_button], layout=Layout(width="auto", justify_content="center")
+        )
 
-        self.recon_tab = VBox(
-            [
-                recon_initialization_box,
-                options_accordion,
-                methods_accordion,
-                save_options_accordion,
-                recon_start_button,
+        self.options_accordion = Accordion(
+            children=[
+                VBox(
+                    [
+                        HBox(
+                            [
+                                self.num_iterations_textbox,
+                                self.center_of_rotation,
+                            ],
+                            layout=Layout(
+                                flex_wrap="wrap", justify_content="space-between"
+                            ),
+                        ),
+                        HBox(
+                            [
+                                self.batch_size,
+                                self.paddingX_textbox,
+                                self.paddingY_textbox,
+                                self.downsample_checkbox,
+                                self.downsample_factor_textbox,
+                            ],
+                            layout=Layout(
+                                flex_wrap="wrap", justify_content="space-between"
+                            ),
+                        ),
+                        self.extra_options_textbox,
+                    ],
+                    layout=Layout(width="100%", height="100%"),
+                )
+            ],
+            selected_index=None,
+            layout=Layout(width="100%"),
+            titles=("Options",),
+        )
+
+        self.tab = VBox(
+            children=[
+                top_of_box_hb,
+                self.plotter_accordion,
+                self.methods_accordion,
+                self.save_options_accordion,
+                self.options_accordion,
+                start_button_hb,
             ]
         )

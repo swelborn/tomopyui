@@ -22,8 +22,8 @@ def create_dashboard():
     dashboard_tabs = [
         import_tab,
         center_tab_obj.center_tab,
-        align_tab_obj.alignment_tab,
-        recon_tab_obj.recon_tab,
+        align_tab_obj.tab,
+        recon_tab_obj.tab,
         file_import.log_handler.out,
     ]
     dashboard_titles = ["Import", "Center", "Align", "Reconstruct", "Log"]
