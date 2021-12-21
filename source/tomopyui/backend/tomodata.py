@@ -119,11 +119,10 @@ class TomoData:
             self.prj_imgs = self.prj_imgs[np.newaxis, :, :]
         # this will rotate it 90 degrees. Can update to rotate it multiple
         # times.
-        if "opts" in self.metadata:
-            if "rotate" in self.metadata["opts"]:
-                if self.metadata["opts"]["rotate"]:
-                    self.prj_imgs = np.swapaxes(self.prj_imgs, 1, 2)
-                    self.prj_imgs = np.flip(self.prj_imgs, 2)
+        if "rotate" in self.metadata:
+            if self.metadata["rotate"]:
+                self.prj_imgs = np.swapaxes(self.prj_imgs, 1, 2)
+                self.prj_imgs = np.flip(self.prj_imgs, 2)
         return self
 
     def import_tiff_folder(self, num_theta=None):
@@ -151,11 +150,10 @@ class TomoData:
         self.prj_imgs = image_sequence.asarray().astype(np.float32)
         image_sequence.close()
         # rotate dataset 90 deg if wanted
-        if "opts" in self.metadata:
-            if "rotate" in self.metadata["opts"]:
-                if self.metadata["opts"]["rotate"]:
-                    self.prj_imgs = np.swapaxes(self.prj_imgs, 1, 2)
-                    self.prj_imgs = np.flip(self.prj_imgs, 2)
+        if "rotate" in self.metadata:
+            if self.metadata["rotate"]:
+                self.prj_imgs = np.swapaxes(self.prj_imgs, 1, 2)
+                self.prj_imgs = np.flip(self.prj_imgs, 2)
 
         return self
 
@@ -174,11 +172,10 @@ class TomoData:
             self.prj_imgs = self.prj_imgs[np.newaxis, :, :]
         # this will rotate it 90 degrees. Can update to rotate it multiple
         # times.
-        if "opts" in self.metadata:
-            if "rotate" in self.metadata["opts"]:
-                if self.metadata["opts"]["rotate"]:
-                    self.prj_imgs = np.swapaxes(self.prj_imgs, 1, 2)
-                    self.prj_imgs = np.flip(self.prj_imgs, 2)
+        if "rotate" in self.metadata:
+            if self.metadata["opts"]:
+                self.prj_imgs = np.swapaxes(self.prj_imgs, 1, 2)
+                self.prj_imgs = np.flip(self.prj_imgs, 2)
         return self
 
     # --------------------------Plotting Functions----------------------#
