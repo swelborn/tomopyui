@@ -3,7 +3,7 @@ from . import helpers
 
 extend_description_style = {"description_width": "auto"}
 
-def _init_widgets(obj):
+def init_widgets(obj):
     '''
     Initializes many of the widgets in the Alignment and Recon tabs.
     '''
@@ -176,7 +176,7 @@ def _init_widgets(obj):
             style=extend_description_style,
             value=obj.upsample_factor,
         )
-        
+
     elif obj.widget_type == "Recon":
 
         # -- Description of turn-on radio -------------------------------------

@@ -1,40 +1,21 @@
 #!/usr/bin/env python
 
 from ipywidgets import *
-from ipyfilechooser import FileChooser
-import tomopy.prep.normalize
-
-import os
-import functools
-
 from ._import import import_helpers
 from ._shared import helpers
-
-# fix where this is coming from:
-import tomopyui.backend.tomodata as td
-
-# for alignment box
-import tifffile as tf
-import glob
-from ._shared.debouncer import debounce
-from ._shared import output_handler
-import json
-
-# for alignment box
-import tomopyui.backend.tomodata as td
-from tomopyui.widgets._shared._init_widgets import _init_widgets
-import logging
-
-# for center box
-from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
+from ._shared._init_widgets import init_widgets
+from ipyfilechooser import FileChooser
+from mpl_interactions import hyperslicer, ioff, interactive_hist, zoom_factory
 from tomopyui.backend.util.center import write_center
+from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
 
-# for plotting
+import functools
+import os
+import tomopy.prep.normalize
+import tomopyui.backend.tomodata as td
 import matplotlib.pyplot as plt
 import numpy as np
-import requests
-
-from mpl_interactions import hyperslicer, ioff, interactive_hist, zoom_factory
+import logging
 
 extend_description_style = {"description_width": "auto"}
 
@@ -73,7 +54,7 @@ class Import:
         # Init logger to be used throughout the app. 
         # TODO: This does not need to be under Import.
         self.log = logging.getLogger(__name__)
-        self.log_handler, self.log = output_handler.return_handler(
+        self.log_handler, self.log = helpers.return_handler(
             self.log, logging_level=20
         )
 
@@ -770,7 +751,7 @@ class Align:
         self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", 
                                 "npy"]
         self.widget_type = "Align"
-        _init_widgets(self) # initialization of many widgets/some attributes
+        init_widgets(self) # initialization of many widgets/some attributes
         self.set_metadata()
         self.set_metadata_obj_specific()
         self.set_observes()
@@ -910,12 +891,12 @@ class Align:
             change.description = "Something went wrong."
 
     # -- Sliders ----------------------------------------------------------
-    @debounce(0.2)
+    @helpers.debounce(0.2)
     def prj_range_x_update(self, change):
         self.prj_range_x = change.new
         self.set_metadata()
 
-    @debounce(0.2)
+    @helpers.debounce(0.2)
     def prj_range_y_update(self, change):
         self.prj_range_y = change.new
         self.set_metadata()
@@ -1147,7 +1128,7 @@ class Recon(Align):
         self.save_opts_list = ["tomo_before", "recon", "tiff", 
                         "npy"]
         self.widget_type = "Recon"
-        _init_widgets(self) # initialization of many widgets/some attributes
+        init_widgets(self) # initialization of many widgets/some attributes
         super().set_metadata()
         super().set_observes()
         self.set_observes_obj_specific()
