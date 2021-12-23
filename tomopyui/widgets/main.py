@@ -1,26 +1,30 @@
 import tomopyui.widgets.meta as meta
-import functools
 from ipywidgets import *
 
 
 def create_dashboard():
+    '''
+    This is the function to open the app in a jupyter notebook. In jupyter,
+    run the following commands:
+
+    .. code-block:: python
+
+        %matplotlib ipympl
+        import tomopyui.widgets.main as main
+
+        dashboard, file_import, center, prep, align, recon = main.create_dashboard()
+        dashboard
+
+    '''
 
     file_import = meta.Import()
-    import_widgets = [
-        [file_import.filechooser],
-        file_import.angles_textboxes,
-        file_import.opts_checkboxes,
-    ]
-    import_widgets = [item for sublist in import_widgets for item in sublist]
-    import_tab = HBox(import_widgets)
-
     center_tab_obj = meta.Center(file_import)
     prep_tab_obj = meta.Prep(file_import)
     recon_tab_obj = meta.Recon(file_import)
     align_tab_obj = meta.Align(file_import)
 
     dashboard_tabs = [
-        import_tab,
+        file_import.tab,
         center_tab_obj.center_tab,
         align_tab_obj.tab,
         recon_tab_obj.tab,

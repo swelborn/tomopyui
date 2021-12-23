@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+
+[tool.isort]
+profile = "black"
+src_paths = "tomopyui"
+multi_line_output = 3
+
+[tool.pydocstyle]
+match_dir = "tomopyui"
+convention = "numpy"
+add_select = ["D402","D415","D417"]
+
+[tool.pytest.ini_options]
+testpaths = ["docs/examples", "tests"]
+addopts = [
+    "--current-env",
+    "--doctest-continue-on-failure",
+    "--doctest-modules",
+    "--ignore-glob=docs/examples/*.py",
+    "--mpl",
+    "--nbval",
+]
+
+[tool.mypy]
+files = "tomopyui"
+warn_unused_configs = true
+warn_unused_ignores = true
+check_untyped_defs = true
+implicit_reexport = false
+# this is strict!
+# disallow_untyped_defs = true
+show_column_numbers = true
+show_error_codes = true
+ignore_missing_imports = true

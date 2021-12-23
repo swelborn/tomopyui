@@ -19,16 +19,112 @@ import logging
 
 extend_description_style = {"description_width": "auto"}
 
+# TODO: put this in its own file
+allowed_recon_kwargs = {
+    "art": ["num_gridx", "num_gridy", "num_iter"],
+    "bart": ["num_gridx", "num_gridy", "num_iter", "num_block", "ind_block"],
+    "fbp": ["num_gridx", "num_gridy", "filter_name", "filter_par"],
+    "gridrec": ["num_gridx", "num_gridy", "filter_name", "filter_par"],
+    "mlem": ["num_gridx", "num_gridy", "num_iter"],
+    "osem": ["num_gridx", "num_gridy", "num_iter", "num_block", "ind_block"],
+    "ospml_hybrid": [
+        "num_gridx",
+        "num_gridy",
+        "num_iter",
+        "reg_par",
+        "num_block",
+        "ind_block",
+    ],
+    "ospml_quad": [
+        "num_gridx",
+        "num_gridy",
+        "num_iter",
+        "reg_par",
+        "num_block",
+        "ind_block",
+    ],
+    "pml_hybrid": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
+    "pml_quad": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
+    "sirt": ["num_gridx", "num_gridy", "num_iter"],
+    "tv": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
+    "grad": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
+    "tikh": ["num_gridx", "num_gridy", "num_iter", "reg_data", "reg_par"],
+}
+
+filter_names = {
+    "none",
+    "shepp",
+    "cosine",
+    "hann",
+    "hamming",
+    "ramlak",
+    "parzen",
+    "butterworth",
+}
 
 class Import:
+    """
+    Class to import tomography data. At this point, it is assumed that the data
+    coming in is already normalized externally. 
+
+    Attributes
+    ----------
+    angle_start, angle_end : double
+        Start and end angles of the data being imported
+    num_theta : int 
+        Number of theta values in the dataset. Currently does not do anything 
+        in the backend.
+    prj_shape : (Z, Y, X) 
+        Shape pulled from image imported. After choosing a file in the 
+        Filechooser object, this will update. This is sent to Align and Recon
+        objects to instantiate sliders.
+    angles_textboxes : list of widgets.Textbox())
+        List of textbox widgets for angles.
+    import_opts_list : list of str
+        Right now, the only option on import is "rotate". If other options were
+        to be added, you can add to this list. Each of these options will 
+        create a Checkbox in self.opts_checkboxes. 
+    opts_checkboxes : list of widgets.Checkbox()
+        Created from import_opts_list.
+    fpath : str
+        Updated when file or filepath is chosen.
+    fname : str
+        Updated when file is chosen (if only directory is chosen, fname="")
+    ftype : "npy", "tiff"
+        Filetypes. Should be expanded to h5 files in future versions.
+    filechooser : FileChooser()
+        Filechooser widget
+    prj_range_x : (0, number of x pixels)
+        Retrieved from reading image metadata after choosing a file or folder.
+    prj_range_y : (0, number of y pixels)  
+        Retrieved from reading image metadata after choosing a file or folder.
+    prj_range_z : (0, number of z pixels)  
+        Not currently working
+    tomo : tomodata.TomoData()
+        Created after calling make_tomo.
+    wd : str
+        Current working directory, set after choosing file or folder. This is 
+        defaulted to fpath
+    log : logging.logger
+        Logger used throughout the program
+    log_handler : 
+        Can use this as context manager, see link here to ipywidgets readthedocs.
+    metadata : dict
+        Keys are attributes of the class. Values are their values. They are
+        updated by Import.set_metadata().
+    tab : widgets.HBox()
+        Box for all the widgets that are in the Import tab. Created at end of 
+        __init__().
+
+    """
 
     def __init__(self):
 
         # Init textboxes
-        self.angle_start = -90
-        self.angle_end = 90
+        self.angle_start = -90.0
+        self.angle_end = 90.0
         self.num_theta = 360
-        self.image_shape = None
+        self.prj_shape = None
         self.angles_textboxes = import_helpers.create_angles_textboxes(self)
 
         # Init checkboxes
@@ -45,9 +141,9 @@ class Import:
         self.ftype = None
         self.filechooser = FileChooser()
         self.filechooser.register_callback(self.update_file_information)
-        self.prj_range_x = None
-        self.prj_range_y = None
-        self.prj_range_z = None
+        self.prj_range_x = (0, 100)
+        self.prj_range_y = (0, 100)
+        self.prj_range_z = (0, 100)
         self.tomo = None
         self.wd = None
 
@@ -60,12 +156,22 @@ class Import:
 
         # Init metadata
         self.metadata = {}
-        self.set_metadata()  # init metadata
+        self.set_metadata()
+
+        # Create tab
+        self.make_tab()
 
     def set_wd(self, wd):
+        '''
+        Sets the current working directory of Import class. Does not do much
+        right now. 
+        '''
         self.wd = wd
 
     def set_metadata(self):
+        '''
+        Sets relevant metadata for Import
+        '''
         self.metadata = {
             "fpath": self.fpath,
             "fname": self.fname,
@@ -76,36 +182,45 @@ class Import:
             "prj_range_y" : self.prj_range_y,
         } | self.import_opts
 
-    # TODO: 
     def load_metadata(self):
+        '''
+        TODO: each class should have their own loading function.
+        '''
         print("load metadata here")
 
     def update_file_information(self):
+        '''
+        Callback for self.filechooser.
+        '''
         self.fpath = self.filechooser.selected_path
         self.fname = self.filechooser.selected_filename
         self.set_wd(self.fpath)
         # metadata must be set here in case tomodata is created (for folder 
         # import). this can be changed later.
         self.set_metadata()
-        self.get_image_shape()
+        self.get_prj_shape()
         self.set_prj_ranges()
         self.set_metadata()
 
-    def get_image_shape(self):
+    def get_prj_shape(self):
+        '''
+        Grabs the image shape depending on the filename. Does this without
+        loading the image into memory.
+        '''
         if self.fname.__contains__(".tif"):
-            self.image_shape = helpers.get_img_shape(self.fpath, 
+            self.prj_shape = helpers.get_img_shape(self.fpath, 
                                                     self.fname,
                                                     "tiff",
                                                     self.metadata,
                                                     )
         elif self.fname.__contains__(".npy"):
-            self.image_shape = helpers.get_img_shape(self.fpath, 
+            self.prj_shape = helpers.get_img_shape(self.fpath, 
                                                     self.fname,
                                                     "npy",
                                                     self.metadata,
                                                     )
         elif self.fname == "":
-            self.image_shape = helpers.get_img_shape(self.fpath, 
+            self.prj_shape = helpers.get_img_shape(self.fpath, 
                                                     self.fname,
                                                     "tiff",
                                                     self.metadata,
@@ -113,14 +228,75 @@ class Import:
                                                     )
 
     def set_prj_ranges(self):
-        self.prj_range_x = (0, self.image_shape[2]-1)
-        self.prj_range_y = (0, self.image_shape[1]-1)
-        self.prj_range_z = (0, self.image_shape[0]-1)
+        self.prj_range_x = (0, self.prj_shape[2]-1)
+        self.prj_range_y = (0, self.prj_shape[1]-1)
+        self.prj_range_z = (0, self.prj_shape[0]-1)
+
+    def make_tab(self):
+        '''
+        Creates the HBox which stores widgets.
+        '''
+        import_widgets = [
+        [file_import.filechooser],
+        file_import.angles_textboxes,
+        file_import.opts_checkboxes,
+        ]
+        import_widgets = [item for sublist in import_widgets for item in sublist]
+        self.import_tab = HBox(import_widgets)
 
     def make_tomo(self):
+        '''
+        Creates a tomo.TomoData object and stores it in Import. Unsure if this 
+        is currently useful, but could be later on. Passes self.metadata into
+        tomodata.TomoData().__init__
+
+        .. code-block:: python
+
+            # In Jupyter:
+            
+            # Cell 1:
+            from ipywidgets import *
+            from tomopyui.widgets.meta import Import
+            from 
+            a = Import()
+            a.tab
+            # You should see the HBox widget, you can select your file.
+
+            # Cell2:
+            a.make_tomo() # creates tomo.TomoData based on inputs
+            a.tomo.prj_imgs # access the projections like so.
+        
+        '''
         self.tomo = td.TomoData(metadata=self.metadata)
 
 class Plotter:
+    """
+    Class for plotting. Creates hyperslicers for Center, Align, and Recon classes.
+
+    Attributes
+    ----------
+    Import : tomopyui.widgets.meta.Import()
+        Needs an import object to be constructed.
+    prj_range_x_slider : widgets.IntRangeSlider()
+        Used in both Align and Recon as their x range slider. 
+    prj_range_y_slider : widgets.IntRangeSlider()
+        Used in both Align and Recon as their y range slider. 
+    set_range_button : widgets.Button()
+        Used in both Align and Recon for setting the range to the 
+        current plot range on the image shown in the hyperslicer (left fig).
+    slicer_with_hist_fig : matplotlib.pyplot.fig 
+        Figure containing an mpl-interactions.hyperslicer (left) and 
+        a histogram (right) associated with that slice.
+    threshold_control : mpl-interactions.Controls()
+        Comes from mpl-interactions.hyperslicer. Contains slider associated 
+        with the current slice. See mpl-interactions for details.
+    threshold_control_list : list of widgets 
+        Allows for organization of the widgets after creating the hyperslicer.
+    save_animation_button : widgets.Button()
+        Not implemented in Align or Recon yet (TODO). Enables saving of mp4
+        of the hyperslicer with its current histogram threshold range.
+    """
+
     def __init__(self, Import):
 
         self.Import = Import
@@ -152,26 +328,34 @@ class Plotter:
             layout=Layout(width="100%"),
             style=extend_description_style,
         )
-        self.slicer_with_hist_fig = None
-        self.threshold_control = None
-        self.threshold_control_list = None
         self.set_range_button = Button(
             description="Click to set current range to plot range.",
             layout=Layout(width="auto"),
         )
-        self.link_ranges_button_alignment = None
-        self.link_ranges_button_recon = None
+        self.slicer_with_hist_fig = None
+        self.threshold_control = None
+        self.threshold_control_list = None
         self.save_animation_button = None
 
     def create_slicer_with_hist(
         self, plot_type="prj", imagestack=None, Center=None
     ):
         """
-        Creates a plot with a histogram for a given set of data
+        Creates a plot with a histogram for a given set of data. Sets Plotter
+        attributes: slicer_with_hist_fig, threshold_control, 
+        threshold_control_list, and set_range_button.
 
         Parameters
         -----------
-        plot_type:str. Used for deciding what to use for the titles of things, etc.
+        plot_type : "prj" or "center"
+            Choice will determine what the hyperslicer will show (projection
+            images or reconstructed data with different centers, respectively).
+        imagestack : 3D ndarray
+            Images to show in hyperslicer
+        Center : tomopyui.widgets.meta.Center()
+            Center object, which will be used to title the plot with its
+            attribute index_to_try.
+
         """
 
         # Turn off immediate display of plot.
@@ -297,7 +481,7 @@ class Plotter:
 
     def save_prj_animation(self):
         """
-        Creates button to save animation.
+        Creates button to save animation. Not yet implemented.
         """
 
         def save_animation_on_click(click):
@@ -325,6 +509,7 @@ class Plotter:
 
 
 class Prep:
+
     def __init__(self, Import):
 
         self.tomo = Import.tomo
@@ -381,72 +566,92 @@ class Prep:
         self.tomo = tomo_norm_mlog
 
 class Center:
-    def __init__(self, Import, Prep=None, Align=None, Recon=None):
+    """
+    Class for creating a tab to help find the center of rotation. See examples 
+    for more information on center finding.
+
+    Attributes
+    ----------
+    Import : tomopyui.widgets.meta.Import()
+        Needs an import object to be constructed.
+    current_center : double
+        Current center of rotation. Updated when center_textbox is updated.
+
+        TODO: this should be linked to both Align and Recon.
+    center_guess : double
+        Guess value for center of rotation for automatic alignment (image entropy).
+        Updated when  
+    index_to_try : int
+        Index to try out when automatically (entropy) or manually trying to 
+        find the center of rotation.
+    search_step : double
+        Step size between centers (see tomopy.recon.rotation.write_center or 
+        tomopyui.backend.util.center) TODO: link these.
+    search_range : double
+        Will search from [center_guess - search_range] to [center_guess + search range]
+        in steps of search_step.
+    num_iter : int
+        Number of iterations to use in center reconstruction.
+    algorithm : str
+        Algorithm to use in the reconstruction. Chosen from dropdown list.
+    filter : str
+        Filter to be used. Only works with fbp and gridrec. If you choose 
+        another algorith, this will be ignored.    
+
+    """
+    def __init__(self, Import):
+
         self.Import = Import
-        self.Prep = Prep
-        self.Align = Align
-        self.Recon = Recon
-        # add a method in Import prj range (just like in Align/Prep)
-        self.current_center = 5
-        self.center_guess = self.current_center
-        self.centers_list = None
-        self.index_to_try = 50
+        self.current_center = None
+        self.center_guess = None
+        self.index_to_try = None
         self.search_step = 0.5
         self.search_range = 5
-        self.center_textbox = None
-        self.find_center_button = None
-        self.find_center_vo_button = None
         self.cen_range = None
         self.num_iter = 1
         self.algorithm = "gridrec"
         self.filter = "parzen"
-        self.err_output = Output()
-        self.manual_center_vbox = VBox([])
-        self.automatic_center_vbox = VBox([])
-        self.automatic_center_accordion = Accordion(children=[])
-        self.manual_center_accordion = Accordion(children=[])
-        self.center_tab = Tab(children=[])
+        self.metadata = {}
         self.center_plotter = Plotter(Import=self.Import)
-        self.create_center_tab()
+        self._init_widgets()
+        self._set_observes()
+        self.make_tab()
 
-    def create_center_tab(self):
-        def find_center_on_click(click):
-            self.find_center_button.button_style = "info"
-            self.find_center_button.icon = "fa-spin fa-cog fa-lg"
-            self.find_center_button.description = "Importing data..."
-            try:
-                tomo = td.TomoData(metadata=self.Import.metadata)
-                self.Import.log.info("Imported tomo")
-                self.Import.log.info("Finding center...")
-                self.Import.log.info(f"Using index: {self.index_to_try}")
-            except:
-                self.find_center_button.description = (
-                    "Please choose a file first. Try again after you do that."
-                )
-                self.find_center_button.button_style = "warning"
-                self.find_center_button.icon = "exclamation-triangle"
-            try:
-                self.find_center_button.description = "Finding center..."
-                self.find_center_button.button_style = "info"
-                self.current_center = find_center(
-                    tomo.prj_imgs,
-                    tomo.theta,
-                    ratio=0.9,
-                    ind=self.index_to_try,
-                    init=self.center_guess,
-                )
-                self.center_textbox.value = self.current_center
-                self.Import.log.info(f"Found center. {self.current_center}")
-                self.find_center_button.description = "Found center."
-                self.find_center_button.icon = "fa-check-square"
-                self.find_center_button.button_style = "success"
-            except:
-                self.find_center_button.description = (
-                    "Something went wrong with finding center."
-                )
-                self.find_center_button.icon = "exclamation-triangle"
-                self.find_center_button.button_style = "warning"
+    def set_metadata(self):
+        '''
+        Sets Center metadata.
+        '''
 
+        self.metadata["center"] = self.current_center
+        self.metadata["center_guess"] = self.center_guess
+        self.metadata["index_to_try"] = self.index_to_try 
+        self.metadata["search_step"] = self.search_step
+        self.metadata["search_range"] = self.search_range
+        self.metadata["cen_range"] = self.cen_range
+        self.metadata["num_iter"] = self.num_iter
+        self.metadata["algorithm"] = self.algorithm
+        self.metadata["filter"] = self.filter
+
+    def _init_widgets(self):
+
+        self.center_textbox = FloatText(
+            description="Center: ",
+            disabled=False,
+            style=extend_description_style,
+        )
+        self.load_rough_center = Button(
+            description="Click to load rough center from imported data.",
+            disabled=False,
+            button_style="info",
+            tooltip="Loads the half-way pixel point for the center.",
+            icon="",
+            layout=Layout(width="auto", justify_content="center"),
+        )
+        self.center_guess_textbox = FloatText(
+            description="Guess for center: ",
+            disabled=False,
+            style=extend_description_style,
+        )
         self.find_center_button = Button(
             description="Click to automatically find center (image entropy).",
             disabled=False,
@@ -455,41 +660,40 @@ class Center:
             icon="",
             layout=Layout(width="auto", justify_content="center"),
         )
-        self.find_center_button.on_click(find_center_on_click)
-
-        def find_center_vo_on_click(click):
-            self.find_center_vo_button.button_style = "info"
-            self.find_center_vo_button.icon = "fa-spin fa-cog fa-lg"
-            self.find_center_vo_button.description = "Importing data..."
-            try:
-                tomo = td.TomoData(metadata=self.Import.metadata)
-                self.Import.log.info("Imported tomo")
-                self.Import.log.info("Finding center...")
-                self.Import.log.info(f"Using index: {self.index_to_try}")
-            except:
-                self.find_center_vo_button.description = (
-                    "Please choose a file first. Try again after you do that."
-                )
-                self.find_center_vo_button.button_style = "warning"
-                self.find_center_vo_button.icon = "exclamation-triangle"
-            try:
-                self.find_center_vo_button.description = (
-                    "Finding center using Vo method..."
-                )
-                self.find_center_vo_button.button_style = "info"
-                self.current_center = find_center_vo(tomo.prj_imgs, ncore=1)
-                self.center_textbox.value = self.current_center
-                self.Import.log.info(f"Found center. {self.current_center}")
-                self.find_center_vo_button.description = "Found center."
-                self.find_center_vo_button.icon = "fa-check-square"
-                self.find_center_vo_button.button_style = "success"
-            except:
-                self.find_center_vo_button.description = (
-                    "Something went wrong with finding center."
-                )
-                self.find_center_vo_button.icon = "exclamation-triangle"
-                self.find_center_vo_button.button_style = "warning"
-
+        self.index_to_try_textbox = IntText(
+            description="Projection image to use for auto:",
+            disabled=False,
+            style=extend_description_style,
+            value=self.index_to_try,
+        )
+        self.num_iter_textbox = FloatText(
+            description="Number of iterations: ",
+            disabled=False,
+            style=extend_description_style,
+            value=self.num_iter,
+        )
+        self.search_range_textbox = IntText(
+            description="Search range around center:",
+            disabled=False,
+            style=extend_description_style,
+            value=self.search_range,
+        )
+        self.search_step_textbox = FloatText(
+            description="Step size in search range: ",
+            disabled=False,
+            style=extend_description_style,
+            value=self.search_step,
+        )
+        self.algorithms_dropdown = Dropdown(
+            options=[key for key in allowed_recon_kwargs],
+            value=self.algorithm,
+            description="Algorithm:",
+        )
+        self.filters_dropdown = Dropdown(
+            options=[key for key in filter_names],
+            value=self.filter,
+            description="Algorithm:",
+        )
         self.find_center_vo_button = Button(
             description="Click to automatically find center (Vo).",
             disabled=False,
@@ -498,60 +702,6 @@ class Center:
             icon="",
             layout=Layout(width="auto", justify_content="center"),
         )
-        self.find_center_vo_button.on_click(find_center_vo_on_click)
-
-        def center_textbox_slider_update(change):
-            self.center_textbox.value = self.cen_range[change.new]
-
-        def find_center_manual_on_click(change):
-            self.find_center_manual_button.button_style = "info"
-            self.find_center_manual_button.icon = "fas fa-cog fa-spin fa-lg"
-            self.find_center_manual_button.description = "Starting reconstruction."
-
-            # TODO: for memory, add only desired slice
-            tomo = td.TomoData(metadata=self.Import.metadata)
-            theta = tomo.theta
-            cen_range = [
-                self.current_center - self.search_range,
-                self.current_center + self.search_range,
-                self.search_step,
-            ]
-
-            # reconstruct, but also pull the centers used out to map to center
-            # textbox
-            rec, self.cen_range = write_center(
-                tomo.prj_imgs,
-                theta,
-                cen_range=cen_range,
-                ind=self.index_to_try,
-                mask=True,
-                algorithm=self.algorithm,
-                filter_name=self.filter,
-                num_iter=self.num_iter,
-            )
-            self.center_plotter.create_slicer_with_hist(
-                plot_type="center", imagestack=rec, Center=self
-            )
-
-            # this maps the threshold_control slider to center texbox
-            self.center_plotter.threshold_control.vbox.children[0].children[1].observe(
-                center_textbox_slider_update, names="value"
-            )
-            self.find_center_manual_button.button_style = "success"
-            self.find_center_manual_button.icon = "fa-check-square"
-            self.find_center_manual_button.description = "Finished reconstruction."
-
-            # Make VBox instantiated outside into the plot
-            self.center_tab.children[2].children[0].children[2].children = [
-                HBox([self.center_plotter.slicer_with_hist_fig.canvas]),
-                HBox(self.center_plotter.threshold_control_list),
-            ]
-            self.manual_center_accordion = Accordion(
-                children=[self.manual_center_vbox],
-                selected_index=None,
-                titles=("Find center through plotting",),
-            )
-
         self.find_center_manual_button = Button(
             description="Click to find center by plotting.",
             disabled=False,
@@ -560,145 +710,200 @@ class Center:
             icon="",
             layout=Layout(width="auto", justify_content="center"),
         )
-        self.find_center_manual_button.on_click(find_center_manual_on_click)
 
-        def center_update(change):
-            self.current_center = change.new
-            # self.Import.center = change.new
-            # self.Prep.center = change.new
-            # self.Recon.center = change.new
+    def _center_update(self, change):
+        self.current_center = change.new
+        self.set_metadata()
+    def _center_guess_update(self, change):
+        self.center_guess = change.new
+        self.set_metadata()
+    def _load_rough_center_onclick(self, change):
+        self.center_guess = Import.prj_range_x[1]/2
+        self.current_center = Import.prj_range_x[1]/2
+        self.set_metadata()
+    def _index_to_try_update(self, change):
+        self.index_to_try = change.new
+        self.set_metadata()
+    def _num_iter_update(self, change):
+        self.num_iter = change.new
+        self.set_metadata()
+    def _search_range_update(self, change):
+        self.search_range = change.new
+        self.set_metadata()
+    def _search_step_update(self, change):
+        self.search_step = change.new
+        self.set_metadata()
+    def _update_algorithm(self, change):
+        self.algorithm = change.new
+        self.set_metadata()
+    def _update_filters(self, change):
+        self.filter = change.new
+        self.set_metadata()
+    def _center_textbox_slider_update(self, change):
+        self.center_textbox.value = self.cen_range[change.new]
+        self.set_metadata()
 
-        self.center_textbox = FloatText(
-            description="Center: ",
-            disabled=False,
-            style=extend_description_style,
-            value=self.current_center,
+    def find_center_on_click(self, change):
+        '''
+        Callback to button for attempting to find center automatically using 
+        tomopy.recon.rotation.find_center. Takes index_to_try and center_guess.
+        This method has worked better for me, if I use a good index_to_try 
+        and center_guess.
+        '''
+        self.find_center_button.button_style = "info"
+        self.find_center_button.icon = "fa-spin fa-cog fa-lg"
+        self.find_center_button.description = "Importing data..."
+        try:
+            tomo = td.TomoData(metadata=self.Import.metadata)
+            self.Import.log.info("Imported tomo")
+            self.Import.log.info("Finding center...")
+            self.Import.log.info(f"Using index: {self.index_to_try}")
+        except:
+            self.find_center_button.description = (
+                "Please choose a file first. Try again after you do that."
+            )
+            self.find_center_button.button_style = "warning"
+            self.find_center_button.icon = "exclamation-triangle"
+        try:
+            self.find_center_button.description = "Finding center..."
+            self.find_center_button.button_style = "info"
+            self.current_center = find_center(
+                tomo.prj_imgs,
+                tomo.theta,
+                ratio=0.9,
+                ind=self.index_to_try,
+                init=self.center_guess,
+            )
+            self.center_textbox.value = self.current_center
+            self.Import.log.info(f"Found center. {self.current_center}")
+            self.find_center_button.description = "Found center."
+            self.find_center_button.icon = "fa-check-square"
+            self.find_center_button.button_style = "success"
+        except:
+            self.find_center_button.description = (
+                "Something went wrong with finding center."
+            )
+            self.find_center_button.icon = "exclamation-triangle"
+            self.find_center_button.button_style = "warning"
+
+    def find_center_vo_on_click(self, change):
+        '''
+        Callback to button for attempting to find center automatically using 
+        tomopy.recon.rotation.find_center_vo. Note: this method has not worked
+        well for me.
+        '''
+        self.find_center_vo_button.button_style = "info"
+        self.find_center_vo_button.icon = "fa-spin fa-cog fa-lg"
+        self.find_center_vo_button.description = "Importing data..."
+        try:
+            tomo = td.TomoData(metadata=self.Import.metadata)
+            self.Import.log.info("Imported tomo")
+            self.Import.log.info("Finding center...")
+            self.Import.log.info(f"Using index: {self.index_to_try}")
+        except:
+            self.find_center_vo_button.description = (
+                "Please choose a file first. Try again after you do that."
+            )
+            self.find_center_vo_button.button_style = "warning"
+            self.find_center_vo_button.icon = "exclamation-triangle"
+        try:
+            self.find_center_vo_button.description = (
+                "Finding center using Vo method..."
+            )
+            self.find_center_vo_button.button_style = "info"
+            self.current_center = find_center_vo(tomo.prj_imgs, ncore=1)
+            self.center_textbox.value = self.current_center
+            self.Import.log.info(f"Found center. {self.current_center}")
+            self.find_center_vo_button.description = "Found center."
+            self.find_center_vo_button.icon = "fa-check-square"
+            self.find_center_vo_button.button_style = "success"
+        except:
+            self.find_center_vo_button.description = (
+                "Something went wrong with finding center."
+            )
+            self.find_center_vo_button.icon = "exclamation-triangle"
+            self.find_center_vo_button.button_style = "warning"
+
+    def find_center_manual_on_click(self, change):
+        '''
+        Reconstructs at various centers when you click the button, and plots
+        the results with a slider so one can view. TODO: see X example. 
+        Uses search_range, search_step, center_guess,  Creates a hyperslicer + histogram plot 
+        '''
+        self.find_center_manual_button.button_style = "info"
+        self.find_center_manual_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.find_center_manual_button.description = "Starting reconstruction."
+
+        # TODO: for memory, add only desired slice
+        tomo = td.TomoData(metadata=self.Import.metadata)
+        theta = tomo.theta
+        cen_range = [
+            self.center_guess - self.search_range,
+            self.center_guess + self.search_range,
+            self.search_step,
+        ]
+
+        # reconstruct, but also pull the centers used out to map to center
+        # textbox
+        rec, self.cen_range = write_center(
+            tomo.prj_imgs,
+            theta,
+            cen_range=cen_range,
+            ind=self.index_to_try,
+            mask=True,
+            algorithm=self.algorithm,
+            filter_name=self.filter,
+            num_iter=self.num_iter,
         )
-        self.center_textbox.observe(center_update, names="value")
-
-        def center_guess_update(change):
-            self.center_guess = change.new
-
-        center_guess_textbox = FloatText(
-            description="Guess for center: ",
-            disabled=False,
-            style=extend_description_style,
+        self.center_plotter.create_slicer_with_hist(
+            plot_type="center", imagestack=rec, Center=self
         )
-        center_guess_textbox.observe(center_guess_update, names="value")
 
-        def search_step_update(change):
-            self.search_step = change.new
-
-        search_step_textbox = FloatText(
-            description="Step size in search range: ",
-            disabled=False,
-            style=extend_description_style,
-            value=self.search_step,
+        # this maps the threshold_control slider to center texbox
+        self.center_plotter.threshold_control.vbox.children[0].children[1].observe(
+            self._center_textbox_slider_update, names="value"
         )
-        search_step_textbox.observe(search_step_update, names="value")
+        self.find_center_manual_button.button_style = "success"
+        self.find_center_manual_button.icon = "fa-check-square"
+        self.find_center_manual_button.description = "Finished reconstruction."
 
-        def search_range_update(change):
-            self.search_range = change.new
-
-        search_range_textbox = IntText(
-            description="Search range around center:",
-            disabled=False,
-            style=extend_description_style,
-            value=self.search_range,
+        # Make VBox instantiated outside into the plot
+        self.center_tab.children[2].children[0].children[2].children = [
+            HBox([self.center_plotter.slicer_with_hist_fig.canvas]),
+            HBox(self.center_plotter.threshold_control_list),
+        ]
+        self.manual_center_accordion = Accordion(
+            children=[self.manual_center_vbox],
+            selected_index=None,
+            titles=("Find center through plotting",),
         )
-        search_range_textbox.observe(search_range_update, names="value")
 
-        allowed_recon_kwargs = {
-            "art": ["num_gridx", "num_gridy", "num_iter"],
-            "bart": ["num_gridx", "num_gridy", "num_iter", "num_block", "ind_block"],
-            "fbp": ["num_gridx", "num_gridy", "filter_name", "filter_par"],
-            "gridrec": ["num_gridx", "num_gridy", "filter_name", "filter_par"],
-            "mlem": ["num_gridx", "num_gridy", "num_iter"],
-            "osem": ["num_gridx", "num_gridy", "num_iter", "num_block", "ind_block"],
-            "ospml_hybrid": [
-                "num_gridx",
-                "num_gridy",
-                "num_iter",
-                "reg_par",
-                "num_block",
-                "ind_block",
-            ],
-            "ospml_quad": [
-                "num_gridx",
-                "num_gridy",
-                "num_iter",
-                "reg_par",
-                "num_block",
-                "ind_block",
-            ],
-            "pml_hybrid": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-            "pml_quad": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-            "sirt": ["num_gridx", "num_gridy", "num_iter"],
-            "tv": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-            "grad": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-            "tikh": ["num_gridx", "num_gridy", "num_iter", "reg_data", "reg_par"],
-        }
+    def _set_observes(self):
+        self.center_textbox.observe(self._center_update, names="value")
+        self.center_guess_textbox.observe(self._center_guess_update, names="value")
+        self.load_rough_center.observe(self._load_rough_center_onclick, names="value")
+        self.index_to_try_textbox.observe(self._index_to_try_update, names="value")
+        self.num_iter_textbox.observe(self._num_iter_update, names="value")
+        self.search_range_textbox.observe(self._search_range_update, names="value")
+        self.search_step_textbox.observe(self._search_step_update, names="value")
+        self.algorithms_dropdown.observe(self._update_algorithm, names="value")
+        self.filters_dropdown.observe(self._update_filters, names="value")
+        self.find_center_button.on_click(self.find_center_on_click)
+        self.find_center_vo_button.on_click(self.find_center_vo_on_click)
+        self.find_center_manual_button.on_click(self.find_center_manual_on_click)
 
-        filter_names = {
-            "none",
-            "shepp",
-            "cosine",
-            "hann",
-            "hamming",
-            "ramlak",
-            "parzen",
-            "butterworth",
-        }
-
-        def update_filters(change):
-            self.filter = change.new
-
-        filters_dropdown = Dropdown(
-            options=[key for key in filter_names],
-            value=self.filter,
-            description="Algorithm:",
-        )
-        filters_dropdown.observe(update_filters, names="value")
-
-        def update_algorithm(change):
-            self.algorithm = change.new
-
-        algorithms_dropdown = Dropdown(
-            options=[key for key in allowed_recon_kwargs],
-            value=self.algorithm,
-            description="Algorithm:",
-        )
-        algorithms_dropdown.observe(update_algorithm, names="value")
-
-        def num_iter_update(change):
-            self.num_iter = change.new
-
-        num_iter_textbox = FloatText(
-            description="Number of iterations: ",
-            disabled=False,
-            style=extend_description_style,
-            value=self.num_iter,
-        )
-        num_iter_textbox.observe(num_iter_update, names="value")
-
-        def index_to_try_update(change):
-            self.index_to_try = change.new
-
-        index_to_try_textbox = IntText(
-            description="Projection image to use for auto:",
-            disabled=False,
-            style=extend_description_style,
-            value=self.index_to_try,
-        )
-        index_to_try_textbox.observe(index_to_try_update, names="value")
-
+    def make_tab(self):
+        '''
+        Function to create a Center object's tab. TODO: make the tab look better.
+        '''
+        
         # Accordion to find center automatically
         self.automatic_center_vbox = VBox(
             [
                 HBox([self.find_center_button, self.find_center_vo_button]),
                 HBox(
                     [
-                        center_guess_textbox,
+                        self.center_guess_textbox,
                         index_to_try_textbox,
                     ]
                 ),
@@ -716,12 +921,12 @@ class Center:
                 self.find_center_manual_button,
                 HBox(
                     [
-                        index_to_try_textbox,
-                        num_iter_textbox,
-                        search_range_textbox,
-                        search_step_textbox,
-                        algorithms_dropdown,
-                        filters_dropdown,
+                        self.index_to_try_textbox,
+                        self.num_iter_textbox,
+                        self.search_range_textbox,
+                        self.search_step_textbox,
+                        self.algorithms_dropdown,
+                        self.filters_dropdown,
                     ]
                 ),
                 VBox([]),
@@ -736,31 +941,87 @@ class Center:
 
         self.center_tab = VBox(
             [
-                self.center_textbox,
+                HBox([self.center_textbox,self.load_rough_center]),
                 self.automatic_center_accordion,
                 self.manual_center_accordion,
-                self.err_output,
             ]
         )
 
 class Align:
+    """
+    Class to set automatic alignment attributes in the Alignment dashboard tab.
+    On initialization, this class will create a tab. 
+    Features:
+    - Plotting the projection images in an mpl-interactions.hypersicer + 
+    histogram. 
+    - Selecting the plot range through the plot.
+    - Selecting the plot range through range sliders.
+    - Reconstruction method selection. Each widgets.Checkbox() that is clicked 
+    will do a reconstruction using that alignment technique, and save into a 
+    folder with a datetime stamp.
+    - Save options, including tomography images before, tomography images after
+    and last reconstruction performed by the alignment.
+    - 
 
+    Attributes
+    ----------
+    Import : tomopyui.widgets.meta.Import()
+        Needs an import object to be constructed.
+    prj_shape : (Z, Y, X) 
+        Shape pulled from image, imported in Import tab. After choosing a file 
+        in Import, and choosing radio button for turning on the tab, this will load the 
+        projection range into the sliders. 
+    downsample : boolean
+        Determines whether or not to downsample the data before alignment. 
+        Clicking this box will open another box to choose the downsample factor
+        (how much you want to reduce the datasize by). This will downsample your
+        data by skimage.scale TODO: check to make sure this is right.  
+    downsample_factor : double
+        The factor used to scale the data going into the alignment routine. 
+        The data will be downsampled and then the alignment routine will attempt
+        to correct for misalignment. After completing the alignment, the original
+        (not downsampled) projection images will be shifted based on the shifts
+        found in the downsampled data.
+    num_iter : int
+        Number of alignment iterations to perform.
+    center : double
+        Center of rotation used for alignment. 
+    upsample_factor : int
+        During alignment, your data can be upsampled for sub-pixel registration
+        during phase cross correlation. TODO: link to paper on this.
+    extra_options : str
+        This option will add the extra-options keyword argument to the tomopy 
+        astra wrapper. TODO: See this page: X. TODO: need a list of extra options
+        keyword arguments.
+    batch_size : int
+        Since the data is broken up into chunks for the alignment process to 
+        take place on the GPU, this attribute will cut the data into chunks
+        in the following way:
+
+    .. code-block:: python
+
+        
+    filter : str
+        Filter to be used. Only works with fbp and gridrec. If you choose 
+        another algorith, this will be ignored.    
+
+    """
     def __init__(self, Import):
 
-        self.init_attributes(Import)
+        self._init_attributes(Import)
         self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", 
                                 "npy"]
         self.widget_type = "Align"
         init_widgets(self) # initialization of many widgets/some attributes
-        self.set_metadata()
-        self.set_metadata_obj_specific()
-        self.set_observes()
-        self.set_observes_obj_specific()
+        self.set_metadata() 
+        self._set_metadata_obj_specific()
+        self._set_observes()
+        self._set_observes_obj_specific()
         self.make_tab()
 
-    def init_attributes(self, Import):
+    def _init_attributes(self, Import):
         self.Import = Import
-        self.image_shape = Import.image_shape
+        self.prj_shape = Import.prj_shape
         self.angle_start = Import.angle_start # TODO
         self.angle_end = Import.angle_end # TODO
         self.num_theta = Import.num_theta # TODO
@@ -785,7 +1046,9 @@ class Align:
         self.metadata["opts"] = {}
 
     def set_metadata(self):
-
+        '''
+        Sets Recon metadata.
+        '''
         self.metadata["opts"]["downsample"] = self.downsample
         self.metadata["opts"]["downsample_factor"] = self.downsample_factor
         self.metadata["opts"]["num_iter"] = self.num_iter
@@ -802,25 +1065,25 @@ class Align:
         self.metadata["prj_range_y"] = self.prj_range_y
         self.metadata["partial"] = self.partial
 
-    def set_metadata_obj_specific(self):
+    def _set_metadata_obj_specific(self):
         self.metadata["opts"]["upsample_factor"] = self.upsample_factor
 
-    def set_prj_ranges_full(self):
+    def _set_prj_ranges_full(self):
 
-        self.prj_range_x = (0, self.image_shape[2]-1)
-        self.prj_range_y = (0, self.image_shape[1]-1)
-        self.prj_range_z = (0, self.image_shape[0]-1)
-        self.prj_range_x_slider.max = self.image_shape[2]-1
-        self.prj_range_y_slider.max = self.image_shape[1]-1
+        self.prj_range_x = (0, self.prj_shape[2]-1)
+        self.prj_range_y = (0, self.prj_shape[1]-1)
+        self.prj_range_z = (0, self.prj_shape[0]-1)
+        self.prj_range_x_slider.max = self.prj_shape[2]-1
+        self.prj_range_y_slider.max = self.prj_shape[1]-1
         self.prj_range_x_slider.value = self.prj_range_x
         self.prj_range_y_slider.value = self.prj_range_y
         self.set_metadata()
 
     # -- Radio to turn on tab ---------------------------------------------
-    def activate_tab(self, change):
+    def _activate_tab(self, change):
         if change.new == 0:
             self.radio_fulldataset.disabled = False
-            self.image_shape = self.Import.image_shape
+            self.prj_shape = self.Import.prj_shape
             self.plotter_accordion.selected_index = 0
             self.start_button.disabled = False
             self.save_options_accordion.selected_index = 0
@@ -840,7 +1103,7 @@ class Align:
             self.log.info("Deactivated alignment.")
 
     # -- Radio to turn on partial dataset ---------------------------------
-    def activate_full_partial(self, change):
+    def _activate_full_partial(self, change):
         if change.new == 1:
             self.partial = True
             self.prj_range_x_slider.disabled = False
@@ -855,7 +1118,7 @@ class Align:
             self.set_metadata()
 
     # -- Plot projections button ------------------------------------------
-    def plot_prjs_on_click(self, change):
+    def _plot_prjs_on_click(self, change):
         self.plot_prj_images_button.button_style = "info"
         self.plot_prj_images_button.icon = "fas fa-cog fa-spin fa-lg"
         self.plot_prj_images_button.description = "Importing data."
@@ -866,7 +1129,7 @@ class Align:
         self.prj_plotter.set_range_button.description = "Click to set projection range to current plot range"
         self.make_prj_plot()
 
-    def make_prj_plot(self):
+    def _make_prj_plot(self):
         # Make VBox inside alignment tab into the plot
         self.tab.children[1].children[0].children[1].children = [
             HBox([self.prj_plotter.slicer_with_hist_fig.canvas]),
@@ -892,30 +1155,30 @@ class Align:
 
     # -- Sliders ----------------------------------------------------------
     @helpers.debounce(0.2)
-    def prj_range_x_update(self, change):
+    def _prj_range_x_update(self, change):
         self.prj_range_x = change.new
         self.set_metadata()
 
     @helpers.debounce(0.2)
-    def prj_range_y_update(self, change):
+    def _prj_range_y_update(self, change):
         self.prj_range_y = change.new
         self.set_metadata()
     
     # -- Options ---------------------------------------------------------- 
 
     # Number of iterations
-    def update_num_iter(self, change):
+    def _update_num_iter(self, change):
         self.num_iter = change.new
         self.progress_total.max = change.new
         self.set_metadata()
 
     # Center of rotation
-    def update_center_of_rotation(self, change):
+    def _update_center_of_rotation(self, change):
         self.center = change.new
         self.set_metadata()
 
     # Downsampling
-    def downsample_turn_on(self, change):
+    def _downsample_turn_on(self, change):
         if change.new == True:
             self.downsample = True
             self.downsample_factor = self.downsample_factor_textbox.value
@@ -928,17 +1191,17 @@ class Align:
             self.downsample_factor_textbox.disabled = True
             self.set_metadata()
 
-    def update_downsample_factor_dict(self, change):
+    def _update_downsample_factor_dict(self, change):
         self.downsample_factor = change.new
         self.set_metadata()
 
     # Upsampling
-    def update_upsample_factor(self, change):
+    def _update_upsample_factor(self, change):
         self.upsample_factor = change.new
         self.set_metadata_obj_specific()
 
     # Batch size
-    def update_batch_size(self, change):
+    def _update_batch_size(self, change):
         self.batch_size = change.new
         self.progress_phase_cross_corr.max = change.new
         self.progress_shifting.max = change.new
@@ -946,66 +1209,69 @@ class Align:
         self.set_metadata()
 
     # X Padding
-    def update_x_padding(self, change):
+    def _update_x_padding(self, change):
         self.paddingX = change.new
         self.set_metadata()
 
     # Y Padding
-    def update_y_padding(self, change):
+    def _update_y_padding(self, change):
         self.paddingY = change.new
         self.set_metadata()
 
     # Extra options
-    def update_extra_options(self, change):
+    def _update_extra_options(self, change):
         self.extra_options = change.new
         self.set_metadata()
 
     def set_observes(self):
 
         # -- Radio to turn on tab ---------------------------------------------
-        self.radio_tab.observe(self.activate_tab, names="index")
+        self.radio_tab.observe(self._activate_tab, names="index")
 
         # -- Plot projections button ------------------------------------------
-        self.plot_prj_images_button.on_click(self.plot_prjs_on_click)
+        self.plot_prj_images_button.on_click(self._plot_prjs_on_click)
 
         # -- Radio to turn on partial dataset ---------------------------------
-        self.radio_fulldataset.observe(self.activate_full_partial, names="index")
+        self.radio_fulldataset.observe(self._activate_full_partial, names="index")
 
         # -- Sliders ----------------------------------------------------------
         self.prj_range_x_slider.observe(
-            self.prj_range_x_update, names="value"
+            self._prj_range_x_update, names="value"
         )
 
         self.prj_range_y_slider.observe(
-            self.prj_range_y_update, names="value"
+            self._prj_range_y_update, names="value"
         )
         # -- Options ----------------------------------------------------------
 
         # Center 
-        self.center_of_rotation.observe(self.update_center_of_rotation, names="value")
+        self.center_of_rotation.observe(self._update_center_of_rotation, names="value")
 
         # Downsampling
-        self.downsample_checkbox.observe(self.downsample_turn_on)
-        self.downsample_factor_textbox.observe(self.update_downsample_factor_dict, names="value")
+        self.downsample_checkbox.observe(self._downsample_turn_on)
+        self.downsample_factor_textbox.observe(self._update_downsample_factor_dict, names="value")
 
         # X Padding
-        self.paddingX_textbox.observe(self.update_x_padding, names="value")
+        self.paddingX_textbox.observe(self._update_x_padding, names="value")
 
         # Y Padding
-        self.paddingY_textbox.observe(self.update_y_padding, names="value")
+        self.paddingY_textbox.observe(self._update_y_padding, names="value")
 
         # Extra options
-        self.extra_options_textbox.observe(self.update_extra_options, names="value")
+        self.extra_options_textbox.observe(self._update_extra_options, names="value")
 
     def set_observes_obj_specific(self):
 
         # -- Set observes only for alignment ----------------------------------
-        self.num_iterations_textbox.observe(self.update_num_iter, names="value")
-        self.batch_size.observe(self.update_batch_size, names="value")
+        self.num_iterations_textbox.observe(self._update_num_iter, names="value")
+        self.batch_size.observe(self._update_batch_size, names="value")
+        self.upsample_factor_textbox.observe(self._update_upsample_factor, names="value")
         self.start_button.on_click(self.set_options_and_run)
-        self.upsample_factor_textbox.observe(self.update_upsample_factor, names="value")
-        
+
     def make_tab(self):
+        '''
+        Creates an alignment tab.
+        '''
 
         # -- Saving ----------------------------------------------------------- 
         save_hbox = HBox(

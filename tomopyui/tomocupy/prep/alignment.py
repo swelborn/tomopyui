@@ -6,14 +6,13 @@ from cupyx.scipy import ndimage as ndi_cp
 from skimage.registration import phase_cross_correlation
 from tomopy.prep.alignment import scale as scale_tomo
 from tomopy.recon import algorithm as tomopy_algorithm
-from fastprogress.fastprogress import master_bar, progress_bar
 
 import astra
 import os
 import cupy as cp
 import numpy as np
 import matplotlib.pyplot as plt
-import tomocupy.recon.algorithm as tomocupy_algorithm
+import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
 
 
 def align_joint(TomoAlign):
@@ -30,7 +29,7 @@ def align_joint(TomoAlign):
     if method_str == "MLEM_CUDA":
         method_str = "EM_CUDA"
     upsample_factor = TomoAlign.metadata["opts"]["upsample_factor"]
-    num_batches = TomoAlign.metadata["opts"]["batch_size"]  # change to num_batches
+    num_batches = TomoAlign.metadata["opts"]["num_batches"]  # change to num_batches
     center = TomoAlign.center
 
     # Needs scaling for skimage float operations.
@@ -115,8 +114,6 @@ def align_joint(TomoAlign):
         # update progress bar
         # method_bar.update()
         # break up reconstruction into batches along z axis
-        print(TomoAlign.recon.shape)
-        print(np.mean(TomoAlign.recon))
         TomoAlign.recon = np.array_split(TomoAlign.recon, num_batches, axis=0)
         # may not need a copy.
         _rec = TomoAlign.recon.copy()

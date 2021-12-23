@@ -1,26 +1,28 @@
 # Contributing
 
-Thanks for thinking of a way to help improve this library! Remember that contributions come in all shapes and sizes beyond writing bug fixes. Contributing to [documentation](#documentation), opening new [issues](https://github.com/ianhi/mpl-interactions/issues) for bugs, asking for clarification on things you find unclear, and requesting new features, are all super valuable contributions.
+Thanks for thinking of a way to help improve this library! Remember that contributions come in all shapes and sizes beyond writing bug fixes. Contributing to [documentation](#documentation), opening new [issues](https://github.com/samwelborn/tomopyui/issues) for bugs, asking for clarification on things you find unclear, and requesting new features, are all super valuable contributions.
 
 ## Code Improvements
 
-All development for this library happens on GitHub at [mpl_interactions](https://github.com/ianhi/mpl-interactions). We recommend you work with a [Conda](https://www.anaconda.com/products/individual) environment (or an alternative virtual environment like [`venv`](https://docs.python.org/3/library/venv.html)).
+All development for this library happens on GitHub [here](https://github.com/samwelborn/tomopyui). We recommend you work with a [Conda](https://www.anaconda.com/products/individual) environment (or an alternative virtual environment like [`venv`](https://docs.python.org/3/library/venv.html)).
+
+The below instructions also use [Mamba](https://github.com/mamba-org/mamba#the-fast-cross-platform-package-manager) which is a very fast implementation of `conda`.
 
 ```bash
 git clone <your fork>
 cd mpl-interactions
-conda env create
+mamba env create
 conda activate mpl-interactions
 pre-commit install
 ```
 
-The `conda env create` command installs all Python packages that are useful when working on the source code of `mpl_interactions` and its documentation. You can also install these packages separately:
+The `mamba env create` command installs all Python packages that are useful when working on the source code of `tomopyui` and its documentation. You can also install these packages separately:
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev, doc]"
 ```
 
-The {command}`-e .` flag installs the `mpl_interactions` folder in ["editable" mode](https://pip.pypa.io/en/stable/cli/pip_install/#editable-installs) and {command}`[dev]` installs the [optional dependencies](https://setuptools.readthedocs.io/en/latest/userguide/dependency_management.html#optional-dependencies) you need for developing `mpl_interacions`.
+The {command}`-e .` flag installs the `tomopyui` folder in ["editable" mode](https://pip.pypa.io/en/stable/cli/pip_install/#editable-installs) and {command}`[dev]` installs the [optional dependencies](https://setuptools.readthedocs.io/en/latest/userguide/dependency_management.html#optional-dependencies) you need for developing `tomopyui`.
 
 ### Seeing your changes
 
@@ -33,7 +35,7 @@ If you are working in a Jupyter Notebook, then in order to see your code changes
   %load_ext autoreload
   %autoreload 2
 
-  from mpl_interactions import ....
+  from tomopyui import ....
   ```
 
 ### Working with Git
@@ -63,13 +65,3 @@ tox -e doclive
 ```
 
 In a few seconds your web browser should open up the documentation. Now whenever you save a file the documentation will automatically regenerate and the webpage will refresh for you!
-
-### Embedding GIFs
-
-Unfortunately, interactive plots are not interactive on [Read the Docs](https://readthedocs.org/projects/mpl-interactions), because widgets require an active Python kernel to work. Instead, we therefore shoot [gif](https://docs.fileformat.com/image/gif) or [apng](https://docs.fileformat.com/image/apng) screencasts of interacting with the plots and embed them in the Jupyter notebooks.
-
-To accomplish, these GIFs are best stored in `docs/_static/images`. Then, below the input cell of which you want to render cell output, you create a Markdown cell below that code cell and insert the GIF there [as an image](https://www.markdownguide.org/basic-syntax/#images).
-
-## Thank you to our current team!
-
-This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributors members can be found on `mpl_interactions`' [README](https://github.com/ianhi/mpl-interactions#contributors-) page.

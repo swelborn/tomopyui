@@ -13,7 +13,7 @@ from .util.save_metadata import save_metadata
 from tomopy.recon import algorithm as tomopy_algorithm
 
 
-import tomocupy.recon.algorithm as tomocupy_algorithm
+import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
 import tomopyui.backend.tomodata as td
 import matplotlib.pyplot as plt
 import datetime

@@ -7,7 +7,6 @@
 # -- Path setup --------------------------------------------------------------
 
 import inspect
-
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -17,12 +16,11 @@ import shutil
 import subprocess
 import sys
 
-import tomopyui
+try:
+    from tomopyui import __version__ as release
+except ImportError:
+    release = "unknown"
 
-sys.path.insert(0, os.path.abspath("../source"))
-sys.path.insert(0, os.path.abspath("."))
-
-release = tomopyui.__version__
 
 
 # -- Project information -----------------------------------------------------
@@ -31,7 +29,6 @@ project = "tomopyui"
 copyright = "2021, Samuel Scott Welborn"
 author = "Samuel Scott Welborn"
 
-# The full version, including alpha/beta/rc tags
 
 # -- Generate API ------------------------------------------------------------
 api_folder_name = "api"
@@ -45,15 +42,9 @@ subprocess.call(
             "--no-toc",
             "--templatedir _templates",
             "--separate",
-            "../source/tomopyui/",
-            "../source/tomopyui/backend"
-            "../source/tomopyui/widgets",
-            # # excluded modules
-            # "../*/helpers.py",
-            # "../*/ipyplot.py",
-            # "../*/mpl_kwargs.py",
-            # "../*/xarray_helpers.py",
-            # "../*/tests",
+            "../tomopyui/",
+            # excluded modules
+            # nothing here for cookiecutter
         ]
     ),
     shell=True,
@@ -75,21 +66,11 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
-    # "sphinx_gallery.gen_gallery",
     "sphinx_panels",
     "sphinx_thebe",
     "sphinx_togglebutton",
 ]
 
-# from mpl_playback.scraper import matplotlib_scraper
-
-# sphinx_gallery_conf = {
-#     "examples_dirs": "examples/gallery",  # path to your example scripts
-#     "gallery_dirs": "gallery",  # path to where to save gallery generated output
-#     "filename_pattern": "/.*",
-#     "ignore_pattern": "/_.*",  # https://www.debuggex.com/
-#     "image_scrapers": (matplotlib_scraper),
-# }
 
 # API settings
 autodoc_default_options = {
@@ -132,12 +113,8 @@ copybutton_prompt_text = r">>> |\.\.\. "  # doctest
 
 # Settings for linkcheck
 linkcheck_anchors = False
-linkcheck_ignore = []
+linkcheck_ignore = []  # type: ignore
 
-# Settings for myst-nb
-# execution_excludepatterns = [
-#     "examples/devlop/*",
-# ]
 execution_timeout = -1
 jupyter_execute_notebooks = "off"
 if "EXECUTE_NB" in os.environ:
@@ -167,13 +144,6 @@ exclude_patterns = [
     ".DS_Store",
     "Thumbs.db",
     "_build",
-    "examples/devlop",
-    "examples/gallery",
-    # "examples/non-ipympl-backends.ipynb",
-    "gallery/*.ipynb",
-    "gallery/*.md5",
-    "gallery/*.md",
-    "gallery/*.py",
 ]
 
 
@@ -198,14 +168,14 @@ html_theme_options = {
         "thebelab": True,
     },
     "path_to_docs": "docs",
-    "repository_branch": "master",
+    "repository_branch": "main",
     "repository_url": "https://github.com/samwelborn/tomopyui",
     "use_download_button": True,
     "use_edit_page_button": True,
     "use_issues_button": True,
     "use_repository_button": True,
 }
-html_title = "mpl-interactions"
+html_title = "tomopyui"
 
 master_doc = "index"
 thebe_config = {
@@ -253,6 +223,6 @@ def linkcode_resolve(domain, info):
     else:
         linespec = ""
 
-    fn = os.path.relpath(fn, start=os.path.dirname(tomopyui.__file__))
+    fn = os.path.relpath(fn, start=os.path.dirname("../tomopyui"))
 
-    return f"https://github.com/samwelborn/tomopyui/{fn}{linespec}"
+    return f"https://github.com/samwelborn/tomopyui/blob/main/tomopyui/{fn}{linespec}"  # noqa

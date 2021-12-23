@@ -3,11 +3,12 @@
 from copy import copy, deepcopy
 from skimage.transform import rescale  # look for better option
 from time import perf_counter
-from tomocupy.prep.alignment import shift_prj_cp
-from tomocupy.prep.alignment import align_joint
+from ..tomocupy.prep.alignment import shift_prj_cp
+from ..tomocupy.prep.alignment import align_joint
 from .util.save_metadata import save_metadata
 from .util.pad_projections import pad_projections
 from .util.trim_padding import trim_padding
+
 
 # from tqdm.notebook import tnrange, tqdm
 
