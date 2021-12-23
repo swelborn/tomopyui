@@ -993,17 +993,36 @@ class Align:
         This option will add the extra-options keyword argument to the tomopy 
         astra wrapper. TODO: See this page: X. TODO: need a list of extra options
         keyword arguments.
-    batch_size : int
+    num_batches : int
         Since the data is broken up into chunks for the alignment process to 
         take place on the GPU, this attribute will cut the data into chunks
         in the following way:
 
-    .. code-block:: python
-
+        .. code-block:: python
+            
+            # Jupyter
+            # Cell 1
+            import numpy as np
+            from tomopyui.widgets.meta import Import
+            a = Import()
+            a
+            # choose file with FileChooser in output of this cell
         
-    filter : str
-        Filter to be used. Only works with fbp and gridrec. If you choose 
-        another algorith, this will be ignored.    
+            # Cell 2
+            a.make_tomo()
+            print(a.tomo.prj_imgs.shape)
+            # Output : (100, 100, 100)
+
+            # Cell 3 
+            num_batches = 5
+            b = np.array_split(a.tomo.prj_imgs, num_batches, axis=0)
+            print(len(b))
+            # Output : 5
+            print(b[0].shape)
+            # Output : (20, 100, 100)
+
+    paddingX, paddingY : int
+        Padding used to do the alignment.  
 
     """
     def __init__(self, Import):
@@ -1033,7 +1052,7 @@ class Align:
         self.center = 0
         self.upsample_factor = 50
         self.extra_options = {}
-        self.batch_size = 20
+        self.num_batches = 20
         self.prj_range_x = (0, 10)
         self.prj_range_y = (0, 10)
         self.paddingX = 10
@@ -1053,7 +1072,7 @@ class Align:
         self.metadata["opts"]["downsample_factor"] = self.downsample_factor
         self.metadata["opts"]["num_iter"] = self.num_iter
         self.metadata["opts"]["center"] = self.center
-        self.metadata["opts"]["batch_size"] = self.batch_size
+        self.metadata["opts"]["num_batches"] = self.num_batches
         self.metadata["opts"]["pad"] = (
             self.paddingX,
             self.paddingY,
@@ -1201,8 +1220,8 @@ class Align:
         self.set_metadata_obj_specific()
 
     # Batch size
-    def _update_batch_size(self, change):
-        self.batch_size = change.new
+    def _update_num_batches(self, change):
+        self.num_batches = change.new
         self.progress_phase_cross_corr.max = change.new
         self.progress_shifting.max = change.new
         self.progress_reprj.max = change.new
@@ -1264,7 +1283,7 @@ class Align:
 
         # -- Set observes only for alignment ----------------------------------
         self.num_iterations_textbox.observe(self._update_num_iter, names="value")
-        self.batch_size.observe(self._update_batch_size, names="value")
+        self.num_batches.observe(self._update_num_batches, names="value")
         self.upsample_factor_textbox.observe(self._update_upsample_factor, names="value")
         self.start_button.on_click(self.set_options_and_run)
 
@@ -1341,7 +1360,7 @@ class Align:
                         ),
                         HBox(
                             [
-                                self.batch_size,
+                                self.num_batches,
                                 self.paddingX_textbox,
                                 self.paddingY_textbox,
                                 self.downsample_checkbox,
@@ -1421,8 +1440,8 @@ class Recon(Align):
             change.description = "Something went wrong."
 
     # Batch size
-    def update_batch_size(self, change):
-        self.batch_size = change.new
+    def update_num_batches(self, change):
+        self.num_batches = change.new
         self.set_metadata()
 
     # Number of iterations
@@ -1433,7 +1452,7 @@ class Recon(Align):
     def set_observes_obj_specific(self):
 
         self.start_button.on_click(self.set_options_and_run)
-        self.batch_size.observe(self.update_batch_size, names="value")
+        self.num_batches.observe(self.update_num_batches, names="value")
         self.num_iterations_textbox.observe(self.update_num_iter, names="value")
 
     # -- Create recon tab -----------------------------------------------------
@@ -1506,7 +1525,7 @@ class Recon(Align):
                         ),
                         HBox(
                             [
-                                self.batch_size,
+                                self.num_batches,
                                 self.paddingX_textbox,
                                 self.paddingY_textbox,
                                 self.downsample_checkbox,
