@@ -1,4 +1,4 @@
-name: tomopyui-testing-docs-1
+name: tomopyui
 channels:
   - conda-forge/label/widgetsnbextension_dev
   - conda-forge/label/jupyterlab_widgets_rc
