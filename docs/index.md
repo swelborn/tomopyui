@@ -7,14 +7,38 @@ A graphical user interface for tomopy.
 ## Basic Usage
 
 ```python
-# a basic usage example can go here
-print(1+1)
+
 ```
 
 ## Install
-```bash
-pip install tomopyui
+
+Create a fresh environment so you don't break anything else:
+
 ```
+conda create -n tomopyui
+conda activate tomopyui
+```
+
+Then, install run the following commands in order:
+
+```
+
+```
+
+After creating this environment, navigate to the directory you downloaded
+this repository to, and run the following command:
+
+```
+pip install .
+```
+
+or 
+
+```
+pip install -e .
+```
+
+for helping to develop this GUI.
 
 
 

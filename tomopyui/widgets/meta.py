@@ -1022,7 +1022,13 @@ class Align:
             # Output : (20, 100, 100)
 
     paddingX, paddingY : int
-        Padding used to do the alignment.  
+        Padding added to the projection images. 
+    partial : boolean
+        If True, will use a partial dataset. The plot range sliders set the 
+        values.
+    metadata : dict
+        Metadata from the alignment options. This passes into 
+        tomopyui.backend.tomoalign.TomoAlign.
 
     """
     def __init__(self, Import):
@@ -1242,7 +1248,7 @@ class Align:
         self.extra_options = change.new
         self.set_metadata()
 
-    def set_observes(self):
+    def _set_observes(self):
 
         # -- Radio to turn on tab ---------------------------------------------
         self.radio_tab.observe(self._activate_tab, names="index")
@@ -1279,7 +1285,7 @@ class Align:
         # Extra options
         self.extra_options_textbox.observe(self._update_extra_options, names="value")
 
-    def set_observes_obj_specific(self):
+    def _set_observes_obj_specific(self):
 
         # -- Set observes only for alignment ----------------------------------
         self.num_iterations_textbox.observe(self._update_num_iter, names="value")

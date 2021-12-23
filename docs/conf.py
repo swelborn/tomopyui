@@ -44,7 +44,6 @@ subprocess.call(
             "--separate",
             "../tomopyui/",
             # excluded modules
-            # nothing here for cookiecutter
         ]
     ),
     shell=True,
@@ -78,6 +77,7 @@ autodoc_default_options = {
     "show-inheritance": True,
     "undoc-members": True,
 }
+autodoc_mock_imports = ["cupyx", "cupy", "tqdm"]
 add_module_names = False
 napoleon_google_docstring = False
 napoleon_include_private_with_doc = False

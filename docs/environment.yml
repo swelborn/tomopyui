@@ -14,15 +14,13 @@ dependencies:
   - jupyterlab
   - astropy
   - ipyfilechooser
-  - ipywidgets>=8
+  - ipywidgets=8
   - widgetsnbextension
   - jupyterlab_widgets
   - ca-certificates
   - certifi
   - openssl
   - astra-toolbox
-  - cudatoolkit
-  - cupy
   - joblib
   - ipympl [--no-deps]
   - sphinx
