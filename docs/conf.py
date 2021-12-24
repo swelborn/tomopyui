@@ -176,6 +176,7 @@ html_theme_options = {
     "use_edit_page_button": True,
     "use_issues_button": True,
     "use_repository_button": True,
+    "logo_only": True,
 }
 html_title = "tomopyui"
 html_logo = "_static/images/logo.png"

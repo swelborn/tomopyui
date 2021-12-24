@@ -1,23 +1,25 @@
-
 # tomopyui
-
-## Description
 
 Have you ever wondered to yourself one of the following:
 
-- "I really don't want to learn a python API to reconstruct my X-Ray tomography data" 
+- "I really don't want to learn a python API to reconstruct my tomography data" 
 - "I really wish I knew what was going on during automatic tomography data alignment, and that it wasn't just a black box filled with math that gives me a bad result"
 - "I really don't want to open another image stack in ImageJ"
 
-`tomopyui` aims to provide a solution to these problems. Built on [tomopy](https://tomopy.readthedocs.io/en/latest/), [astra-toolbox](http://www.astra-toolbox.com/docs/install.html), [ipywidgets](https://ipywidgets.readthedocs.io/en/latest/), and [mpl-interactions](https://mpl-interactions.readthedocs.io/en/stable/index.html), `tomopyui` is a graphical user interface (GUI) that will allow you to
+`tomopyui` aims to provide a solution to these problems. Built on [tomopy](https://tomopy.readthedocs.io/en/latest/), [astra-toolbox](http://www.astra-toolbox.com/docs/install.html), [ipywidgets](https://ipywidgets.readthedocs.io/en/latest/), and [mpl-interactions](https://mpl-interactions.readthedocs.io/en/stable/index.html), `tomopyui` is a graphical user interface (GUI) that will allow you to:
 
-- Import your data
-- Find your center of rotation (manually, or automatically from [tomopy](https://tomopy.readthedocs.io/en/latest/))
-- Iteratively align your data 
+- Import tomography data
+- Find the data's center of rotation (manually, or automatically from [tomopy](https://tomopy.readthedocs.io/en/latest/) 's centering algorithms)
+- Iteratively align your data using [joint iterative reconstruction and reprojection](https://www.nature.com/articles/s41598-017-12141-9.pdf) and inspect the convergence at each iteration. 
+- Look at your normalized/aligned/reconstructed data in the app, rather than pulling it up in ImageJ
+- Try out all the reconstruction algorithms in a few clicks. Run them. Come back to folders filled with reconstructed data using all those algorithms. Some are better than others, and some are faster than others. 
+- Process a dataset quickly to find standard values, save alignment and reconstruction metadata in JSON files for batch reconstruction later on. (still in development progress)
+
+This application was developed at the Stanford Synchrotron Radiation Lightsource ([SSRL](https://www-ssrl.slac.stanford.edu/)) to aid in our alignment and reconstruction processes. It could certainly use _your_ help! See the {doc}`contributing` page for more information on how you can get involved.
 
 ## Usage
 
-Open up Jupyter Lab, and run the following in the first cell:
+Open up [JupyterLab](https://jupyterlab.readthedocs.io/en/stable/getting_started/overview.html) after [installing](#install), and run the following in the first cell:
 
 ```{jupyter-execute}
 %matplotlib ipympl
@@ -27,6 +29,18 @@ dashboard, file_import, center, prep, align, recon = main.create_dashboard()
 dashboard
 ```
 
+You can click through the tabs that you will see on the dashboard to check out the options available. Most of the features cannot be used on this webpage, but it gives you a flavor of what comes with the app.
+
+Here is what it will look like when you open it on your computer:
+
+```{image} _static/images/frontpage_usage.gif
+
+```
+
+There will be more examples of usage [TK](https://en.wikipedia.org/wiki/To_come_(publishing)) in the {doc}`examples` page.
+
+This shows you how to upload your data and check it out using the [mpl-interactions](https://mpl-interactions.readthedocs.io/en/stable/index.html) interactive [hyperslicer](https://mpl-interactions.readthedocs.io/en/stable/examples/hyperslicer.html) and [histogram](https://mpl-interactions.readthedocs.io/en/stable/examples/hist.html) widgets.
+
 ## Install
 
 :::{note}
@@ -34,7 +48,6 @@ dashboard
 If you are new to installing conda/pip packages, and/or you do not currently have a CUDA installation on your machine, see the {doc}`install` page for an in-depth (at least for Windows) guide.
 
 :::
-
 
 :::{note}
 
@@ -61,7 +74,7 @@ Navigate on into the tomopyui directory:
 cd tomopyui
 ```
 
-Run the following command :
+Run the following command:
 
 ```
 conda env create -f environment.yml
@@ -89,7 +102,7 @@ pip install .
 
 Without CUDA, this program is useless for aligning/reconstructing tomography data. 
 
-If you don't have CUDA or and just want to check out the ipywidgets, you can still do that using the environment.yml in the docs folder:
+If you don't have CUDA and you just want to check out the ipywidgets, you can still do that using the environment.yml in the docs folder:
 
 ```
 cd tomopyui
@@ -110,8 +123,11 @@ _Follow the links below for in-depth installation page and API._
 ```{toctree}
 :maxdepth: 2
 
+howitworks
 install
+examples
 API <api/tomopyui>
+contributing
 ```
 
 ```{toctree}

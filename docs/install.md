@@ -164,8 +164,11 @@ First create your own fork of <https://github.com/samwelborn/tomopyui>. If you a
 ```
 pip install -e .
 ```
+
+The {command}`-e .` flag installs the `tomopyui` folder in ["editable" mode](https://pip.pypa.io/en/stable/cli/pip_install/#editable-installs). This will let you make changes to the code in your install folder, and send them to your own `tomopyui` fork. 
+
 :::{note}
 
-A nice set of basic instructions for development is on [Development Guide - tomopy](https://tomopy.readthedocs.io/en/latest/devguide.html).  
+A nice set of basic instructions for development is on [Development Guide - tomopy](https://tomopy.readthedocs.io/en/latest/devguide.html) or on this [GitHub page](https://github.com/firstcontributions/first-contributions#first-contributions).
 
 :::
