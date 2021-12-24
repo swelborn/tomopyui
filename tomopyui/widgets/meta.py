@@ -74,17 +74,17 @@ class Import:
     num_theta : int 
         Number of theta values in the dataset. Currently does not do anything 
         in the backend.
-    prj_shape : (Z, Y, X) 
+    prj_shape : tuple, (Z, Y, X) 
         Shape pulled from image imported. After choosing a file in the 
         Filechooser object, this will update. This is sent to Align and Recon
         objects to instantiate sliders.
-    angles_textboxes : list of widgets.Textbox())
-        List of textbox widgets for angles.
+    angles_textboxes : list of :doc:`Textbox <ipywidgets:index>`
+        List of :doc:`Textbox <ipywidgets:index>` widgets for angles.
     import_opts_list : list of str
         Right now, the only option on import is "rotate". If other options were
         to be added, you can add to this list. Each of these options will 
-        create a Checkbox in self.opts_checkboxes. 
-    opts_checkboxes : list of widgets.Checkbox()
+        create a :doc:`Checkbox <ipywidgets:index>` in self.opts_checkboxes. 
+    opts_checkboxes : list of :doc:`Checkbox <ipywidgets:index>`
         Created from import_opts_list.
     fpath : str
         Updated when file or filepath is chosen.
@@ -108,12 +108,12 @@ class Import:
     log : logging.logger
         Logger used throughout the program
     log_handler : 
-        Can use this as context manager, see link here to ipywidgets readthedocs.
+        Can use this as context manager, see :doc:`ipywidgets docs <ipywidgets:index>`.
     metadata : dict
         Keys are attributes of the class. Values are their values. They are
-        updated by Import.set_metadata().
-    tab : widgets.HBox()
-        Box for all the widgets that are in the Import tab. Created at end of 
+        updated by `Import.set_metadata()`.
+    tab : :doc:`HBox <ipywidgets:index>`
+        Box for all the :doc:`widgets <ipywidgets:index>` that are in the `Import` tab. Created at end of 
         __init__().
 
     """
@@ -163,14 +163,14 @@ class Import:
 
     def set_wd(self, wd):
         '''
-        Sets the current working directory of Import class. Does not do much
+        Sets the current working directory of `Import` class. Does not do much
         right now. 
         '''
         self.wd = wd
 
     def set_metadata(self):
         '''
-        Sets relevant metadata for Import
+        Sets relevant metadata for `Import`
         '''
         self.metadata = {
             "fpath": self.fpath,
@@ -190,7 +190,7 @@ class Import:
 
     def update_file_information(self):
         '''
-        Callback for self.filechooser.
+        Callback for `Import`.filechooser.
         '''
         self.fpath = self.filechooser.selected_path
         self.fname = self.filechooser.selected_filename
@@ -237,18 +237,16 @@ class Import:
         Creates the HBox which stores widgets.
         '''
         import_widgets = [
-        [file_import.filechooser],
-        file_import.angles_textboxes,
-        file_import.opts_checkboxes,
+        [self.filechooser],
+        self.angles_textboxes,
+        self.opts_checkboxes,
         ]
         import_widgets = [item for sublist in import_widgets for item in sublist]
-        self.import_tab = HBox(import_widgets)
+        self.tab = HBox(import_widgets)
 
     def make_tomo(self):
         '''
-        Creates a tomo.TomoData object and stores it in Import. Unsure if this 
-        is currently useful, but could be later on. Passes self.metadata into
-        tomodata.TomoData().__init__
+        Creates a `~tomopyui.backend.tomodata.TomoData` object and stores it in `Import`. 
 
         .. code-block:: python
 
@@ -271,30 +269,30 @@ class Import:
 
 class Plotter:
     """
-    Class for plotting. Creates hyperslicers for Center, Align, and Recon classes.
+    Class for plotting. Creates :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` for `Center`, `Align`, and `Recon` classes.
 
     Attributes
     ----------
-    Import : tomopyui.widgets.meta.Import()
+    Import : `Import`
         Needs an import object to be constructed.
-    prj_range_x_slider : widgets.IntRangeSlider()
+    prj_range_x_slider : :doc:`IntRangeSlider <ipywidgets:index>`
         Used in both Align and Recon as their x range slider. 
-    prj_range_y_slider : widgets.IntRangeSlider()
+    prj_range_y_slider : :doc:`IntRangeSlider <ipywidgets:index>`
         Used in both Align and Recon as their y range slider. 
-    set_range_button : widgets.Button()
+    set_range_button : :doc:`Button <ipywidgets:index>`
         Used in both Align and Recon for setting the range to the 
-        current plot range on the image shown in the hyperslicer (left fig).
-    slicer_with_hist_fig : matplotlib.pyplot.fig 
-        Figure containing an mpl-interactions.hyperslicer (left) and 
-        a histogram (right) associated with that slice.
-    threshold_control : mpl-interactions.Controls()
-        Comes from mpl-interactions.hyperslicer. Contains slider associated 
+        current plot range on the image shown in the :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` (left fig).
+    slicer_with_hist_fig : :doc:`matplotlib subplots <matplotlib:api/_as_gen/matplotlib.pyplot.subplots>`
+        Figure containing an :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` (left) and 
+        a :doc:`histogram <mpl-interactions:examples/hist>` (right) associated with that slice.
+    threshold_control : :class:`mpl-interactions:mpl_interactions.controller.Controls`
+        Comes from :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>`. Contains slider associated 
         with the current slice. See mpl-interactions for details.
-    threshold_control_list : list of widgets 
-        Allows for organization of the widgets after creating the hyperslicer.
-    save_animation_button : widgets.Button()
-        Not implemented in Align or Recon yet (TODO). Enables saving of mp4
-        of the hyperslicer with its current histogram threshold range.
+    threshold_control_list : list of :doc:`ipywidgets <ipywidgets:index>`
+        Allows for organization of the widgets after creating the :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>`.
+    save_animation_button : :doc:`Button <ipywidgets:index>`
+        Not implemented in `Align` or `Recon` yet (TODO). Enables saving of mp4
+        of the :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` with its current :doc:`histogram <mpl-interactions:examples/hist>` threshold range.
     """
 
     def __init__(self, Import):
@@ -341,20 +339,19 @@ class Plotter:
         self, plot_type="prj", imagestack=None, Center=None
     ):
         """
-        Creates a plot with a histogram for a given set of data. Sets Plotter
+        Creates a plot with a :doc:`histogram <mpl-interactions:examples/hist>` for a given set of data. Sets Plotter
         attributes: slicer_with_hist_fig, threshold_control, 
         threshold_control_list, and set_range_button.
 
         Parameters
         -----------
         plot_type : "prj" or "center"
-            Choice will determine what the hyperslicer will show (projection
+            Choice will determine what the :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` will show (projection
             images or reconstructed data with different centers, respectively).
-        imagestack : 3D ndarray
-            Images to show in hyperslicer
-        Center : tomopyui.widgets.meta.Center()
-            Center object, which will be used to title the plot with its
-            attribute index_to_try.
+        imagestack : 3D `numpy.ndarray`
+            Images to show in :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>`
+        Center : `Center`
+            Used to title the plot with its attribute index_to_try.
 
         """
 
@@ -572,21 +569,20 @@ class Center:
 
     Attributes
     ----------
-    Import : tomopyui.widgets.meta.Import()
+    Import : `Import`
         Needs an import object to be constructed.
     current_center : double
         Current center of rotation. Updated when center_textbox is updated.
 
-        TODO: this should be linked to both Align and Recon.
+        TODO: this should be linked to both `Align` and `Recon`.
     center_guess : double
-        Guess value for center of rotation for automatic alignment (image entropy).
-        Updated when  
+        Guess value for center of rotation for automatic alignment (`~tomopy.recon.rotation.find_center`).
     index_to_try : int
         Index to try out when automatically (entropy) or manually trying to 
         find the center of rotation.
     search_step : double
-        Step size between centers (see tomopy.recon.rotation.write_center or 
-        tomopyui.backend.util.center) TODO: link these.
+        Step size between centers (see `tomopy.recon.rotation.write_center` or 
+        `tomopyui.backend.util.center`).
     search_range : double
         Will search from [center_guess - search_range] to [center_guess + search range]
         in steps of search_step.
@@ -619,7 +615,7 @@ class Center:
 
     def set_metadata(self):
         '''
-        Sets Center metadata.
+        Sets `Center` metadata.
         '''
 
         self.metadata["center"] = self.current_center
@@ -746,7 +742,7 @@ class Center:
     def find_center_on_click(self, change):
         '''
         Callback to button for attempting to find center automatically using 
-        tomopy.recon.rotation.find_center. Takes index_to_try and center_guess.
+        `tomopy.recon.rotation.find_center`. Takes index_to_try and center_guess.
         This method has worked better for me, if I use a good index_to_try 
         and center_guess.
         '''
@@ -789,7 +785,7 @@ class Center:
     def find_center_vo_on_click(self, change):
         '''
         Callback to button for attempting to find center automatically using 
-        tomopy.recon.rotation.find_center_vo. Note: this method has not worked
+        `tomopy.recon.rotation.find_center_vo`. Note: this method has not worked
         well for me.
         '''
         self.find_center_vo_button.button_style = "info"
@@ -828,7 +824,9 @@ class Center:
         '''
         Reconstructs at various centers when you click the button, and plots
         the results with a slider so one can view. TODO: see X example. 
-        Uses search_range, search_step, center_guess,  Creates a hyperslicer + histogram plot 
+        Uses search_range, search_step, center_guess.
+        Creates a :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` + 
+        :doc:`histogram <mpl-interactions:examples/hist>` plot 
         '''
         self.find_center_manual_button.button_style = "info"
         self.find_center_manual_button.icon = "fas fa-cog fa-spin fa-lg"
@@ -894,7 +892,7 @@ class Center:
 
     def make_tab(self):
         '''
-        Function to create a Center object's tab. TODO: make the tab look better.
+        Function to create a Center object's :doc:`Tab <ipywidgets:index>`. TODO: make the tab look better.
         '''
         
         # Accordion to find center automatically
@@ -904,7 +902,7 @@ class Center:
                 HBox(
                     [
                         self.center_guess_textbox,
-                        index_to_try_textbox,
+                        self.index_to_try_textbox,
                     ]
                 ),
             ]
@@ -952,20 +950,21 @@ class Align:
     Class to set automatic alignment attributes in the Alignment dashboard tab.
     On initialization, this class will create a tab. 
     Features:
-    - Plotting the projection images in an mpl-interactions.hypersicer + 
-    histogram. 
+
+    - Plotting the projection images in an 
+      :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` + 
+      :doc:`histogram <mpl-interactions:examples/hist>`.
     - Selecting the plot range through the plot.
     - Selecting the plot range through range sliders.
-    - Reconstruction method selection. Each widgets.Checkbox() that is clicked 
-    will do a reconstruction using that alignment technique, and save into a 
-    folder with a datetime stamp.
+    - Reconstruction method selection. Each :doc:`Checkbox <ipywidgets:index>` that is clicked 
+      will do a reconstruction using that alignment technique, and save into a 
+      folder with a datetime stamp.
     - Save options, including tomography images before, tomography images after
-    and last reconstruction performed by the alignment.
-    - 
+      and last reconstruction performed by the alignment.
 
     Attributes
     ----------
-    Import : tomopyui.widgets.meta.Import()
+    Import : `Import`
         Needs an import object to be constructed.
     prj_shape : (Z, Y, X) 
         Shape pulled from image, imported in Import tab. After choosing a file 
@@ -1114,7 +1113,7 @@ class Align:
             self.save_options_accordion.selected_index = 0
             self.options_accordion.selected_index = 0
             self.methods_accordion.selected_index = 0
-            self.set_prj_ranges_full()
+            self._set_prj_ranges_full()
             self.log.info("Activated alignment.")
         elif change.new == 1:
             self.radio_fulldataset.disabled = True
@@ -1137,7 +1136,7 @@ class Align:
 
         elif change.new == 0:
             self.partial = False
-            self.set_prj_ranges_full()
+            self._set_prj_ranges_full()
             self.prj_range_x_slider.disabled = True
             self.prj_range_y_slider.disabled = True
             self.set_metadata()
@@ -1152,7 +1151,7 @@ class Align:
         self.plot_prj_images_button.icon = "fa-check-square"
         self.plot_prj_images_button.description = "Finished Import."
         self.prj_plotter.set_range_button.description = "Click to set projection range to current plot range"
-        self.make_prj_plot()
+        self._make_prj_plot()
 
     def _make_prj_plot(self):
         # Make VBox inside alignment tab into the plot
@@ -1223,7 +1222,7 @@ class Align:
     # Upsampling
     def _update_upsample_factor(self, change):
         self.upsample_factor = change.new
-        self.set_metadata_obj_specific()
+        self._set_metadata_obj_specific()
 
     # Batch size
     def _update_num_batches(self, change):
@@ -1415,21 +1414,21 @@ class Recon(Align):
 
     def __init__(self, Import):
 
-        super().init_attributes(Import)
+        super()._init_attributes(Import)
         self.save_opts_list = ["tomo_before", "recon", "tiff", 
                         "npy"]
         self.widget_type = "Recon"
         init_widgets(self) # initialization of many widgets/some attributes
         super().set_metadata()
-        super().set_observes()
-        self.set_observes_obj_specific()
+        super()._set_observes()
+        self._set_observes_obj_specific()
         self.make_tab()
 
 
     # -- Observe functions for reconstruction ---------------------------------
 
     # Start button
-    def set_options_and_run(self, change):
+    def _set_options_and_run(self, change):
         change.icon = "fas fa-cog fa-spin fa-lg"
         change.description = (
             "Setting options and loading data into reconstruction algorithm(s)."
@@ -1446,20 +1445,20 @@ class Recon(Align):
             change.description = "Something went wrong."
 
     # Batch size
-    def update_num_batches(self, change):
+    def _update_num_batches(self, change):
         self.num_batches = change.new
         self.set_metadata()
 
     # Number of iterations
-    def update_num_iter(self, change):
+    def _update_num_iter(self, change):
         self.num_iter = change.new
         self.set_metadata()
 
-    def set_observes_obj_specific(self):
+    def _set_observes_obj_specific(self):
 
-        self.start_button.on_click(self.set_options_and_run)
-        self.num_batches.observe(self.update_num_batches, names="value")
-        self.num_iterations_textbox.observe(self.update_num_iter, names="value")
+        self.start_button.on_click(self._set_options_and_run)
+        self.num_batches.observe(self._update_num_batches, names="value")
+        self.num_iterations_textbox.observe(self._update_num_iter, names="value")
 
     # -- Create recon tab -----------------------------------------------------
     def make_tab(self):

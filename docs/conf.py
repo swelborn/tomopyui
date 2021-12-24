@@ -98,7 +98,9 @@ nitpicky = True  # warn if cross-references are missing
 
 # Intersphinx settings
 intersphinx_mapping = {
-    "ipywidgets": ("https://ipywidgets.readthedocs.io/en/stable", None),
+    "tomopy" : ("https://tomopy.readthedocs.io/en/latest/", None),
+    "mpl-interactions" : ("https://mpl-interactions.readthedocs.io/en/stable/", None),
+    "ipywidgets": ("https://ipywidgets.readthedocs.io/en/latest/", None),
     "matplotlib": ("https://matplotlib.org/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "python": ("https://docs.python.org/3", None),
@@ -176,7 +178,8 @@ html_theme_options = {
     "use_repository_button": True,
 }
 html_title = "tomopyui"
-
+html_logo = "_static/images/logo.png"
+html_favicon = "_static/images/tomopy-favicon.svg"
 master_doc = "index"
 thebe_config = {
     "repository_url": html_theme_options["repository_url"],

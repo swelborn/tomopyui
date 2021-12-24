@@ -110,10 +110,10 @@ def init_widgets(obj):
     )
 
     # Batch size
-    obj.batch_size = IntText(
-        description="Batch size (for GPU): ",
+    obj.num_batches = IntText(
+        description="Number of batches (for GPU): ",
         style=extend_description_style,
-        value=obj.batch_size,
+        value=obj.num_batches,
     )
 
     # X Padding
