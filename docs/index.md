@@ -1,8 +1,19 @@
 
-# tomopyui's Documentation
+# tomopyui
 
-A graphical user interface for tomopy.
+## Description
 
+Have you ever wondered to yourself one of the following:
+
+- "I really don't want to learn a python API to reconstruct my X-Ray tomography data" 
+- "I really wish I knew what was going on during automatic tomography data alignment, and that it wasn't just a black box filled with math that gives me a bad result"
+- "I really don't want to open another image stack in ImageJ"
+
+`tomopyui` aims to provide a solution to these problems. Built on [tomopy](https://tomopy.readthedocs.io/en/latest/), [astra-toolbox](http://www.astra-toolbox.com/docs/install.html), [ipywidgets](https://ipywidgets.readthedocs.io/en/latest/), and [mpl-interactions](https://mpl-interactions.readthedocs.io/en/stable/index.html), `tomopyui` is a graphical user interface (GUI) that will allow you to
+
+- Import your data
+- Find your center of rotation (manually, or automatically from [tomopy](https://tomopy.readthedocs.io/en/latest/))
+- Iteratively align your data 
 
 ## Usage
 
