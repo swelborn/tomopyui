@@ -74,15 +74,23 @@ class TomoAlign:
         self.wd = os.getcwd()
 
     def make_metadata_list(self):
+        """
+        Creates a metadata list for all of the methods check-marked in the UI.
+        This is put into the for loop in _main. Each item in the list is a 
+        separate metadata dictionary.
+        """
         metadata_list = []
         for key in self.metadata["methods"]:
             d = self.metadata["methods"]
             keys_to_remove = set(self.metadata["methods"].keys())
             keys_to_remove.remove(key)
-            _d = {k: d[k] for k in set(list(d.keys())) - keys_to_remove}
+            _d = {k.replace(" ", "_"): d[k] for k in set(list(d.keys())) - keys_to_remove}
             _metadata = self.metadata.copy()
             _metadata["methods"] = _d
-            metadata_list.append(_metadata)
+            newkey = key.replace(" ","_") # put underscores in method names
+            if _metadata["methods"][newkey]: 
+                metadata_list.append(_metadata) # append only true methods
+
         return metadata_list
 
     def init_prj(self):
@@ -107,6 +115,7 @@ class TomoAlign:
                 (1, self.downsample_factor, self.downsample_factor),
                 anti_aliasing=True,
             )
+
         # Pad
         self.prj_for_alignment, self.pad_ds = pad_projections(
             self.prj_for_alignment, self.pad_ds, 1
@@ -116,8 +125,6 @@ class TomoAlign:
         """
         Aligns a TomoData object using options in GUI.
         """
-        # This will contain more options later, as of now it only accepts
-        # align_joint from tomocupy
 
         align_joint(self)
 
@@ -128,15 +135,6 @@ class TomoAlign:
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y%m%d-%H%M-")
         method_str = list(self.metadata["methods"].keys())[0]
-
-        if (
-            "SIRT_CUDA" in self.metadata["methods"]
-            and "Faster" in self.metadata["methods"]["SIRT_CUDA"]
-        ):
-            if self.metadata["methods"]["SIRT_CUDA"]["Faster"]:
-                method_str = method_str + "-faster"
-            if self.metadata["methods"]["SIRT_CUDA"]["Fastest"]:
-                method_str = method_str + "-fastest"
         os.mkdir(dt_string + method_str)
         os.chdir(dt_string + method_str)
         save_metadata("metadata.json", self.metadata)
@@ -146,6 +144,8 @@ class TomoAlign:
                 np.save("projections_after_alignment", self.tomo.prj_imgs)
             if self.metadata["save_opts"]["tiff"]:
                 tf.imwrite("projections_after_alignment.tif", self.tomo.prj_imgs)
+
+            # defaults to at least saving tiff if none are checked
             if (
                 not self.metadata["save_opts"]["tiff"]
                 and not self.metadata["save_opts"]["npy"]
