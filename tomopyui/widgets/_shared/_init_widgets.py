@@ -50,13 +50,13 @@ def init_widgets(obj):
             obj.plot_prj_images_button,
             VBox([]),
             obj.prj_plotter.set_range_button,
-        ]
+        ],
+        layout=Layout(align_content="center")
     )
 
     obj.plotter_accordion = Accordion(
         children=[obj.plotting_vbox],
         selected_index=None,
-        layout=Layout(width="100%"),
         titles=("Plot Projection Images",),
     )
 
@@ -80,7 +80,11 @@ def init_widgets(obj):
     # this.
 
     obj.prj_range_x_slider = obj.prj_plotter.prj_range_x_slider
+    link_range_x = link((obj.prj_range_x_slider, "value"),
+                        (obj.prj_plotter.prj_range_x_slider,"value"))
     obj.prj_range_y_slider = obj.prj_plotter.prj_range_y_slider
+    link_range_y = link((obj.prj_range_y_slider, "value"),
+                        (obj.prj_plotter.prj_range_y_slider,"value"))
 
     # -- Options ---------------------------------------------------------- 
 
@@ -92,11 +96,12 @@ def init_widgets(obj):
     )
 
     # Center 
-    obj.center_of_rotation = FloatText(
+    obj.center_textbox = FloatText(
         description="Center of Rotation: ",
         style=extend_description_style,
         value=obj.center,
     )
+    center_link = link((obj.center_textbox, "value"), (obj.Center.center_textbox, "value"))
 
     # Downsampling
     obj.downsample_checkbox = Checkbox(description="Downsample?", value=False)

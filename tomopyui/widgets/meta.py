@@ -309,7 +309,6 @@ class Plotter:
             orientation="horizontal",
             readout=True,
             readout_format="d",
-            layout=Layout(width="100%"),
             style=extend_description_style,
         )
         self.prj_range_y_slider = IntRangeSlider(
@@ -323,7 +322,6 @@ class Plotter:
             orientation="horizontal",
             readout=True,
             readout_format="d",
-            layout=Layout(width="100%"),
             style=extend_description_style,
         )
         self.set_range_button = Button(
@@ -450,7 +448,6 @@ class Plotter:
         def set_img_lims_on_click(click):
             xlim = [int(np.rint(x)) for x in ax1.get_xlim()]
             ylim = [int(np.rint(x)) for x in ax1.get_ylim()]
-
             if xlim[0] < 0:
                 xlim[0] = 0
             if xlim[1] > imagestack.shape[2]:
@@ -598,7 +595,7 @@ class Center:
     def __init__(self, Import):
 
         self.Import = Import
-        self.current_center = None
+        self.current_center = self.Import.prj_range_x[1]/2
         self.center_guess = None
         self.index_to_try = None
         self.search_step = 0.5
@@ -657,10 +654,10 @@ class Center:
             layout=Layout(width="auto", justify_content="center"),
         )
         self.index_to_try_textbox = IntText(
-            description="Projection image to use for auto:",
+            description="Slice to use for auto:",
             disabled=False,
             style=extend_description_style,
-            value=self.index_to_try,
+            placeholder="Default is 1/2*y pixels"
         )
         self.num_iter_textbox = FloatText(
             description="Number of iterations: ",
@@ -714,8 +711,12 @@ class Center:
         self.center_guess = change.new
         self.set_metadata()
     def _load_rough_center_onclick(self, change):
-        self.center_guess = Import.prj_range_x[1]/2
-        self.current_center = Import.prj_range_x[1]/2
+        self.center_guess = self.Import.prj_range_x[1]/2
+        self.current_center = self.center_guess
+        self.center_textbox.value = self.center_guess
+        self.center_guess_textbox.value = self.center_guess
+        self.index_to_try_textbox.value = int(np.around(self.Import.prj_range_y[1]/2))
+        self.index_to_try = self.index_to_try_textbox.value
         self.set_metadata()
     def _index_to_try_update(self, change):
         self.index_to_try = change.new
@@ -737,6 +738,7 @@ class Center:
         self.set_metadata()
     def _center_textbox_slider_update(self, change):
         self.center_textbox.value = self.cen_range[change.new]
+        self.current_center = self.center_textbox.value
         self.set_metadata()
 
     def find_center_on_click(self, change):
@@ -867,8 +869,13 @@ class Center:
 
         # Make VBox instantiated outside into the plot
         self.center_tab.children[2].children[0].children[2].children = [
-            HBox([self.center_plotter.slicer_with_hist_fig.canvas]),
-            HBox(self.center_plotter.threshold_control_list),
+            HBox([self.center_plotter.slicer_with_hist_fig.canvas],
+                layout=Layout(justify_content="center")),
+            HBox(
+                [HBox([self.center_plotter.threshold_control_list[0]],
+                    layout=Layout(align_items="center")),
+                VBox(self.center_plotter.threshold_control_list[1::])],
+            layout=Layout(justify_content="center"))
         ]
         self.manual_center_accordion = Accordion(
             children=[self.manual_center_vbox],
@@ -879,7 +886,7 @@ class Center:
     def _set_observes(self):
         self.center_textbox.observe(self._center_update, names="value")
         self.center_guess_textbox.observe(self._center_guess_update, names="value")
-        self.load_rough_center.observe(self._load_rough_center_onclick, names="value")
+        self.load_rough_center.on_click(self._load_rough_center_onclick)
         self.index_to_try_textbox.observe(self._index_to_try_update, names="value")
         self.num_iter_textbox.observe(self._num_iter_update, names="value")
         self.search_range_textbox.observe(self._search_range_update, names="value")
@@ -918,16 +925,17 @@ class Center:
             [
                 self.find_center_manual_button,
                 HBox(
-                    [
+                    [   self.center_guess_textbox,
                         self.index_to_try_textbox,
                         self.num_iter_textbox,
                         self.search_range_textbox,
                         self.search_step_textbox,
                         self.algorithms_dropdown,
                         self.filters_dropdown,
-                    ]
+                    ],
+                    layout=Layout(display="flex", flex_flow="row wrap", align_content="center", justify_content="flex-start")
                 ),
-                VBox([]),
+                VBox([], layout=Layout(justify_content="center", align_content="center")),
             ]
         )
 
@@ -1030,9 +1038,8 @@ class Align:
         tomopyui.backend.tomoalign.TomoAlign.
 
     """
-    def __init__(self, Import):
-
-        self._init_attributes(Import)
+    def __init__(self, Import, Center):
+        self._init_attributes(Import, Center)
         self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", 
                                 "npy"]
         self.widget_type = "Align"
@@ -1043,8 +1050,9 @@ class Align:
         self._set_observes_obj_specific()
         self.make_tab()
 
-    def _init_attributes(self, Import):
+    def _init_attributes(self, Import, Center):
         self.Import = Import
+        self.Center = Center
         self.prj_shape = Import.prj_shape
         self.angle_start = Import.angle_start # TODO
         self.angle_end = Import.angle_end # TODO
@@ -1054,7 +1062,7 @@ class Align:
         self.downsample = False
         self.downsample_factor = 0.5
         self.num_iter = 1
-        self.center = 0
+        self.center = Center.current_center
         self.upsample_factor = 50
         self.extra_options = {}
         self.num_batches = 20
@@ -1070,9 +1078,6 @@ class Align:
         self.metadata["opts"] = {}
 
     def set_metadata(self):
-        '''
-        Sets Recon metadata.
-        '''
         self.metadata["opts"]["downsample"] = self.downsample
         self.metadata["opts"]["downsample_factor"] = self.downsample_factor
         self.metadata["opts"]["num_iter"] = self.num_iter
@@ -1106,6 +1111,9 @@ class Align:
     # -- Radio to turn on tab ---------------------------------------------
     def _activate_tab(self, change):
         if change.new == 0:
+            self.center = self.Center.current_center
+            self.center_textbox.value = self.Center.current_center
+            self.set_metadata()
             self.radio_fulldataset.disabled = False
             self.prj_shape = self.Import.prj_shape
             self.plotter_accordion.selected_index = 0
@@ -1156,8 +1164,13 @@ class Align:
     def _make_prj_plot(self):
         # Make VBox inside alignment tab into the plot
         self.tab.children[1].children[0].children[1].children = [
-            HBox([self.prj_plotter.slicer_with_hist_fig.canvas]),
-            HBox(self.prj_plotter.threshold_control_list),
+            HBox([self.prj_plotter.slicer_with_hist_fig.canvas],
+                layout=Layout(justify_content="center")),
+            HBox([
+                HBox([self.prj_plotter.threshold_control_list[0]],
+                    layout=Layout(align_items="center")),
+                VBox(self.prj_plotter.threshold_control_list[1::])
+                ])
         ]
 
     # -- Button to start alignment ----------------------------------------
@@ -1197,7 +1210,7 @@ class Align:
         self.set_metadata()
 
     # Center of rotation
-    def _update_center_of_rotation(self, change):
+    def _update_center_textbox(self, change):
         self.center = change.new
         self.set_metadata()
 
@@ -1269,7 +1282,7 @@ class Align:
         # -- Options ----------------------------------------------------------
 
         # Center 
-        self.center_of_rotation.observe(self._update_center_of_rotation, names="value")
+        self.center_textbox.observe(self._update_center_textbox, names="value")
 
         # Downsampling
         self.downsample_checkbox.observe(self._downsample_turn_on)
@@ -1306,7 +1319,6 @@ class Align:
         self.save_options_accordion = Accordion(
             children=[save_hbox],
             selected_index=None,
-            layout=Layout(width="100%"),
             titles=("Save Options",),
         )
 
@@ -1325,7 +1337,7 @@ class Align:
                 self.prj_range_x_slider,
                 self.prj_range_y_slider,
             ],
-            layout=Layout(width="30%"),
+            layout=Layout(width="40%"),
             justify_content="center",
             align_items="space-between",
         )
@@ -1356,7 +1368,7 @@ class Align:
                         HBox(
                             [
                                 self.num_iterations_textbox,
-                                self.center_of_rotation,
+                                self.center_textbox,
                                 self.upsample_factor_textbox,
                             ],
                             layout=Layout(
@@ -1377,11 +1389,9 @@ class Align:
                         ),
                         self.extra_options_textbox,
                     ],
-                    layout=Layout(width="100%", height="100%"),
                 )
             ],
             selected_index=None,
-            layout=Layout(width="100%"),
             titles=("Alignment Options",),
         )
 
@@ -1412,9 +1422,9 @@ class Align:
 
 class Recon(Align):
 
-    def __init__(self, Import):
-
-        super()._init_attributes(Import)
+    def __init__(self, Import, Center):
+        self.Center = Center
+        super()._init_attributes(Import, Center)
         self.save_opts_list = ["tomo_before", "recon", "tiff", 
                         "npy"]
         self.widget_type = "Recon"
@@ -1472,7 +1482,6 @@ class Recon(Align):
         self.save_options_accordion = Accordion(
             children=[save_hbox],
             selected_index=None,
-            layout=Layout(width="100%"),
             titles=("Save Options",),
         )
 
@@ -1522,7 +1531,7 @@ class Recon(Align):
                         HBox(
                             [
                                 self.num_iterations_textbox,
-                                self.center_of_rotation,
+                                self.center_textbox,
                             ],
                             layout=Layout(
                                 flex_wrap="wrap", justify_content="space-between"
@@ -1542,11 +1551,9 @@ class Recon(Align):
                         ),
                         self.extra_options_textbox,
                     ],
-                    layout=Layout(width="100%", height="100%"),
                 )
             ],
             selected_index=None,
-            layout=Layout(width="100%"),
             titles=("Options",),
         )
 

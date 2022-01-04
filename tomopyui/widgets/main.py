@@ -20,8 +20,8 @@ def create_dashboard():
     file_import = meta.Import()
     center_tab_obj = meta.Center(file_import)
     prep_tab_obj = meta.Prep(file_import)
-    recon_tab_obj = meta.Recon(file_import)
-    align_tab_obj = meta.Align(file_import)
+    recon_tab_obj = meta.Recon(file_import, center_tab_obj)
+    align_tab_obj = meta.Align(file_import, center_tab_obj)
 
     dashboard_tabs = [
         file_import.tab,
