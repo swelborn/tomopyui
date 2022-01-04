@@ -354,7 +354,7 @@ class Plotter:
         """
 
         # Turn off immediate display of plot.
-        with ioff:
+        with plt.ioff():
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), layout="tight")
         fig.suptitle("")
         fig.canvas.header_visible = False
