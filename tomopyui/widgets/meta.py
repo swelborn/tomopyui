@@ -1071,8 +1071,8 @@ class Align:
         self.paddingX = 10
         self.paddingY = 10
         self.partial = False
-        self.methods_list = ["FBP_CUDA", "SIRT_CUDA", "SART_CUDA", "CGLS_CUDA",
-                            "MLEM_CUDA","SIRT Plugin-Faster","SIRT 3D-Fastest"]
+        self.methods_list = ["FBP CUDA", "SIRT CUDA", "SART CUDA", "CGLS CUDA",
+                            "MLEM CUDA", "SIRT Plugin","SIRT 3D"]
         self.prj_plotter = Plotter(self.Import)
         self.metadata = {}
         self.metadata["opts"] = {}
@@ -1301,7 +1301,7 @@ class Align:
 
         # -- Set observes only for alignment ----------------------------------
         self.num_iterations_textbox.observe(self._update_num_iter, names="value")
-        self.num_batches.observe(self._update_num_batches, names="value")
+        self.num_batches_textbox.observe(self._update_num_batches, names="value")
         self.upsample_factor_textbox.observe(self._update_upsample_factor, names="value")
         self.start_button.on_click(self.set_options_and_run)
 
@@ -1363,39 +1363,30 @@ class Align:
 
         self.options_accordion = Accordion(
             children=[
-                VBox(
-                    [
+
                         HBox(
                             [
                                 self.num_iterations_textbox,
                                 self.center_textbox,
                                 self.upsample_factor_textbox,
-                            ],
-                            layout=Layout(
-                                flex_wrap="wrap", justify_content="space-between"
-                            ),
-                        ),
-                        HBox(
-                            [
-                                self.num_batches,
+                                self.num_batches_textbox,
                                 self.paddingX_textbox,
                                 self.paddingY_textbox,
                                 self.downsample_checkbox,
                                 self.downsample_factor_textbox,
+                                self.extra_options_textbox,
                             ],
                             layout=Layout(
-                                flex_wrap="wrap", justify_content="space-between"
-                            ),
+                                flex_flow="row wrap", justify_content="space-between"
+                                ),
                         ),
-                        self.extra_options_textbox,
-                    ],
-                )
+
             ],
             selected_index=None,
             titles=("Alignment Options",),
         )
 
-        progress_vbox = VBox(
+        progress_hbox = HBox(
             [
                 self.progress_total,
                 self.progress_reprj,
@@ -1412,9 +1403,9 @@ class Align:
                 self.save_options_accordion,
                 self.options_accordion,
                 start_button_hb,
-                HBox(
-                    [progress_vbox, self.plot_output1, self.plot_output2],
-                    layout=Layout(flex_wrap="wrap", justify_content="center"),
+                progress_hbox,
+                VBox(
+                    [self.plot_output1, self.plot_output2],
                 ),
             ]
         )
@@ -1467,7 +1458,7 @@ class Recon(Align):
     def _set_observes_obj_specific(self):
 
         self.start_button.on_click(self._set_options_and_run)
-        self.num_batches.observe(self._update_num_batches, names="value")
+        self.num_batches_textbox.observe(self._update_num_batches, names="value")
         self.num_iterations_textbox.observe(self._update_num_iter, names="value")
 
     # -- Create recon tab -----------------------------------------------------
@@ -1539,7 +1530,7 @@ class Recon(Align):
                         ),
                         HBox(
                             [
-                                self.num_batches,
+                                self.num_batches_textbox,
                                 self.paddingX_textbox,
                                 self.paddingY_textbox,
                                 self.downsample_checkbox,

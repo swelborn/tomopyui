@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 
-# center needs to be fixed for this method
-# rec needs to be fixed for this method
 from tomopy.recon import algorithm as tomopy_algorithm
 import astra
 
 
-def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
+def recon_sirt_plugin(prj, angles, num_iter=1, rec=None, center=None):
     # Init tomo in sinogram order
     sinograms = tomopy_algorithm.init_tomo(prj, 0)
     num_proj = sinograms.shape[1]
@@ -18,14 +16,24 @@ def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
         center_shift = -(center - num_x / 2)
         proj_geom = astra.geom_postalignment(proj_geom, (center_shift,))
     vol_geom = astra.create_vol_geom(num_x, num_x, num_y)
-    projector = astra.create_projector("cuda3d", proj_geom, vol_geom)
+    sinograms_id = astra.data3d.create("-sino", proj_geom, sinograms)
+    rec_id = astra.data3d.create("-vol", vol_geom, rec)
+    projector_id = astra.create_projector("cuda3d", proj_geom, vol_geom)
     astra.plugin.register(astra.plugins.SIRTPlugin)
-    W = astra.OpTomo(projector)
-    rec_sirt = W.reconstruct("SIRT-PLUGIN", sinograms, num_iter)
+    cfg = astra.astra_dict('SIRT-PLUGIN')
+    cfg["ProjectionDataId"] = sinograms_id
+    cfg["ReconstructionDataId"] = rec_id
+    cfg["ProjectorId"] = projector_id
+    alg_id = astra.algorithm.create(cfg)
+    astra.algorithm.run(alg_id, num_iter)
+    rec_sirt = astra.data3d.get(rec_id)
+    astra.algorithm.delete(alg_id)
+    astra.data3d.delete(rec_id)
+    astra.data3d.delete(sinograms_id)
     return rec_sirt
 
 
-def recon_sirt_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
+def recon_sirt_3D(prj, angles, num_iter=1, rec=None, center=None):
     # Todo: allow this to handle batches.
     # Init tomo in sinogram order
     sinograms = tomopy_algorithm.init_tomo(prj, 0)
@@ -80,8 +88,8 @@ def recon_cgls_3D_allgpu(prj, angles, num_iter=1, rec=None, center=None):
     cfg["ReconstructionDataId"] = rec_id
     alg_id = astra.algorithm.create(cfg)
     astra.algorithm.run(alg_id, num_iter)
-    rec_sirt = astra.data3d.get(rec_id)
+    rec_cgls = astra.data3d.get(rec_id)
     astra.algorithm.delete(alg_id)
     astra.data3d.delete(rec_id)
     astra.data3d.delete(sinograms_id)
-    return rec_sirt
+    return rec_cgls

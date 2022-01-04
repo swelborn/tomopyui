@@ -6,14 +6,16 @@ from cupyx.scipy import ndimage as ndi_cp
 from skimage.registration import phase_cross_correlation
 from tomopy.prep.alignment import scale as scale_tomo
 from tomopy.recon import algorithm as tomopy_algorithm
+from bqplot_image_gl import ImageGL
+from ipywidgets import *
 
 import astra
 import os
+import bqplot as bq
 import cupy as cp
 import numpy as np
 import matplotlib.pyplot as plt
 import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
-
 
 def align_joint(TomoAlign):
 
@@ -31,6 +33,7 @@ def align_joint(TomoAlign):
     upsample_factor = TomoAlign.upsample_factor
     num_batches = TomoAlign.num_batches
     center = TomoAlign.center
+    projection_num = 50 # default to 50 now, TODO: can make an option
 
     # Needs scaling for skimage float operations
     TomoAlign.prj_for_alignment, scl = scale_tomo(TomoAlign.prj_for_alignment)
@@ -46,15 +49,86 @@ def align_joint(TomoAlign):
     TomoAlign.sy = np.zeros((tomo_shape[0]))
     TomoAlign.conv = np.zeros((num_iter))
 
+    # Initialize projection images plot
+    scale_x = bq.LinearScale(min=0, max=1)
+    scale_y = bq.LinearScale(min=1, max=0)
+    scales = {'x': scale_x,
+              'y': scale_y}
+
+    projection_fig = bq.Figure(scales=scales)
+    simulated_fig = bq.Figure(scales=scales)
+
+    scales_image = {'x': scale_x,
+                    'y': scale_y,
+                    'image': bq.ColorScale(
+                        min=float(np.min(TomoAlign.prj_for_alignment[projection_num])),
+                        max=float(np.max(TomoAlign.prj_for_alignment[projection_num])),
+                        scheme='viridis'
+                                       )
+                   }
+
+    image_projection = ImageGL(
+        image=TomoAlign.prj_for_alignment[projection_num],
+        scales=scales_image, )
+    image_simulated = ImageGL(
+        image=np.zeros_like(TomoAlign.prj_for_alignment[projection_num]),
+        scales=scales_image, )
+
+    projection_fig.marks = (image_projection,)
+    projection_fig.layout.width = "500px"
+    projection_fig.layout.height = "500px"
+    projection_fig.title = f"Projection Number {50}"
+    simulated_fig.marks = (image_simulated,)
+    simulated_fig.layout.width = "500px"
+    simulated_fig.layout.height = "500px"
+    simulated_fig.title = f"Re-projected Image {50}"
+    with TomoAlign.plot_output1:
+        TomoAlign.plot_output1.clear_output(wait=True)
+        display(HBox([projection_fig, simulated_fig],
+            layout=Layout(justify_content="center", align_items="stretch")))
+
+    # Initialize Sx, Sy plot
+    xs = bq.LinearScale()
+    ys = bq.LinearScale()
+    x = range(TomoAlign.prj_for_alignment.shape[0])
+    y = [TomoAlign.sx, TomoAlign.sy]
+    line = bq.Lines(x=x, y=y,
+        scales={'x': xs, 'y': ys},
+        colors=['dodgerblue', 'red'],
+        stroke_width=3,
+        labels=["Shift in X (px)", "Shift in Y (px)"],
+        display_legend=True)
+    xax = bq.Axis(scale=xs,
+        label='Projection Number',
+        grid_lines='none')
+    yax = bq.Axis(scale=ys,
+        orientation='vertical',
+        tick_format='0.1f',
+        label='Shift',
+        grid_lines='none')
+    figSxSy = bq.Figure(marks=[line], axes=[xax, yax], animation_duration=1000)
+    with TomoAlign.plot_output2:
+        TomoAlign.plot_output2.clear_output()
+        display(figSxSy)
+
     # Start alignment
     for n in range(num_iter):
 
         # for progress bars
         TomoAlign.Align.progress_shifting.value = 0
-        TomoAlign.Align.progress_reprojection.value = 0
+        TomoAlign.Align.progress_reprj.value = 0
         TomoAlign.Align.progress_phase_cross_corr.value = 0
         _rec = TomoAlign.recon
+        print(np.mean(_rec))
         if method_str == "SIRT_Plugin":
+            TomoAlign.recon = tomocupy_algorithm.recon_sirt_plugin(
+                TomoAlign.prj_for_alignment,
+                TomoAlign.tomo.theta,
+                num_iter=1,
+                rec=_rec,
+                center=center,
+            )
+        elif method_str == "SIRT_3D":
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
                 TomoAlign.prj_for_alignment,
                 TomoAlign.tomo.theta,
@@ -62,15 +136,7 @@ def align_joint(TomoAlign):
                 rec=_rec,
                 center=center,
             )
-        if method_str == "SIRT_3D":
-            TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D_allgpu(
-                TomoAlign.prj_for_alignment,
-                TomoAlign.tomo.theta,
-                num_iter=1,
-                rec=_rec,
-                center=center,
-            )
-        if method_str == "CGLS_3D":
+        elif method_str == "CGLS_3D":
             TomoAlign.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
                 TomoAlign.prj_for_alignment,
                 TomoAlign.tomo.theta,
@@ -93,6 +159,7 @@ def align_joint(TomoAlign):
                     TomoAlign.prj_for_alignment,
                     TomoAlign.tomo.theta,
                     algorithm=wrappers.astra,
+                    init_recon=_rec,
                     center=center,
                     ncore=1,
                     **kwargs,
@@ -108,8 +175,6 @@ def align_joint(TomoAlign):
                     **kwargs,
                 )
         TomoAlign.Align.progress_total.value = n + 1
-        # update progress bar
-        # method_bar.update()
         # break up reconstruction into batches along z axis
         TomoAlign.recon = np.array_split(TomoAlign.recon, num_batches, axis=0)
         # may not need a copy.
@@ -127,7 +192,7 @@ def align_joint(TomoAlign):
             sim,
             center,
             TomoAlign.tomo.theta,
-            progress=TomoAlign.Align.progress_reprojection,
+            progress=TomoAlign.Align.progress_reprj,
         )
         sim = np.concatenate(sim, axis=1)
         # only flip the simulated datasets if using normal tomopy algorithm
@@ -174,20 +239,18 @@ def align_joint(TomoAlign):
             progress=TomoAlign.Align.progress_shifting,
         )
         TomoAlign.conv[n] = np.linalg.norm(err)
-        with TomoAlign.plot_output1:
-            TomoAlign.plot_output1.clear_output(wait=True)
-            plotIm(TomoAlign, sim)
-            print(f"Error = {np.linalg.norm(err):3.3f}.")
-        with TomoAlign.plot_output2:
-            TomoAlign.plot_output2.clear_output(wait=True)
-            plotSxSy(TomoAlign)
+        print(f"Error = {np.linalg.norm(err):3.3f}.")
 
+        # update images
+        image_projection.image = TomoAlign.prj_for_alignment[projection_num]
+        image_simulated.image = sim[projection_num]
+        # update plot lines
+        line.y = [TomoAlign.sx, TomoAlign.sy]
         TomoAlign.recon = np.concatenate(TomoAlign.recon, axis=0)
         mempool = cp.get_default_memory_pool()
         mempool.free_all_blocks()
-    # TomoAlign.recon = np.concatenate(TomoAlign.recon, axis=0)
+
     # Re-normalize data
-    # method_bar.close()
     TomoAlign.prj_for_alignment *= scl
     TomoAlign.recon = circ_mask(TomoAlign.recon, 0)
     if downsample:
@@ -197,34 +260,6 @@ def align_joint(TomoAlign):
 
     TomoAlign.pad = tuple([x / TomoAlign.downsample_factor for x in TomoAlign.pad_ds])
     return TomoAlign
-
-
-def plotIm(TomoAlign, sim, projection_num=50):
-    fig = plt.figure(figsize=(8, 8))
-    ax1 = plt.subplot(1, 2, 1)
-    ax2 = plt.subplot(1, 2, 2)
-    ax1.imshow(TomoAlign.prj_for_alignment[projection_num], cmap="gray")
-    ax1.set_axis_off()
-    ax1.set_title(f"Projection Image {projection_num}")
-    ax2.imshow(sim[projection_num], cmap="gray")
-    ax2.set_axis_off()
-    ax2.set_title("Re-projected Image")
-    plt.show()
-
-
-def plotSxSy(TomoAlign):
-    plotrange = range(TomoAlign.prj_for_alignment.shape[0])
-    figsxsy = plt.figure(figsize=(8, 4))
-    ax1 = plt.subplot(1, 2, 1)
-    ax2 = plt.subplot(1, 2, 2)
-    ax1.set(xlabel="Projection number", ylabel="Pixel shift (not downsampled)")
-    ax1.plot(plotrange, TomoAlign.sx / TomoAlign.downsample_factor)
-    ax1.set_title("Sx")
-    ax2.plot(plotrange, TomoAlign.sy / TomoAlign.downsample_factor)
-    ax2.set_title("Sy")
-    ax2.set(xlabel="Projection number", ylabel="Pixel shift (not downsampled)")
-    plt.show()
-
 
 def simulate_projections(rec, sim, center, theta, progress=None):
     for batch in range(len(rec)):

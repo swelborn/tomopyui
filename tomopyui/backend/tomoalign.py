@@ -22,40 +22,42 @@ import numpy as np
 
 class TomoAlign:
     """
-    Class for performing alignments.
-
-    Parameters
-    ----------
-
     """
 
     def __init__(self, Align):
 
-        self.Align = Align
-        self.metadata = Align.metadata.copy()
+        # -- Creating attributes for alignment calcs --------------------------
+        self._set_attributes_from_frontend(Align)
         self.tomo = td.TomoData(metadata=Align.Import.metadata)
-        if self.metadata["partial"]:
-            self.prj_range_x = self.metadata["prj_range_x"]
-            self.prj_range_y = self.metadata["prj_range_y"]
+        self.wd_parent = Align.Import.wd
+        self.plot_output1 = Align.plot_output1
+        self.plot_output2 = Align.plot_output2
         self.shift = None
         self.sx = None
         self.sy = None
         self.conv = None
         self.recon = None
-        self.pad = Align.metadata["opts"]["pad"]
-        self.downsample = Align.metadata["opts"]["downsample"]
-        self.num_batches = Align.metadata["opts"]["batch_size"]
-        if self.downsample:
-            self.downsample_factor = self.metadata["opts"]["downsample_factor"]
-        else:
-            self.downsample_factor = 1
-        self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
-        self.center = self.Align.center * self.downsample_factor + self.pad_ds[0]
-        self.wd_parent = Align.Import.wd
-        self.plot_output1 = Align.plot_output1
-        self.plot_output2 = Align.plot_output2
         self.make_wd()
         self._main()
+
+    def _set_attributes_from_frontend(self, Align):
+        self.Align = Align
+        self.metadata = Align.metadata.copy()
+        if Align.partial:
+            self.prj_range_x = Align.prj_range_x
+            self.prj_range_y = Align.prj_range_y
+        self.pad = (Align.paddingX, Align.paddingY)
+        self.downsample = Align.downsample
+        if self.downsample:
+            self.downsample_factor = Align.downsample_factor
+        else:
+            self.downsample_factor = 1
+        self.num_batches = Align.num_batches
+        self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
+        # add padding to center
+        self.center = Align.center * self.downsample_factor + self.pad_ds[0]
+        self.num_iter = Align.num_iter
+        self.upsample_factor = Align.upsample_factor
 
     def make_wd(self):
         now = datetime.datetime.now()

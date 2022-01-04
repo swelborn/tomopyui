@@ -115,7 +115,7 @@ def init_widgets(obj):
     )
 
     # Batch size
-    obj.num_batches = IntText(
+    obj.num_batches_textbox = IntText(
         description="Number of batches (for GPU): ",
         style=extend_description_style,
         value=obj.num_batches,
