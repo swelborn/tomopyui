@@ -5,7 +5,7 @@ from ._import import import_helpers
 from ._shared import helpers
 from ._shared._init_widgets import init_widgets
 from ipyfilechooser import FileChooser
-from mpl_interactions import hyperslicer, ioff, interactive_hist, zoom_factory
+from mpl_interactions import hyperslicer, ioff, interactive_hist, zoom_factory, panhandler
 from tomopyui.backend.util.center import write_center
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
 
@@ -467,6 +467,7 @@ class Plotter:
         self.set_range_button.on_click(set_img_lims_on_click)
 
         # saving some things in the object
+        self.pan_handler = panhandler(fig)
         self.slicer_with_hist_fig = fig
         self.threshold_control = threshold_control
         self.threshold_control_list = [
