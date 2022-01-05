@@ -3,11 +3,12 @@
 from ipywidgets import *
 from ._import import import_helpers
 from ._shared import helpers
-from ._shared._init_widgets import init_widgets
+from ._shared._init_widgets import init_widgets, _set_widgets_from_load_metadata
 from ipyfilechooser import FileChooser
 from mpl_interactions import hyperslicer, ioff, interactive_hist, zoom_factory, panhandler
 from tomopyui.backend.util.center import write_center
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
+from tomopyui.backend.util.metadata_io import save_metadata, load_metadata
 
 import functools
 import os
@@ -125,6 +126,10 @@ class Import:
         self.angle_end = 90.0
         self.num_theta = 360
         self.prj_shape = None
+        self.prj_range_x = (0, 100)
+        self.prj_range_y = (0, 100)
+        self.prj_range_z = (0, 100)
+        self.tomo = None
         self.angles_textboxes = import_helpers.create_angles_textboxes(self)
 
         # Init checkboxes
@@ -141,11 +146,22 @@ class Import:
         self.ftype = None
         self.filechooser = FileChooser()
         self.filechooser.register_callback(self.update_file_information)
-        self.prj_range_x = (0, 100)
-        self.prj_range_y = (0, 100)
-        self.prj_range_z = (0, 100)
-        self.tomo = None
+        self.filechooser.title = "Import Normalized Tomogram:"
         self.wd = None
+
+        # Init filechooser for align metadata
+        self.fpath_align = None
+        self.fname_align = None
+        self.filechooser_align = FileChooser()
+        self.filechooser_align.register_callback(self.update_file_information_align)
+        self.filechooser_align.title = "Import Alignment Metadata:"
+
+        # Init filechooser for recon metadata
+        self.fpath_recon = None
+        self.fname_recon = None
+        self.filechooser_recon = FileChooser()
+        self.filechooser_recon.register_callback(self.update_file_information_recon)
+        self.filechooser_recon.title = "Import Reconstruction Metadata:"
 
         # Init logger to be used throughout the app. 
         # TODO: This does not need to be under Import.
@@ -203,6 +219,22 @@ class Import:
         self.set_prj_ranges()
         self.set_metadata()
 
+    def update_file_information_align(self):
+        '''
+        Callback for filechooser_align.
+        '''
+        self.fpath_align = self.filechooser_align.selected_path
+        self.fname_align = self.filechooser_align.selected_filename
+        self.set_metadata()
+
+    def update_file_information_recon(self):
+        '''
+        Callback for filechooser_recon.
+        '''
+        self.fpath_recon = self.filechooser_recon.selected_path
+        self.fname_recon = self.filechooser_recon.selected_filename
+        self.set_metadata()
+
     def get_prj_shape(self):
         '''
         Grabs the image shape depending on the filename. Does this without
@@ -243,7 +275,8 @@ class Import:
         self.opts_checkboxes,
         ]
         import_widgets = [item for sublist in import_widgets for item in sublist]
-        self.tab = HBox(import_widgets)
+        self.tab = VBox([HBox(import_widgets), 
+            HBox([self.filechooser_align, self.filechooser_recon])])
 
     def make_tomo(self):
         '''
@@ -1107,6 +1140,27 @@ class Align:
         self.prj_range_y_slider.value = self.prj_range_y
         self.set_metadata()
 
+    def load_metadata(self):
+        self.metadata = load_metadata(self.Import.fpath_align, 
+            self.Import.fname_align)
+
+    def _set_attributes_from_metadata(self):
+        self.downsample = self.metadata["opts"]["downsample"]
+        self.downsample_factor = self.metadata["opts"]["downsample_factor"]
+        self.num_iter = self.metadata["opts"]["num_iter"]
+        self.center = self.metadata["opts"]["center"]
+        self.num_batches = self.metadata["opts"]["num_batches"]
+        (self.paddingX, self.paddingY) = self.metadata["opts"]["pad"] 
+        self.extra_options = self.metadata["opts"]["extra_options"]
+        self.methods_opts = self.metadata["methods"]
+        self.save_opts = self.metadata["save_opts"] 
+        self.prj_range_x = self.metadata["prj_range_x"]
+        self.prj_range_y = self.metadata["prj_range_y"]
+        self.partial = self.metadata["partial"] 
+
+    def _set_attributes_from_metadata_obj_specific(self):
+        self.upsample_factor = self.metadata["opts"]["upsample_factor"]
+
     # -- Radio to turn on tab ---------------------------------------------
     def _activate_tab(self, change):
         if change.new == 0:
@@ -1114,9 +1168,10 @@ class Align:
             self.center_textbox.value = self.Center.current_center
             self.set_metadata()
             self.radio_fulldataset.disabled = False
+            self.load_metadata_button.disabled = False
+            self.start_button.disabled = False
             self.prj_shape = self.Import.prj_shape
             self.plotter_accordion.selected_index = 0
-            self.start_button.disabled = False
             self.save_options_accordion.selected_index = 0
             self.options_accordion.selected_index = 0
             self.methods_accordion.selected_index = 0
@@ -1126,12 +1181,26 @@ class Align:
             self.radio_fulldataset.disabled = True
             self.prj_range_x_slider.disabled = True
             self.prj_range_y_slider.disabled = True
+            self.load_metadata_button.disabled = True
             self.plotter_accordion.selected_index = None
             self.start_button.disabled = True
             self.save_options_accordion.selected_index = None
             self.options_accordion.selected_index = None
             self.methods_accordion.selected_index = None
             self.log.info("Deactivated alignment.")
+
+    # -- Load metadata button ---------------------------------------------
+    def _load_metadata_all_on_click(self, change):
+        self.load_metadata_button.button_style = "info"
+        self.load_metadata_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.load_metadata_button.description = "Importing metadata."
+        self.load_metadata()
+        self._set_attributes_from_metadata()
+        _set_widgets_from_load_metadata(self)
+        self.load_metadata_button.button_style = "success"
+        self.load_metadata_button.icon = "fa-check-square"
+        self.load_metadata_button.description = "Finished importing metadata."
+
 
     # -- Radio to turn on partial dataset ---------------------------------
     def _activate_full_partial(self, change):
@@ -1263,6 +1332,9 @@ class Align:
 
         # -- Radio to turn on tab ---------------------------------------------
         self.radio_tab.observe(self._activate_tab, names="index")
+
+        # -- Load metadata button ---------------------------------------------
+        self.load_metadata_button.on_click(self._load_metadata_all_on_click)
 
         # -- Plot projections button ------------------------------------------
         self.plot_prj_images_button.on_click(self._plot_prjs_on_click)
@@ -1398,6 +1470,7 @@ class Align:
             children=[
                 top_of_box_hb,
                 self.plotter_accordion,
+                self.load_metadata_button,
                 self.methods_accordion,
                 self.save_options_accordion,
                 self.options_accordion,

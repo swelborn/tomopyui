@@ -115,6 +115,17 @@ def create_checkboxes_from_opt_list(opt_list, dictionary, obj):
     checkboxes = [MetaCheckbox(opt, dictionary, obj) for opt in opt_list]
     return [a.checkbox for a in checkboxes] # return list of checkboxes 
 
+def set_checkbox_bool(checkbox_list, dictionary):
+    for key in dictionary:
+        if dictionary[key]:
+            for checkbox in checkbox_list:
+                if checkbox.description == str(key):
+                    checkbox.value = True
+        elif not dictionary[key]:
+            for checkbox in checkbox_list:
+                if checkbox.description ==str(key):
+                    checkbox.value = False
+
 class Timer:
     def __init__(self, timeout, callback):
         self._timeout = timeout

@@ -35,7 +35,17 @@ def init_widgets(obj):
         + " </p>"
     )
 
-    # -- Plotting --------------------------------------------- 
+    # -- Button to load metadata ----------------------------------------------
+    obj.load_metadata_button = Button(
+        description="Click to load metadata.",
+        disabled=True,
+        button_style="info",  # 'success', 'info', 'warning', 'danger' or ''
+        tooltip="First choose a metadata file in the Import tab, then click here",
+        icon="",
+        layout=Layout(width="auto", justify_content="center"),
+    )
+
+    # -- Plotting ------------------------------------------------------------- 
     obj.plot_prj_images_button = Button(
         description="Click to plot projection images.",
         disabled=False,
@@ -200,3 +210,53 @@ def init_widgets(obj):
             icon="",
             layout=Layout(width="auto", justify_content="center"),
         )
+
+def _set_widgets_from_load_metadata(obj):
+
+    # -- Radio to turn on partial dataset -------------------------------------
+    if obj.partial:
+        obj.radio_fulldataset.value = "Partial"
+    else:
+        obj.radio_fulldataset.value = "Full"
+
+    # -- Saving Options -------------------------------------------------------
+    helpers.set_checkbox_bool(obj.save_opts_checkboxes, obj.metadata["save_opts"])
+
+    # -- Method Options -------------------------------------------------------
+    helpers.set_checkbox_bool(obj.methods_checkboxes, obj.metadata["methods"])
+
+    # -- Projection Range Sliders --------------------------------------------- 
+    # Not implemented in load metadata.
+
+    # -- Options ---------------------------------------------------------- 
+
+    # Number of iterations
+    obj.num_iterations_textbox.value = obj.num_iter
+
+    # Center 
+    obj.center_textbox.value = obj.center
+
+    # Downsampling
+    obj.downsample_checkbox.value = obj.downsample 
+    obj.downsample_factor_textbox.value = obj.downsample_factor 
+    if obj.downsample_checkbox.value:
+        obj.downsample_factor_textbox.disabled = False
+
+    # Batch size
+    obj.num_batches_textbox.value = obj.num_batches
+
+    # X Padding
+    obj.paddingX_textbox.value = obj.paddingX
+
+    # Y Padding
+    obj.paddingY_textbox.value = obj.paddingY
+
+    # Extra options
+    obj.extra_options_textbox.value = str(obj.extra_options)
+
+    # -- Object-specific widgets ---------------------------------------------- 
+
+    if obj.widget_type == "Align":
+
+        # -- Upsample factor --------------------------------------------------
+        obj.upsample_factor_textbox.value = obj.upsample_factor

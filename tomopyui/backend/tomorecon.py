@@ -8,7 +8,7 @@ from contextlib import nullcontext
 from tomopy.recon import algorithm
 from tomopy.misc.corr import circ_mask
 from skimage.transform import rescale
-from .util.save_metadata import save_metadata
+from .util.metadata_io import save_metadata, load_metadata
 from tomopy.recon import algorithm as tomopy_algorithm
 from tomopyui.backend.tomoalign import TomoAlign
 
