@@ -75,17 +75,17 @@ def align_joint(TomoAlign):
         scales=scales_image, )
 
     projection_fig.marks = (image_projection,)
-    projection_fig.layout.width = "500px"
-    projection_fig.layout.height = "500px"
+    projection_fig.layout.width = "600px"
+    projection_fig.layout.height = "600px"
     projection_fig.title = f"Projection Number {50}"
     simulated_fig.marks = (image_simulated,)
-    simulated_fig.layout.width = "500px"
-    simulated_fig.layout.height = "500px"
+    simulated_fig.layout.width = "600px"
+    simulated_fig.layout.height = "600px"
     simulated_fig.title = f"Re-projected Image {50}"
     with TomoAlign.plot_output1:
         TomoAlign.plot_output1.clear_output(wait=True)
         display(HBox([projection_fig, simulated_fig],
-            layout=Layout(justify_content="center", align_items="stretch")))
+            layout=Layout(flex_flow="row wrap", justify_content="center", align_items="stretch")))
 
     # Initialize Sx, Sy plot
     xs = bq.LinearScale()
@@ -106,10 +106,33 @@ def align_joint(TomoAlign):
         tick_format='0.1f',
         label='Shift',
         grid_lines='none')
-    figSxSy = bq.Figure(marks=[line], axes=[xax, yax], animation_duration=1000)
+    fig_SxSy = bq.Figure(marks=[line], axes=[xax, yax], animation_duration=1000)
+    fig_SxSy.layout.width = "600px"
+    # Initialize convergence plot
+    xs_conv = bq.LinearScale(min=0)
+    ys_conv = bq.LinearScale()
+    x_conv = [0]
+    y_conv = [TomoAlign.conv[0]]
+    line_conv = bq.Lines(x=x_conv, y=y_conv,
+        scales={'x': xs_conv, 'y': ys_conv},
+        colors=['dodgerblue'],
+        stroke_width=3,
+        labels=["Convergence"],
+        display_legend=True)
+    xax_conv = bq.Axis(scale=xs_conv,
+        label='Iteration',
+        grid_lines='none')
+    yax_conv = bq.Axis(scale=ys_conv,
+        orientation='vertical',
+        tick_format='0.1f',
+        label='Convergence',
+        grid_lines='none')
+    fig_conv = bq.Figure(marks=[line_conv], axes=[xax_conv, yax_conv], animation_duration=1000)
+    fig_conv.layout.width = "600px"
     with TomoAlign.plot_output2:
         TomoAlign.plot_output2.clear_output()
-        display(figSxSy)
+        display(HBox([fig_SxSy, fig_conv],
+            layout=Layout(flex_flow="row wrap", justify_content="center", align_items="stretch", width="95%")))
 
     # Start alignment
     for n in range(num_iter):
@@ -119,7 +142,6 @@ def align_joint(TomoAlign):
         TomoAlign.Align.progress_reprj.value = 0
         TomoAlign.Align.progress_phase_cross_corr.value = 0
         _rec = TomoAlign.recon
-        print(np.mean(_rec))
         if method_str == "SIRT_Plugin":
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_plugin(
                 TomoAlign.prj_for_alignment,
@@ -174,6 +196,7 @@ def align_joint(TomoAlign):
                     ncore=1,
                     **kwargs,
                 )
+        TomoAlign.recon[np.isnan(TomoAlign.recon)] = 0
         TomoAlign.Align.progress_total.value = n + 1
         # break up reconstruction into batches along z axis
         TomoAlign.recon = np.array_split(TomoAlign.recon, num_batches, axis=0)
@@ -239,12 +262,12 @@ def align_joint(TomoAlign):
             progress=TomoAlign.Align.progress_shifting,
         )
         TomoAlign.conv[n] = np.linalg.norm(err)
-        print(f"Error = {np.linalg.norm(err):3.3f}.")
-
         # update images
         image_projection.image = TomoAlign.prj_for_alignment[projection_num]
         image_simulated.image = sim[projection_num]
         # update plot lines
+        line_conv.x = np.arange(0, n+1)
+        line_conv.y = TomoAlign.conv[range(n+1)]
         line.y = [TomoAlign.sx, TomoAlign.sy]
         TomoAlign.recon = np.concatenate(TomoAlign.recon, axis=0)
         mempool = cp.get_default_memory_pool()

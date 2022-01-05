@@ -54,8 +54,7 @@ class TomoAlign:
             self.downsample_factor = 1
         self.num_batches = Align.num_batches
         self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
-        # add padding to center
-        self.center = Align.center * self.downsample_factor + self.pad_ds[0]
+        self.center = Align.center + self.pad_ds[0]
         self.num_iter = Align.num_iter
         self.upsample_factor = Align.upsample_factor
 
@@ -72,7 +71,8 @@ class TomoAlign:
         save_metadata("overall_alignment_metadata.json", self.metadata)
         #!!!!!!!!!! make option for tiff file save
         if self.metadata["save_opts"]["tomo_before"]:
-            np.save("projections_before_alignment", self.tomo.prj_imgs)
+            np.save("projections_before_alignment",
+                self.tomo.prj_imgs)
         self.wd = os.getcwd()
 
     def make_metadata_list(self):
@@ -97,26 +97,29 @@ class TomoAlign:
 
     def init_prj(self):
         if self.metadata["partial"]:
-            proj_range_x_low = self.prj_range_x[0]
-            proj_range_x_high = self.prj_range_x[1]
-            proj_range_y_low = self.prj_range_y[0]
-            proj_range_y_high = self.prj_range_y[1]
-            self.prj_for_alignment = self.tomo.prj_imgs[
+            prj_range_x_low = self.prj_range_x[0]
+            prj_range_x_high = self.prj_range_x[1]
+            prj_range_y_low = self.prj_range_y[0]
+            prj_range_y_high = self.prj_range_y[1]
+            self.prj_for_alignment = deepcopy(self.tomo.prj_imgs[
                 :,
-                proj_range_y_low:proj_range_y_high:1,
-                proj_range_x_low:proj_range_x_high:1,
-            ].copy()
+                prj_range_y_low:prj_range_y_high:1,
+                prj_range_x_low:prj_range_x_high:1,
+            ])
+            # center of rotation change to fit new range
+            self.center = self.center - prj_range_x_low
         else:
-            self.prj_for_alignment = self.tomo.prj_imgs.copy()
+            self.prj_for_alignment = deepcopy(self.tomo.prj_imgs)
 
-        # Make it downsampled if desired.
+        # Downsample
         if self.downsample:
-            # downsample images in stack
             self.prj_for_alignment = rescale(
                 self.prj_for_alignment,
                 (1, self.downsample_factor, self.downsample_factor),
                 anti_aliasing=True,
             )
+            # center of rotation change for downsampled data
+            self.center = self.center*self.downsample_factor
 
         # Pad
         self.prj_for_alignment, self.pad_ds = pad_projections(
@@ -127,7 +130,6 @@ class TomoAlign:
         """
         Aligns a TomoData object using options in GUI.
         """
-
         align_joint(self)
 
     def save_align_data(self):
@@ -143,16 +145,16 @@ class TomoAlign:
 
         if self.metadata["save_opts"]["tomo_after"]:
             if self.metadata["save_opts"]["npy"]:
-                np.save("projections_after_alignment", self.tomo.prj_imgs)
+                np.save("projections_after_alignment", self.tomo_aligned.prj_imgs)
             if self.metadata["save_opts"]["tiff"]:
-                tf.imwrite("projections_after_alignment.tif", self.tomo.prj_imgs)
+                tf.imwrite("projections_after_alignment.tif", self.tomo_aligned.prj_imgs)
 
             # defaults to at least saving tiff if none are checked
             if (
                 not self.metadata["save_opts"]["tiff"]
                 and not self.metadata["save_opts"]["npy"]
             ):
-                tf.imwrite("projections_after_alignment.tif", self.tomo.prj_imgs)
+                tf.imwrite("projections_after_alignment.tif", self.tomo_aligned.prj_imgs)
         if self.metadata["save_opts"]["recon"]:
             if self.metadata["save_opts"]["npy"]:
                 np.save("last_recon", self.recon)
@@ -191,7 +193,7 @@ class TomoAlign:
                 use_corr_prj_gpu=False,
             )
             new_prj_imgs = trim_padding(new_prj_imgs)
-            self.tomo = td.TomoData(
+            self.tomo_aligned = td.TomoData(
                 prj_imgs=new_prj_imgs, metadata=self.Align.Import.metadata
             )
             toc = perf_counter()
