@@ -101,7 +101,7 @@ class TomoAlign:
             prj_range_x_high = self.prj_range_x[1]
             prj_range_y_low = self.prj_range_y[0]
             prj_range_y_high = self.prj_range_y[1]
-            self.prj_for_alignment = deepcopy(self.tomo.prj_imgs[
+            self.prjs = deepcopy(self.tomo.prj_imgs[
                 :,
                 prj_range_y_low:prj_range_y_high:1,
                 prj_range_x_low:prj_range_x_high:1,
@@ -109,12 +109,12 @@ class TomoAlign:
             # center of rotation change to fit new range
             self.center = self.center - prj_range_x_low
         else:
-            self.prj_for_alignment = deepcopy(self.tomo.prj_imgs)
+            self.prjs = deepcopy(self.tomo.prj_imgs)
 
         # Downsample
         if self.downsample:
-            self.prj_for_alignment = rescale(
-                self.prj_for_alignment,
+            self.prjs = rescale(
+                self.prjs,
                 (1, self.downsample_factor, self.downsample_factor),
                 anti_aliasing=True,
             )
@@ -122,8 +122,8 @@ class TomoAlign:
             self.center = self.center*self.downsample_factor
 
         # Pad
-        self.prj_for_alignment, self.pad_ds = pad_projections(
-            self.prj_for_alignment, self.pad_ds, 1
+        self.prjs, self.pad_ds = pad_projections(
+            self.prjs, self.pad_ds, 1
         )
 
     def align(self):
@@ -139,6 +139,7 @@ class TomoAlign:
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y%m%d-%H%M-")
         method_str = list(self.metadata["methods"].keys())[0]
+        os.chdir(self.wd)
         os.mkdir(dt_string + method_str)
         os.chdir(dt_string + method_str)
         save_metadata("metadata.json", self.metadata)

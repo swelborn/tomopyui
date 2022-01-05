@@ -163,10 +163,11 @@ class Import:
 
     def set_wd(self, wd):
         '''
-        Sets the current working directory of `Import` class. Does not do much
-        right now. 
+        Sets the current working directory of `Import` class and changes the
+        current directory to it.
         '''
         self.wd = wd
+        os.chdir(wd)
 
     def set_metadata(self):
         '''
@@ -337,9 +338,9 @@ class Plotter:
         self, plot_type="prj", imagestack=None, Center=None
     ):
         """
-        Creates a plot with a :doc:`histogram <mpl-interactions:examples/hist>` for a given set of data. Sets Plotter
-        attributes: slicer_with_hist_fig, threshold_control, 
-        threshold_control_list, and set_range_button.
+        Creates a plot with a :doc:`histogram <mpl-interactions:examples/hist>`
+        for a given set of data. Sets Plotter attributes: slicer_with_hist_fig,
+        threshold_control, threshold_control_list, and set_range_button.
 
         Parameters
         -----------
@@ -440,7 +441,8 @@ class Plotter:
             hist_vbar_range_callback, ["vmin", "vmax"], eager=True
         )
 
-        # allowing zoom on scroll. TODO: figure out panning without clicking
+        # allowing zoom/pan on scroll/right mouse drag
+        self.pan_handler = panhandler(fig)
         disconnect_zoom = zoom_factory(ax1)
         disconnect_zoom2 = zoom_factory(ax2)
 
@@ -467,12 +469,12 @@ class Plotter:
         self.set_range_button.on_click(set_img_lims_on_click)
 
         # saving some things in the object
-        self.pan_handler = panhandler(fig)
         self.slicer_with_hist_fig = fig
         self.threshold_control = threshold_control
         self.threshold_control_list = [
             slider for slider in threshold_control.vbox.children
         ]
+
 
     def save_prj_animation(self):
         """
@@ -1055,9 +1057,6 @@ class Align:
         self.Import = Import
         self.Center = Center
         self.prj_shape = Import.prj_shape
-        self.angle_start = Import.angle_start # TODO
-        self.angle_end = Import.angle_end # TODO
-        self.num_theta = Import.num_theta # TODO
         self.wd = Import.wd
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
@@ -1099,7 +1098,6 @@ class Align:
         self.metadata["opts"]["upsample_factor"] = self.upsample_factor
 
     def _set_prj_ranges_full(self):
-
         self.prj_range_x = (0, self.prj_shape[2]-1)
         self.prj_range_y = (0, self.prj_shape[1]-1)
         self.prj_range_z = (0, self.prj_shape[0]-1)
@@ -1440,7 +1438,7 @@ class Recon(Align):
             a = TomoRecon(self)
             change.button_style = "success"
             change.icon = "fa-check-square"
-            change.description = "Finished alignment."
+            change.description = "Finished reconstruction."
         except:
             change.button_style = "warning"
             change.icon = "exclamation-triangle"
@@ -1468,7 +1466,7 @@ class Recon(Align):
         # -- Saving ----------------------------------------------------------- 
         save_hbox = HBox(
             self.save_opts_checkboxes,
-            layout=Layout(flex_wrap="wrap", justify_content="space-between"),
+            layout=Layout(flex_flow="row wrap", justify_content="space-between"),
         )
 
         self.save_options_accordion = Accordion(
@@ -1517,34 +1515,21 @@ class Recon(Align):
         )
 
         self.options_accordion = Accordion(
-            children=[
-                VBox(
-                    [
-                        HBox(
-                            [
-                                self.num_iterations_textbox,
-                                self.center_textbox,
+            children=[HBox([
+                            self.num_iterations_textbox,
+                            self.center_textbox,
+                            self.num_batches_textbox,
+                            self.paddingX_textbox,
+                            self.paddingY_textbox,
+                            self.downsample_checkbox,
+                            self.downsample_factor_textbox,
+                            self.extra_options_textbox,
                             ],
-                            layout=Layout(
-                                flex_wrap="wrap", justify_content="space-between"
+                            layout=Layout(flex_flow="row wrap"),
+
                             ),
-                        ),
-                        HBox(
-                            [
-                                self.num_batches_textbox,
-                                self.paddingX_textbox,
-                                self.paddingY_textbox,
-                                self.downsample_checkbox,
-                                self.downsample_factor_textbox,
-                            ],
-                            layout=Layout(
-                                flex_wrap="wrap", justify_content="space-between"
-                            ),
-                        ),
-                        self.extra_options_textbox,
+
                     ],
-                )
-            ],
             selected_index=None,
             titles=("Options",),
         )

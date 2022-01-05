@@ -1,4 +1,3 @@
-from tqdm.notebook import tnrange, tqdm
 from joblib import Parallel, delayed
 from time import process_time, perf_counter, sleep
 from skimage.registration import phase_cross_correlation
@@ -11,7 +10,7 @@ from tomopy.misc.corr import circ_mask
 from skimage.transform import rescale
 from .util.save_metadata import save_metadata
 from tomopy.recon import algorithm as tomopy_algorithm
-
+from tomopyui.backend.tomoalign import TomoAlign
 
 import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
 import tomopyui.backend.tomodata as td
@@ -27,35 +26,37 @@ import tomopy
 import numpy as np
 
 
-class TomoRecon:
+class TomoRecon(TomoAlign):
     """
-    Class for performing reconstructions.
-
-    Parameters
-    ----------
-    tomo : TomoData object.
-        Normalize the raw tomography data with the TomoData class. Then,
-        initialize this class with a TomoData object.
-    metadata : metadata from setup in widget-based notebook.
     """
 
-    def __init__(self, Recon):
-
-        self.Recon = Recon
-        self.metadata = Recon.metadata.copy()
+    def __init__(self, Recon, Align=None):
+        # -- Creating attributes for reconstruction calcs ---------------------
+        self._set_attributes_from_frontend(Recon)
         self.tomo = td.TomoData(metadata=Recon.Import.metadata)
-        self.partial = Recon.partial
-        if self.partial:
-            self.prj_range_x = self.metadata["prj_range_x"]
-            self.prj_range_y = self.metadata["prj_range_y"]
         self.recon = None
-        self.downsample = Recon.downsample
-        self.downsample_factor = Recon.downsample_factor
-        self.center = self.Recon.center * self.downsample_factor  # add padding?
         self.wd_parent = Recon.Import.wd
-        self.num_iter = Recon.num_iter
         self.make_wd()
         self._main()
+
+
+    def _set_attributes_from_frontend(self, Recon):
+        self.Recon = Recon
+        self.metadata = Recon.metadata.copy()
+        self.partial = Recon.partial
+        if self.partial:
+            self.prj_range_x = Recon.prj_range_x
+            self.prj_range_y = Recon.prj_range_y
+        self.pad = (Recon.paddingX, Recon.paddingY)
+        self.downsample = Recon.downsample
+        if self.downsample:
+            self.downsample_factor = Recon.downsample_factor
+        else:
+            self.downsample_factor = 1
+        self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
+        self.center = Recon.center + self.pad_ds[0]
+        self.num_iter = Recon.num_iter
+        self.upsample_factor = Recon.upsample_factor
 
     def make_wd(self):
         now = datetime.datetime.now()
@@ -68,59 +69,15 @@ class TomoRecon:
             os.mkdir(dt_string + "recon-1")
             os.chdir(dt_string + "recon-1")
         save_metadata("overall_recon_metadata.json", self.metadata)
+        if self.metadata["save_opts"]["tomo_before"]:
+            np.save("projections_before_alignment",
+                self.tomo.prj_imgs)
         self.wd = os.getcwd()
-
-    def recon_multiple(self):
-        metadata_list = []
-        for key in self.metadata["methods"]:
-            d = self.metadata["methods"]
-            keys_to_remove = set(self.metadata["methods"].keys())
-            keys_to_remove.remove(key)
-            _d = {k: d[k] for k in set(list(d.keys())) - keys_to_remove}
-            _metadata = self.metadata.copy()
-            _metadata["methods"] = _d
-            metadata_list.append(_metadata)
-        return metadata_list
-
-    def init_prj(self):
-        # Take away part of it, if desired.
-        if self.partial:
-            proj_range_x_low = self.prj_range_x[0]
-            proj_range_x_high = self.prj_range_x[1]
-            proj_range_y_low = self.prj_range_y[0]
-            proj_range_y_high = self.prj_range_y[1]
-            self.prj_for_recon = self.tomo.prj_imgs[
-                :,
-                proj_range_y_low:proj_range_y_high:1,
-                proj_range_x_low:proj_range_x_high:1,
-            ].copy()
-        else:
-            self.prj_for_recon = self.tomo.prj_imgs.copy()
-
-        # Make it downsampled if desired.
-        if self.metadata["opts"]["downsample"]:
-            downsample_factor = self.metadata["opts"]["downsample_factor"]
-
-            # downsample images in stack
-            self.prj_for_recon = rescale(
-                self.prj_for_recon,
-                (1, downsample_factor, downsample_factor),
-                anti_aliasing=True,
-            )
 
     def save_reconstructed_data(self):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y%m%d-%H%M-")
         method_str = list(self.metadata["methods"].keys())[0]
-
-        if (
-            "SIRT_CUDA" in self.metadata["methods"]
-            and "SIRT Plugin-Faster" in self.metadata["methods"]["SIRT_CUDA"]
-        ):
-            if self.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]:
-                method_str = method_str + "-faster"
-            if self.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]:
-                method_str = method_str + "-fastest"
         os.mkdir(dt_string + method_str)
         os.chdir(dt_string + method_str)
         save_metadata("metadata.json", self.metadata)
@@ -150,59 +107,62 @@ class TomoRecon:
 
     def reconstruct(self):
 
-        # Initialize variables from metadata for ease of reading:
         # ensure it only runs on 1 thread for CUDA
         os.environ["TOMOPY_PYTHON_THREADS"] = "1"
-        num_iter = self.metadata["opts"]["num_iter"]
         method_str = list(self.metadata["methods"].keys())[0]
         if method_str == "MLEM_CUDA":
             method_str = "EM_CUDA"
-        # num_batches = self.metadata["opts"]["batch_size"]  # change to num_batches
 
         # Initialization of reconstruction dataset
-        tomo_shape = self.prj_for_recon.shape
+        tomo_shape = self.prjs.shape
         self.recon = np.empty(
             (tomo_shape[1], tomo_shape[2], tomo_shape[2]), dtype=np.float32
         )
         self.Recon.log.info("Starting" + method_str)
-        # Options go into kwargs which go into recon()
-        # center = find_center_vo(self.prj_for_recon)
-        # print(center)
-        center = self.center
 
-        if (
-            "SIRT_CUDA" in self.metadata["methods"]
-            and "SIRT Plugin-Faster" in self.metadata["methods"]["SIRT_CUDA"]
-        ):
-            if self.metadata["methods"]["SIRT_CUDA"]["SIRT Plugin-Faster"]:
-                self.recon = tomocupy_algorithm.recon_sirt_3D(
-                    self.prj_for_recon,
-                    self.tomo.theta,
-                    num_iter=num_iter,
-                    rec=self.recon,
-                    center=center,
-                )
-            elif self.metadata["methods"]["SIRT_CUDA"]["SIRT 3D-Fastest"]:
-                self.recon = tomocupy_algorithm.recon_sirt_3D_allgpu(
-                    self.prj_for_recon,
-                    self.tomo.theta,
-                    num_iter=num_iter,
-                    rec=self.recon,
-                    center=center,
-                )
+        # TODO: parsing recon method could be done in an Align method
+        if method_str == "SIRT_Plugin":
+            self.recon = tomocupy_algorithm.recon_sirt_plugin(
+                self.prjs,
+                self.tomo.theta,
+                num_iter=self.num_iter,
+                rec=self.recon,
+                center=self.center,
+            )
+        elif method_str == "SIRT_3D":
+            self.recon = tomocupy_algorithm.recon_sirt_3D(
+                self.prjs,
+                self.tomo.theta,
+                num_iter=self.num_iter,
+                rec=self.recon,
+                center=self.center,
+            )
+        elif method_str == "CGLS_3D":
+            self.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
+                self.prjs,
+                self.tomo.theta,
+                num_iter=self.num_iter,
+                rec=self.recon,
+                center=self.center,
+            )
         else:
             # Options go into kwargs which go into recon()
             kwargs = {}
-            options = {"proj_type": "cuda", "method": method_str, "num_iter": num_iter}
+            options = {
+                "proj_type": "cuda",
+                "method": method_str,
+                "num_iter": self.num_iter,
+                # TODO: "extra_options": {},
+            }
             kwargs["options"] = options
 
             self.recon = tomopy_algorithm.recon(
-                self.prj_for_recon,
+                self.prjs,
                 self.tomo.theta,
                 algorithm=wrappers.astra,
                 init_recon=self.recon,
-                center=center,
-                ncore=None,
+                center=self.center,
+                ncore=1,
                 **kwargs,
             )
         return self
@@ -212,10 +172,10 @@ class TomoRecon:
         Reconstructs a TomoData object using options in GUI.
         """
 
-        self.init_prj()
-        metadata_list = self.recon_multiple()
+        metadata_list = super().make_metadata_list()
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
+            super().init_prj()
             tic = time.perf_counter()
             self.reconstruct()
             toc = time.perf_counter()

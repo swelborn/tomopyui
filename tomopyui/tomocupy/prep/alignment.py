@@ -23,7 +23,7 @@ def align_joint(TomoAlign):
     os.environ["TOMOPY_PYTHON_THREADS"] = "1"
 
     # Initialize variables from metadata for ease of reading:
-    init_tomo_shape = TomoAlign.prj_for_alignment.shape
+    init_tomo_shape = TomoAlign.prjs.shape
     num_iter = TomoAlign.num_iter
     downsample = TomoAlign.downsample
     pad = TomoAlign.pad
@@ -36,11 +36,11 @@ def align_joint(TomoAlign):
     projection_num = 50 # default to 50 now, TODO: can make an option
 
     # Needs scaling for skimage float operations
-    TomoAlign.prj_for_alignment, scl = scale_tomo(TomoAlign.prj_for_alignment)
+    TomoAlign.prjs, scl = scale_tomo(TomoAlign.prjs)
 
     # Initialization of reconstruction dataset
-    tomo_shape = TomoAlign.prj_for_alignment.shape
-    TomoAlign.recon = np.mean(TomoAlign.prj_for_alignment) * np.empty(
+    tomo_shape = TomoAlign.prjs.shape
+    TomoAlign.recon = np.mean(TomoAlign.prjs) * np.empty(
         (tomo_shape[1], tomo_shape[2], tomo_shape[2]), dtype=np.float32
     )
 
@@ -61,17 +61,17 @@ def align_joint(TomoAlign):
     scales_image = {'x': scale_x,
                     'y': scale_y,
                     'image': bq.ColorScale(
-                        min=float(np.min(TomoAlign.prj_for_alignment[projection_num])),
-                        max=float(np.max(TomoAlign.prj_for_alignment[projection_num])),
+                        min=float(np.min(TomoAlign.prjs[projection_num])),
+                        max=float(np.max(TomoAlign.prjs[projection_num])),
                         scheme='viridis'
                                        )
                    }
 
     image_projection = ImageGL(
-        image=TomoAlign.prj_for_alignment[projection_num],
+        image=TomoAlign.prjs[projection_num],
         scales=scales_image, )
     image_simulated = ImageGL(
-        image=np.zeros_like(TomoAlign.prj_for_alignment[projection_num]),
+        image=np.zeros_like(TomoAlign.prjs[projection_num]),
         scales=scales_image, )
 
     projection_fig.marks = (image_projection,)
@@ -90,7 +90,7 @@ def align_joint(TomoAlign):
     # Initialize Sx, Sy plot
     xs = bq.LinearScale()
     ys = bq.LinearScale()
-    x = range(TomoAlign.prj_for_alignment.shape[0])
+    x = range(TomoAlign.prjs.shape[0])
     y = [TomoAlign.sx, TomoAlign.sy]
     line = bq.Lines(x=x, y=y,
         scales={'x': xs, 'y': ys},
@@ -144,7 +144,7 @@ def align_joint(TomoAlign):
         _rec = TomoAlign.recon
         if method_str == "SIRT_Plugin":
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_plugin(
-                TomoAlign.prj_for_alignment,
+                TomoAlign.prjs,
                 TomoAlign.tomo.theta,
                 num_iter=1,
                 rec=_rec,
@@ -152,7 +152,7 @@ def align_joint(TomoAlign):
             )
         elif method_str == "SIRT_3D":
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
-                TomoAlign.prj_for_alignment,
+                TomoAlign.prjs,
                 TomoAlign.tomo.theta,
                 num_iter=1,
                 rec=_rec,
@@ -160,7 +160,7 @@ def align_joint(TomoAlign):
             )
         elif method_str == "CGLS_3D":
             TomoAlign.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
-                TomoAlign.prj_for_alignment,
+                TomoAlign.prjs,
                 TomoAlign.tomo.theta,
                 num_iter=1,
                 rec=_rec,
@@ -178,7 +178,7 @@ def align_joint(TomoAlign):
             kwargs["options"] = options
             if n == 0:
                 TomoAlign.recon = tomopy_algorithm.recon(
-                    TomoAlign.prj_for_alignment,
+                    TomoAlign.prjs,
                     TomoAlign.tomo.theta,
                     algorithm=wrappers.astra,
                     init_recon=_rec,
@@ -188,7 +188,7 @@ def align_joint(TomoAlign):
                 )
             else:
                 TomoAlign.recon = tomopy_algorithm.recon(
-                    TomoAlign.prj_for_alignment,
+                    TomoAlign.prjs,
                     TomoAlign.tomo.theta,
                     algorithm=wrappers.astra,
                     init_recon=_rec,
@@ -229,7 +229,7 @@ def align_joint(TomoAlign):
         # Cross correlation
         shift_cpu = []
         batch_cross_correlation(
-            TomoAlign.prj_for_alignment,
+            TomoAlign.prjs,
             sim,
             shift_cpu,
             num_batches,
@@ -243,7 +243,7 @@ def align_joint(TomoAlign):
 
         # Shifting.
         (
-            TomoAlign.prj_for_alignment,
+            TomoAlign.prjs,
             TomoAlign.sx,
             TomoAlign.sy,
             TomoAlign.shift,
@@ -251,7 +251,7 @@ def align_joint(TomoAlign):
             TomoAlign.pad_ds,
             center,
         ) = shift_prj_update_shift_cp(
-            TomoAlign.prj_for_alignment,
+            TomoAlign.prjs,
             TomoAlign.sx,
             TomoAlign.sy,
             TomoAlign.shift,
@@ -263,7 +263,7 @@ def align_joint(TomoAlign):
         )
         TomoAlign.conv[n] = np.linalg.norm(err)
         # update images
-        image_projection.image = TomoAlign.prj_for_alignment[projection_num]
+        image_projection.image = TomoAlign.prjs[projection_num]
         image_simulated.image = sim[projection_num]
         # update plot lines
         line_conv.x = np.arange(0, n+1)
@@ -274,7 +274,7 @@ def align_joint(TomoAlign):
         mempool.free_all_blocks()
 
     # Re-normalize data
-    TomoAlign.prj_for_alignment *= scl
+    TomoAlign.prjs *= scl
     TomoAlign.recon = circ_mask(TomoAlign.recon, 0)
     if downsample:
         TomoAlign.sx /= TomoAlign.downsample_factor
