@@ -3,7 +3,7 @@ from ipywidgets import *
 
 
 def create_dashboard():
-    '''
+    """
     This is the function to open the app in a jupyter notebook. In jupyter,
     run the following commands:
 
@@ -15,7 +15,7 @@ def create_dashboard():
         dashboard, file_import, center, prep, align, recon = main.create_dashboard()
         dashboard
 
-    '''
+    """
 
     file_import = meta.Import()
     center_tab_obj = meta.Center(file_import)

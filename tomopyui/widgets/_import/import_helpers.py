@@ -1,15 +1,16 @@
-
 from ipywidgets import *
 import functools
 
 extend_description_style = {"description_width": "auto"}
 
+
 def create_angles_textboxes(Import):
-    '''
+    """
     Creates textboxes for angle start/angle end. Currently, the No. Images
-    textbox does do anything (tiff import grabs that number automatically). 
+    textbox does do anything (tiff import grabs that number automatically).
     TODO: remove that.
-    '''
+    """
+
     def create_textbox(description, value, metadatakey, int=False):
         def angle_callbacks(change, key):
             Import.metadata[key] = change.new
@@ -44,9 +45,7 @@ def create_angles_textboxes(Import):
 
     angle_start = create_textbox("Starting angle (\u00b0): ", -90, "angle_start")
     angle_end = create_textbox("Ending angle (\u00b0): ", 90, "angle_end")
-    num_projections = create_textbox(
-        "Number of Images: ", 360, "num_theta", int=True
-    )
+    num_projections = create_textbox("Number of Images: ", 360, "num_theta", int=True)
 
     angles_textboxes = [angle_start, angle_end, num_projections]
     return angles_textboxes

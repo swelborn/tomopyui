@@ -20,7 +20,7 @@ def recon_sirt_plugin(prj, angles, num_iter=1, rec=None, center=None):
     rec_id = astra.data3d.create("-vol", vol_geom, rec)
     projector_id = astra.create_projector("cuda3d", proj_geom, vol_geom)
     astra.plugin.register(astra.plugins.SIRTPlugin)
-    cfg = astra.astra_dict('SIRT-PLUGIN')
+    cfg = astra.astra_dict("SIRT-PLUGIN")
     cfg["ProjectionDataId"] = sinograms_id
     cfg["ReconstructionDataId"] = rec_id
     cfg["ProjectorId"] = projector_id

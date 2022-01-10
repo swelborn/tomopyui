@@ -12,6 +12,7 @@ def save_metadata(filename, metadata):
     with open(filename, "w+") as f:
         a = safe_serialize(metadata, f)
 
+
 def load_metadata(filepath, filename):
     fp = os.path.abspath(os.path.join(filepath, filename))
     with open(fp) as f:

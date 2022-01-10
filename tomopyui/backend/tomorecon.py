@@ -27,8 +27,7 @@ import numpy as np
 
 
 class TomoRecon(TomoAlign):
-    """
-    """
+    """ """
 
     def __init__(self, Recon, Align=None):
         # -- Creating attributes for reconstruction calcs ---------------------
@@ -38,7 +37,6 @@ class TomoRecon(TomoAlign):
         self.wd_parent = Recon.Import.wd
         self.make_wd()
         self._main()
-
 
     def _set_attributes_from_frontend(self, Recon):
         self.Recon = Recon
@@ -70,8 +68,7 @@ class TomoRecon(TomoAlign):
             os.chdir(dt_string + "recon-1")
         save_metadata("overall_recon_metadata.json", self.metadata)
         if self.metadata["save_opts"]["tomo_before"]:
-            np.save("projections_before_alignment",
-                self.tomo.prj_imgs)
+            np.save("projections_before_alignment", self.tomo.prj_imgs)
         self.wd = os.getcwd()
 
     def save_reconstructed_data(self):

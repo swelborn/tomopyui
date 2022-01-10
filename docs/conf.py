@@ -7,6 +7,7 @@
 # -- Path setup --------------------------------------------------------------
 
 import inspect
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -20,7 +21,6 @@ try:
     from tomopyui import __version__ as release
 except ImportError:
     release = "unknown"
-
 
 
 # -- Project information -----------------------------------------------------
@@ -98,8 +98,8 @@ nitpicky = True  # warn if cross-references are missing
 
 # Intersphinx settings
 intersphinx_mapping = {
-    "tomopy" : ("https://tomopy.readthedocs.io/en/latest/", None),
-    "mpl-interactions" : ("https://mpl-interactions.readthedocs.io/en/stable/", None),
+    "tomopy": ("https://tomopy.readthedocs.io/en/latest/", None),
+    "mpl-interactions": ("https://mpl-interactions.readthedocs.io/en/stable/", None),
     "ipywidgets": ("https://ipywidgets.readthedocs.io/en/latest/", None),
     "matplotlib": ("https://matplotlib.org/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),

@@ -21,8 +21,7 @@ import numpy as np
 
 
 class TomoAlign:
-    """
-    """
+    """ """
 
     def __init__(self, Align):
 
@@ -71,14 +70,13 @@ class TomoAlign:
         save_metadata("overall_alignment_metadata.json", self.metadata)
         #!!!!!!!!!! make option for tiff file save
         if self.metadata["save_opts"]["tomo_before"]:
-            np.save("projections_before_alignment",
-                self.tomo.prj_imgs)
+            np.save("projections_before_alignment", self.tomo.prj_imgs)
         self.wd = os.getcwd()
 
     def make_metadata_list(self):
         """
         Creates a metadata list for all of the methods check-marked in the UI.
-        This is put into the for loop in _main. Each item in the list is a 
+        This is put into the for loop in _main. Each item in the list is a
         separate metadata dictionary.
         """
         metadata_list = []
@@ -86,12 +84,14 @@ class TomoAlign:
             d = self.metadata["methods"]
             keys_to_remove = set(self.metadata["methods"].keys())
             keys_to_remove.remove(key)
-            _d = {k.replace(" ", "_"): d[k] for k in set(list(d.keys())) - keys_to_remove}
+            _d = {
+                k.replace(" ", "_"): d[k] for k in set(list(d.keys())) - keys_to_remove
+            }
             _metadata = self.metadata.copy()
             _metadata["methods"] = _d
-            newkey = key.replace(" ","_") # put underscores in method names
-            if _metadata["methods"][newkey]: 
-                metadata_list.append(_metadata) # append only true methods
+            newkey = key.replace(" ", "_")  # put underscores in method names
+            if _metadata["methods"][newkey]:
+                metadata_list.append(_metadata)  # append only true methods
 
         return metadata_list
 
@@ -101,11 +101,13 @@ class TomoAlign:
             prj_range_x_high = self.prj_range_x[1]
             prj_range_y_low = self.prj_range_y[0]
             prj_range_y_high = self.prj_range_y[1]
-            self.prjs = deepcopy(self.tomo.prj_imgs[
-                :,
-                prj_range_y_low:prj_range_y_high:1,
-                prj_range_x_low:prj_range_x_high:1,
-            ])
+            self.prjs = deepcopy(
+                self.tomo.prj_imgs[
+                    :,
+                    prj_range_y_low:prj_range_y_high:1,
+                    prj_range_x_low:prj_range_x_high:1,
+                ]
+            )
             # center of rotation change to fit new range
             self.center = self.center - prj_range_x_low
         else:
@@ -119,12 +121,10 @@ class TomoAlign:
                 anti_aliasing=True,
             )
             # center of rotation change for downsampled data
-            self.center = self.center*self.downsample_factor
+            self.center = self.center * self.downsample_factor
 
         # Pad
-        self.prjs, self.pad_ds = pad_projections(
-            self.prjs, self.pad_ds, 1
-        )
+        self.prjs, self.pad_ds = pad_projections(self.prjs, self.pad_ds, 1)
 
     def align(self):
         """
@@ -148,14 +148,18 @@ class TomoAlign:
             if self.metadata["save_opts"]["npy"]:
                 np.save("projections_after_alignment", self.tomo_aligned.prj_imgs)
             if self.metadata["save_opts"]["tiff"]:
-                tf.imwrite("projections_after_alignment.tif", self.tomo_aligned.prj_imgs)
+                tf.imwrite(
+                    "projections_after_alignment.tif", self.tomo_aligned.prj_imgs
+                )
 
             # defaults to at least saving tiff if none are checked
             if (
                 not self.metadata["save_opts"]["tiff"]
                 and not self.metadata["save_opts"]["npy"]
             ):
-                tf.imwrite("projections_after_alignment.tif", self.tomo_aligned.prj_imgs)
+                tf.imwrite(
+                    "projections_after_alignment.tif", self.tomo_aligned.prj_imgs
+                )
         if self.metadata["save_opts"]["recon"]:
             if self.metadata["save_opts"]["npy"]:
                 np.save("last_recon", self.recon)
