@@ -1176,7 +1176,7 @@ class Align:
         self.prj_range_y_slider.value = self.prj_range_y
         self.set_metadata()
 
-    def load_metadata(self):
+    def load_metadata_align(self):
         self.metadata = load_metadata(self.Import.fpath_align, self.Import.fname_align)
 
     def _set_attributes_from_metadata(self):
@@ -1229,9 +1229,11 @@ class Align:
         self.load_metadata_button.button_style = "info"
         self.load_metadata_button.icon = "fas fa-cog fa-spin fa-lg"
         self.load_metadata_button.description = "Importing metadata."
-        self.load_metadata()
+        self.load_metadata_align()
         self._set_attributes_from_metadata()
-        _set_widgets_from_load_metadata(self)
+        self = _set_widgets_from_load_metadata(self)
+        self._set_observes()
+        self._set_observes_obj_specific()
         self.load_metadata_button.button_style = "success"
         self.load_metadata_button.icon = "fa-check-square"
         self.load_metadata_button.description = "Finished importing metadata."

@@ -3,7 +3,7 @@ import numpy as np
 
 def trim_padding(prj):
     # https://stackoverflow.com/questions/54567986/python-numpy-remove-empty-zeroes-border-of-3d-array
-    xs, ys, zs = np.where(prj > 1e-7)
+    xs, ys, zs = np.where(np.absolute(prj) > 1e-7)
 
     minxs = np.min(xs)
     maxxs = np.max(xs)

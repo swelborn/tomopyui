@@ -221,10 +221,23 @@ def _set_widgets_from_load_metadata(obj):
         obj.radio_fulldataset.value = "Full"
 
     # -- Saving Options -------------------------------------------------------
-    helpers.set_checkbox_bool(obj.save_opts_checkboxes, obj.metadata["save_opts"])
+    obj.save_opts_checkboxes = helpers.set_checkbox_bool(obj.save_opts_checkboxes, obj.metadata["save_opts"], obj)
 
     # -- Method Options -------------------------------------------------------
-    helpers.set_checkbox_bool(obj.methods_checkboxes, obj.metadata["methods"])
+    # for key in obj.metadata["methods"]:
+    #     if obj.metadata["methods"][key]:
+    #         for checkbox in obj.methods_checkboxes:
+    #             if checkbox.description == str(key):
+    #                 checkbox.value = True
+    #     elif not obj.metadata["methods"][key]:
+    #         for checkbox in obj.methods_checkboxes:
+    #             if checkbox.description == str(key):
+    #                 checkbox.value = False
+    obj.methods_checkboxes = helpers.set_checkbox_bool(
+                                                obj.methods_checkboxes, 
+                                                obj.metadata["methods"], 
+                                                obj)
+
 
     # -- Projection Range Sliders ---------------------------------------------
     # Not implemented in load metadata.
@@ -261,3 +274,5 @@ def _set_widgets_from_load_metadata(obj):
 
         # -- Upsample factor --------------------------------------------------
         obj.upsample_factor_textbox.value = obj.upsample_factor
+
+    return obj

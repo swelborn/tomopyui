@@ -116,16 +116,24 @@ def create_checkboxes_from_opt_list(opt_list, dictionary, obj):
     return [a.checkbox for a in checkboxes]  # return list of checkboxes
 
 
-def set_checkbox_bool(checkbox_list, dictionary):
+def set_checkbox_bool(checkbox_list, dictionary, obj):
+
+    def create_opt_dict_on_check(change):
+        dictionary[change.owner.description] = change.new
+        obj.set_metadata()  # obj needs a set_metadata function
+
     for key in dictionary:
         if dictionary[key]:
             for checkbox in checkbox_list:
                 if checkbox.description == str(key):
                     checkbox.value = True
+                    checkbox.observe(create_opt_dict_on_check, names="value")
         elif not dictionary[key]:
             for checkbox in checkbox_list:
                 if checkbox.description == str(key):
                     checkbox.value = False
+                    checkbox.observe(create_opt_dict_on_check, names="value")
+    return checkbox_list
 
 
 class Timer:
