@@ -1,0 +1,38 @@
+name: tomopyui-nocuda
+channels:
+  - conda-forge/label/widgetsnbextension_dev
+  - conda-forge/label/jupyterlab_widgets_rc
+  - conda-forge/label/ipywidgets_dev
+  - astra-toolbox
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - tomopy
+  - dxchange
+  - jupyterlab
+  - astropy
+  - ipyfilechooser
+  - ipywidgets=8
+  - widgetsnbextension
+  - jupyterlab_widgets
+  - ca-certificates
+  - certifi
+  - openssl
+  - joblib
+  - ipympl [--no-deps]
+  - bqplot
+  - sphinx
+  - jupyter_sphinx
+  - numpydoc
+  - sphinx-copybutton
+  - sphinx-panels
+  - sphinx-thebe
+  - sphinx-togglebutton
+  - sphinx-book-theme
+  - sphinx-gallery
+  - myst-nb [--no-deps]
+  - pip:
+    - mpl-interactions
+    - bqplot-image-gl
