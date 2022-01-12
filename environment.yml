@@ -25,6 +25,7 @@ dependencies:
   - cupy
   - joblib
   - ipympl [--no-deps]
+  - bqplot
   - sphinx
   - jupyter_sphinx
   - numpydoc
@@ -37,3 +38,4 @@ dependencies:
   - myst-nb [--no-deps]
   - pip:
     - mpl-interactions
+    - bqplot-image-gl
