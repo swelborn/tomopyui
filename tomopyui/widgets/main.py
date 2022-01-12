@@ -38,6 +38,11 @@ def create_dashboard():
             checkbox.disabled = False
         else:
             checkbox.disabled = True
+    for checkbox in align_tab_obj.tomopy_methods_checkboxes:
+        if os.environ["cuda_enabled"] == "True":
+            checkbox.disabled = True
+        else:
+            checkbox.disabled = False
     dashboard_tabs = [
         file_import.tab,
         center_tab_obj.center_tab,

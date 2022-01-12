@@ -1078,12 +1078,15 @@ class Align:
         self.paddingY = 10
         self.partial = False
         self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
+        self.tomopy_methods_list.remove("gridrec")
+        self.tomopy_methods_list.remove("fbp")
         self.astra_cuda_methods_list = [
             key for key in astra_cuda_recon_algorithm_kwargs
         ]
         self.prj_plotter = Plotter(self.Import)
         self.metadata = {}
         self.metadata["opts"] = {}
+        self.run_list = []
 
     def set_metadata(self):
         self.metadata["opts"]["downsample"] = self.downsample

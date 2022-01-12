@@ -3,7 +3,7 @@
 from tomopy.misc.corr import circ_mask
 from tomopy.recon import wrappers
 from cupyx.scipy import ndimage as ndi_cp
-from skimage.registration import phase_cross_correlation
+from tomopyui.backend.util.registration._phase_cross_correlation_cupy import phase_cross_correlation
 from tomopy.prep.alignment import scale as scale_tomo
 from tomopy.recon import algorithm as tomopy_algorithm
 from bqplot_image_gl import ImageGL
@@ -169,6 +169,7 @@ def align_joint(TomoAlign):
         TomoAlign.Align.progress_reprj.value = 0
         TomoAlign.Align.progress_phase_cross_corr.value = 0
         _rec = TomoAlign.recon
+        # TODO: handle reconstruction-type parsing elsewhere
         if method_str == "SIRT_Plugin":
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_plugin(
                 TomoAlign.prjs,
@@ -203,26 +204,16 @@ def align_joint(TomoAlign):
                 "extra_options": {"MinConstraint": 0},
             }
             kwargs["options"] = options
-            if n == 0:
-                TomoAlign.recon = tomopy_algorithm.recon(
-                    TomoAlign.prjs,
-                    TomoAlign.tomo.theta,
-                    algorithm=wrappers.astra,
-                    init_recon=_rec,
-                    center=center,
-                    ncore=1,
-                    **kwargs,
-                )
-            else:
-                TomoAlign.recon = tomopy_algorithm.recon(
-                    TomoAlign.prjs,
-                    TomoAlign.tomo.theta,
-                    algorithm=wrappers.astra,
-                    init_recon=_rec,
-                    center=center,
-                    ncore=1,
-                    **kwargs,
-                )
+            TomoAlign.recon = tomopy_algorithm.recon(
+                TomoAlign.prjs,
+                TomoAlign.tomo.theta,
+                algorithm=wrappers.astra,
+                init_recon=_rec,
+                center=center,
+                ncore=1,
+                **kwargs,
+            )
+
         TomoAlign.recon[np.isnan(TomoAlign.recon)] = 0
         TomoAlign.Align.progress_total.value = n + 1
         # break up reconstruction into batches along z axis
@@ -310,7 +301,7 @@ def align_joint(TomoAlign):
         TomoAlign.sy /= TomoAlign.downsample_factor
         TomoAlign.shift /= TomoAlign.downsample_factor
 
-    TomoAlign.pad = tuple([x / TomoAlign.downsample_factor for x in TomoAlign.pad_ds])
+    TomoAlign.pad = tuple([int(x / TomoAlign.downsample_factor) for x in TomoAlign.pad_ds])
     return TomoAlign
 
 

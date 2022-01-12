@@ -3,7 +3,7 @@ import numpy as np
 # https://stackoverflow.com/questions/54567986/python-numpy-remove-empty-zeroes-border-of-3d-array
 
 def pad_projections(prj, pad):
-    npad = ((0, 0), (pad[1], pad[1]), (pad[0], pad[0]))
+    npad = ((0, 0), ((pad[1]), pad[1]), (pad[0], pad[0]))
     prj = np.pad(prj, npad, mode="constant", constant_values=0)
     return prj, pad
 

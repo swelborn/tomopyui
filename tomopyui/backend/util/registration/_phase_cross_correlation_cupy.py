@@ -3,17 +3,16 @@ Port of Manuel Guizar's code from:
 http://www.mathworks.com/matlabcentral/fileexchange/18401-efficient-subpixel-image-registration-by-cross-correlation
 """
 
-import math
-
-import cupy as cp
 import numpy as np
+from .fft import fftmodule as fft
+from ._masked_phase_cross_correlation_cupy import _masked_phase_cross_correlation
+import cupy as cp
+import cupyx.scipy.fft as cufft
 
-from .._shared.fft import fftmodule as fft
-from ._masked_phase_cross_correlation import _masked_phase_cross_correlation
+fft.set_global_backend(cufft)
 
 
-def _upsampled_dft(data, upsampled_region_size,
-                   upsample_factor=1, axis_offsets=None):
+def _upsampled_dft(data, upsampled_region_size, upsample_factor=1, axis_offsets=None):
     """
     Upsampled DFT by matrix multiplication.
 
@@ -49,31 +48,39 @@ def _upsampled_dft(data, upsampled_region_size,
     output : ndarray
             The upsampled DFT of the specified region.
     """
+    fft.set_global_backend(cufft)
+
     # if people pass in an integer, expand it to a list of equal-sized sections
     if not hasattr(upsampled_region_size, "__iter__"):
-        upsampled_region_size = [upsampled_region_size] * data.ndim
+        upsampled_region_size = [upsampled_region_size,] * data.ndim
+        upsampled_region_size = cp.asarray(upsampled_region_size, dtype=cp.float64)
     else:
         if len(upsampled_region_size) != data.ndim:
-            raise ValueError("shape of upsampled region sizes must be equal "
-                             "to input data's number of dimensions.")
-
+            raise ValueError(
+                "shape of upsampled region sizes must be equal "
+                "to input data's number of dimensions."
+            )
     if axis_offsets is None:
-        axis_offsets = [0] * data.ndim
+        axis_offsets = [0,] * data.ndim
     else:
         if len(axis_offsets) != data.ndim:
-            raise ValueError("number of axis offsets must be equal to input "
-                             "data's number of dimensions.")
-
+            raise ValueError(
+                "number of axis offsets must be equal to input "
+                "data's number of dimensions."
+            )
+    # axis_offsets = cp.asarray(axis_offsets)
     im2pi = 1j * 2 * np.pi
-
+    # upsampled_region_size = cp.asarray(upsampled_region_size)
     dim_properties = list(zip(data.shape, upsampled_region_size, axis_offsets))
 
     for (n_items, ups_size, ax_offset) in dim_properties[::-1]:
-        kernel = ((cp.arange(ups_size) - ax_offset)[:, None]
-                  * fft.fftfreq(n_items, upsample_factor))
+        n_items = int(n_items)
+        ups_size = cp.asarray(ups_size, dtype=cp.float64)
+        ax_offset = cp.asarray(ax_offset, dtype=cp.float64)
+        kernel = (cp.arange(ups_size) - ax_offset)[:, None] * cp.fft.fftfreq(
+            n_items, upsample_factor
+        )
         kernel = cp.exp(-im2pi * kernel)
-        # CuPy Backend: use kernel of same precision as the data
-        kernel = kernel.astype(data.dtype, copy=False)
 
         # Equivalent to:
         #   data[i, j, k] = kernel[i, :] @ data[j, k].T
@@ -91,7 +98,7 @@ def _compute_phasediff(cross_correlation_max):
     cross_correlation_max : complex
         The complex value of the cross correlation at its maximum point.
     """
-    return cp.arctan2(cross_correlation_max.imag, cross_correlation_max.real)
+    return np.arctan2(cross_correlation_max.imag, cross_correlation_max.real)
 
 
 def _compute_error(cross_correlation_max, src_amp, target_amp):
@@ -107,16 +114,23 @@ def _compute_error(cross_correlation_max, src_amp, target_amp):
     target_amp : float
         The normalized average image intensity of the target image
     """
-    error = 1.0 - cross_correlation_max * cross_correlation_max.conj() /\
-        (src_amp * target_amp)
+    error = 1.0 - cross_correlation_max * cross_correlation_max.conj() / (
+        src_amp * target_amp
+    )
+    return np.sqrt(np.abs(error))
 
-    return cp.sqrt(cp.abs(error))
 
-
-def phase_cross_correlation(reference_image, moving_image, *,
-                            upsample_factor=1, space="real",
-                            return_error=True, reference_mask=None,
-                            moving_mask=None, overlap_ratio=0.3):
+def phase_cross_correlation(
+    reference_images,
+    moving_images,
+    *,
+    upsample_factor=1,
+    space="real",
+    return_error=True,
+    reference_mask=None,
+    moving_mask=None,
+    overlap_ratio=0.3
+):
     """Efficient subpixel image translation registration by cross-correlation.
 
     This code gives the same precision as the FFT upsampled cross-correlation
@@ -127,8 +141,8 @@ def phase_cross_correlation(reference_image, moving_image, *,
 
     Parameters
     ----------
-    reference_image : array
-        Reference image.
+    reference_image : 3D array
+        Reference image array.
     moving_image : array
         Image to register. Must be same dimensionality as
         ``reference_image``.
@@ -191,91 +205,89 @@ def phase_cross_correlation(reference_image, moving_image, *,
     .. [4] D. Padfield. "Masked FFT registration". In Proc. Computer Vision and
            Pattern Recognition, pp. 2918-2925 (2010).
            :DOI:`10.1109/CVPR.2010.5540032`
+
     """
+    fft.set_global_backend(cufft)
+
     if (reference_mask is not None) or (moving_mask is not None):
-        return _masked_phase_cross_correlation(reference_image, moving_image,
-                                               reference_mask, moving_mask,
-                                               overlap_ratio)
+        return _masked_phase_cross_correlation(
+            reference_images, moving_images, reference_mask, moving_mask, overlap_ratio
+        )
 
     # images must be the same shape
-    if reference_image.shape != moving_image.shape:
+    if reference_images.shape != moving_images.shape:
         raise ValueError("images must be same shape")
 
     # assume complex data is already in Fourier space
-    if space.lower() == 'fourier':
-        src_freq = reference_image
-        target_freq = moving_image
+    if space.lower() == "fourier":
+        src_freqs = reference_images
+        target_freqs = moving_images
     # real data needs to be fft'd.
-    elif space.lower() == 'real':
-        src_freq = fft.fftn(reference_image)
-        target_freq = fft.fftn(moving_image)
+    elif space.lower() == "real":
+        reference_images = cp.array(reference_images, dtype="complex64")
+        moving_images = cp.array(moving_images, dtype="complex64")
+        src_freqs = fft.fftn(reference_images, axes=(1, 2))
+        target_freqs = fft.fftn(moving_images, axes=(1, 2))
     else:
         raise ValueError('space argument must be "real" of "fourier"')
 
     # Whole-pixel shift - Compute cross-correlation by an IFFT
-    shape = src_freq.shape
-    image_product = src_freq * target_freq.conj()
-    cross_correlation = fft.ifftn(image_product)
-
+    shape = src_freqs.shape
+    image_product = src_freqs * target_freqs.conj()
+    cross_correlation = fft.ifftn(image_product, axes=(1, 2))
+    cross_correlation_abs = cp.abs(cross_correlation)
+    shifts = cp.zeros((2, reference_images.shape[0]))
     # Locate maximum
-    maxima = cp.unravel_index(
-        cp.argmax(cp.abs(cross_correlation)), cross_correlation.shape
-    )
-    midpoints = cp.asarray([np.fix(axis_size / 2) for axis_size in shape])
-
-    float_dtype = image_product.real.dtype
-    shifts = cp.stack([m.astype(float_dtype, copy=False) for m in maxima])
-    shifts[shifts > midpoints] -= cp.asarray(shape)[shifts > midpoints]
-
-    if upsample_factor == 1:
-        if return_error:
-            sabs = cp.abs(src_freq)
-            sabs *= sabs
-            tabs = cp.abs(target_freq)
-            tabs *= tabs
-            src_amp = np.sum(sabs) / src_freq.size
-            target_amp = np.sum(tabs) / target_freq.size
-            CCmax = cross_correlation[maxima]
-    # If upsampling > 1, then refine estimate with matrix multiply DFT
-    else:
-        # Initial shift estimate in upsampled grid
-        shifts = cp.around(shifts * upsample_factor) / upsample_factor
-        upsampled_region_size = math.ceil(upsample_factor * 1.5)
-        # Center of output array at dftshift + 1
-        dftshift = np.fix(upsampled_region_size / 2.0)
-        upsample_factor = float(upsample_factor)
-        # Matrix multiply DFT around the current shift estimate
-        sample_region_offset = dftshift - shifts * upsample_factor
-        cross_correlation = _upsampled_dft(image_product.conj(),
-                                           upsampled_region_size,
-                                           upsample_factor,
-                                           sample_region_offset).conj()
-
-        # Locate maximum and map back to original pixel grid
-        maxima = cp.unravel_index(cp.argmax(cp.abs(cross_correlation)),
-                                  cross_correlation.shape)
-        CCmax = cross_correlation[maxima]
-
-        maxima = (
-            cp.stack([m.astype(float_dtype, copy=False) for m in maxima])
-            - dftshift
+    for m in range(reference_images.shape[0]):
+        shiftsm = shifts[:, m]
+        shapem = src_freqs[m].shape
+        ipm = image_product[m]
+        maxima = np.unravel_index(
+            np.argmax(cross_correlation_abs[m]), cross_correlation_abs[m].shape
         )
 
-        shifts = shifts + maxima / upsample_factor
+        midpoints = cp.array([cp.fix(axis_size / 2) for axis_size in shapem])
+        shiftsm = cp.stack(maxima).astype(cp.float64)
 
-        if return_error:
-            src_amp = cp.abs(src_freq)
-            src_amp *= src_amp
-            src_amp = cp.sum(src_amp)
-            target_amp = cp.abs(target_freq)
-            target_amp *= target_amp
-            target_amp = cp.sum(target_amp)
+        shiftsm[shiftsm > midpoints] -= cp.array(shapem)[shiftsm > midpoints]
 
-    # If its only one row or column the shift along that dimension has no
-    # effect. We set to zero.
-    for dim in range(src_freq.ndim):
-        if shape[dim] == 1:
-            shifts[dim] = 0
+        if upsample_factor == 1:
+            if return_error:
+                src_amp = cp.sum(cp.real(src_freqs[m] * src_freqs[m].conj()))
+                src_amp /= src_freqs.size
+                target_amp = cp.sum(cp.real(target_freqs[m] * target_freqs[m].conj()))
+                target_amp /= target_freqs.size
+                CCmax = cross_correlation[m][maxima]
+            shifts[:, m] = shiftsm
+        # If upsampling > 1, then refine estimate with matrix multiply DFT
+        else:
+            # Initial shift estimate in upsampled grid
+            shifts = np.round(shifts * upsample_factor) / upsample_factor
+            upsampled_region_size = int(cp.ceil(upsample_factor * 1.5))
+            # Center of output array at dftshift + 1
+            dftshift = cp.fix(upsampled_region_size / 2.0)
+            upsample_factor = cp.array(upsample_factor, dtype=np.float64)
+            # Matrix multiply DFT around the current shift estimate
+            sample_region_offset = dftshift - shiftsm * upsample_factor
+            cross_correlation_new = _upsampled_dft(
+                image_product[m].conj(),
+                upsampled_region_size,
+                upsample_factor,
+                sample_region_offset,
+            ).conj()
+            # Locate maximum and map back to original pixel grid
+            maxima = cp.unravel_index(
+                cp.argmax(cp.abs(cross_correlation_new)), cross_correlation_new.shape
+            )
+            CCmax = cross_correlation_new[maxima]
+            maxima = cp.stack(maxima).astype(cp.float64) - dftshift
+            shiftsm = shiftsm + maxima / upsample_factor
+            return_error = False
+            shifts[:, m] = shiftsm
+
+            if return_error:
+                src_amp = np.sum(np.real(src_freq * src_freq.conj()))
+                target_amp = np.sum(np.real(target_freq * target_freq.conj()))
 
     if return_error:
         # Redirect user to masked_phase_cross_correlation if NaNs are observed
@@ -285,10 +297,14 @@ def phase_cross_correlation(reference_image, moving_image, *,
                 "input data or use the `reference_mask`/`moving_mask` "
                 "keywords, eg: "
                 "phase_cross_correlation(reference_image, moving_image, "
-                "reference_mask=~np.isnan(reference_image), "
-                "moving_mask=~np.isnan(moving_image))")
+                "reference_mask=~cp.isnan(reference_image), "
+                "moving_mask=~cp.isnan(moving_image))"
+            )
 
-        return shifts, _compute_error(CCmax, src_amp, target_amp),\
-            _compute_phasediff(CCmax)
+        return (
+            shifts,
+            _compute_error(CCmax, src_amp, target_amp),
+            _compute_phasediff(CCmax),
+        )
     else:
         return shifts

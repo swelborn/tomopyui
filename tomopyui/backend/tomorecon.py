@@ -170,13 +170,25 @@ class TomoRecon(TomoAlign):
         else:
             # defined in _main.py
             os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
-            self.recon = tomopy_algorithm.recon(
-                self.prjs,
-                self.tomo.theta,
-                algorithm=method_str,
-                init_recon=self.recon,
-                center=self.center,
-            )
+            if algorithm == "gridrec" or algorithm == "fbp":
+
+                self.recon = tomopy_algorithm.recon(
+                    self.prjs,
+                    self.tomo.theta,
+                    algorithm=method_str,
+                    init_recon=self.recon,
+                    center=self.center,
+                )
+            else:
+                self.recon = tomopy_algorithm.recon(
+                    self.prjs,
+                    self.tomo.theta,
+                    algorithm=method_str,
+                    init_recon=self.recon,
+                    center=self.center,
+                    num_iter=self.num_iter,
+                )
+
         return self
 
     def _main(self):

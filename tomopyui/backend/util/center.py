@@ -5,59 +5,13 @@
 import os.path
 
 import numpy as np
-from scipy import ndimage
-from scipy.optimize import minimize
-from skimage.registration import phase_cross_correlation
 
 from tomopy.misc.corr import circ_mask
-from tomopy.misc.morph import downsample
 from tomopy.recon.algorithm import recon
 import tomopy.util.dtype as dtype
-from tomopy.util.misc import fft2, write_tiff
-from tomopy.util.mproc import distribute_jobs
-
-allowed_recon_kwargs = {
-    "art": ["num_gridx", "num_gridy", "num_iter"],
-    "bart": ["num_gridx", "num_gridy", "num_iter", "num_block", "ind_block"],
-    "fbp": ["num_gridx", "num_gridy", "filter_name", "filter_par"],
-    "gridrec": ["num_gridx", "num_gridy", "filter_name", "filter_par"],
-    "mlem": ["num_gridx", "num_gridy", "num_iter"],
-    "osem": ["num_gridx", "num_gridy", "num_iter", "num_block", "ind_block"],
-    "ospml_hybrid": [
-        "num_gridx",
-        "num_gridy",
-        "num_iter",
-        "reg_par",
-        "num_block",
-        "ind_block",
-    ],
-    "ospml_quad": [
-        "num_gridx",
-        "num_gridy",
-        "num_iter",
-        "reg_par",
-        "num_block",
-        "ind_block",
-    ],
-    "pml_hybrid": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-    "pml_quad": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-    "sirt": ["num_gridx", "num_gridy", "num_iter"],
-    "tv": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-    "grad": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-    "tikh": ["num_gridx", "num_gridy", "num_iter", "reg_data", "reg_par"],
-}
-
-filter_names = {
-    "none",
-    "shepp",
-    "cosine",
-    "hann",
-    "hamming",
-    "ramlak",
-    "parzen",
-    "butterworth",
-}
-
+# includes astra_cuda_recon_algorithm_kwargs, tomopy_recon_algorithm_kwargs,
+# and tomopy_filter_names, extend_description_style
+from tomopyui._sharedvars import *
 
 def write_center(
     tomo,
