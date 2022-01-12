@@ -8,6 +8,7 @@ from tomopy.prep.alignment import scale as scale_tomo
 from tomopy.recon import algorithm as tomopy_algorithm
 from bqplot_image_gl import ImageGL
 from ipywidgets import *
+from tomopyui.backend.util.padding import *
 
 import astra
 import os
@@ -69,12 +70,10 @@ def align_joint(TomoAlign):
     }
 
     image_projection = ImageGL(
-        image=TomoAlign.prjs[projection_num],
-        scales=scales_image,
+        image=TomoAlign.prjs[projection_num], scales=scales_image,
     )
     image_simulated = ImageGL(
-        image=np.zeros_like(TomoAlign.prjs[projection_num]),
-        scales=scales_image,
+        image=np.zeros_like(TomoAlign.prjs[projection_num]), scales=scales_image,
     )
 
     projection_fig.marks = (image_projection,)
@@ -322,12 +321,7 @@ def simulate_projections(rec, sim, center, theta, progress=None):
         vol_geom = astra.create_vol_geom(_rec.shape[1], _rec.shape[1], _rec.shape[0])
         phantom_id = astra.data3d.create("-vol", vol_geom, data=_rec)
         proj_geom = astra.create_proj_geom(
-            "parallel3d",
-            1,
-            1,
-            _rec.shape[0],
-            _rec.shape[1],
-            theta,
+            "parallel3d", 1, 1, _rec.shape[0], _rec.shape[1], theta,
         )
         if center is not None:
             center_shift = -(center - _rec.shape[1] / 2)
@@ -399,10 +393,7 @@ def batch_cross_correlation(
         # In the warping section, we have to now warp prj by (-50, 0), so the
         # SAME sign of the shift value given here.
         shift_gpu = phase_cross_correlation(
-            _sim_gpu,
-            _prj_gpu,
-            upsample_factor=upsample_factor,
-            return_error=False,
+            _sim_gpu, _prj_gpu, upsample_factor=upsample_factor, return_error=False,
         )
         shift_cpu.append(cp.asnumpy(shift_gpu))
         if progress is not None:

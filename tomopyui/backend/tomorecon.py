@@ -1,18 +1,15 @@
 from joblib import Parallel, delayed
 from time import process_time, perf_counter, sleep
-from skimage.registration import phase_cross_correlation
-from skimage import transform
 from tomopy.recon import wrappers
 from tomopy.prep.alignment import scale as scale_tomo
 from contextlib import nullcontext
 from tomopy.recon import algorithm
 from tomopy.misc.corr import circ_mask
-from skimage.transform import rescale
 from .util.metadata_io import save_metadata, load_metadata
 from tomopy.recon import algorithm as tomopy_algorithm
 from tomopyui.backend.tomoalign import TomoAlign
+from tomopyui.backend.util.padding import *
 
-import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
 import tomopyui.backend.tomodata as td
 import matplotlib.pyplot as plt
 import datetime
@@ -21,10 +18,12 @@ import json
 import astra
 import os
 import tifffile as tf
-import cupy as cp
 import tomopy
 import numpy as np
 
+if os.environ["cuda_enabled"] == "True":
+    import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
+    import cupy as cp
 
 class TomoRecon(TomoAlign):
     """ """
@@ -107,6 +106,13 @@ class TomoRecon(TomoAlign):
         # ensure it only runs on 1 thread for CUDA
         os.environ["TOMOPY_PYTHON_THREADS"] = "1"
         method_str = list(self.metadata["methods"].keys())[0]
+        if (method_str in self.Recon.astra_cuda_methods_list and 
+                os.environ["cuda_enabled"] == "True"
+            ):
+            self.current_recon_is_cuda = True
+        else:
+            self.current_recon_is_cuda = False
+
         if method_str == "MLEM_CUDA":
             method_str = "EM_CUDA"
 
@@ -142,7 +148,7 @@ class TomoRecon(TomoAlign):
                 rec=self.recon,
                 center=self.center,
             )
-        else:
+        elif self.current_recon_is_cuda:
             # Options go into kwargs which go into recon()
             kwargs = {}
             options = {
@@ -152,7 +158,6 @@ class TomoRecon(TomoAlign):
                 # TODO: "extra_options": {},
             }
             kwargs["options"] = options
-
             self.recon = tomopy_algorithm.recon(
                 self.prjs,
                 self.tomo.theta,
@@ -161,6 +166,16 @@ class TomoRecon(TomoAlign):
                 center=self.center,
                 ncore=1,
                 **kwargs,
+            )
+        else:
+            # defined in _main.py
+            os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
+            self.recon = tomopy_algorithm.recon(
+                self.prjs,
+                self.tomo.theta,
+                algorithm=method_str,
+                init_recon=self.recon,
+                center=self.center,
             )
         return self
 
@@ -175,6 +190,8 @@ class TomoRecon(TomoAlign):
             super().init_prj()
             tic = time.perf_counter()
             self.reconstruct()
+            self.recon = unpad_rec_with_pad(self.recon, self.pad_ds)
+            self.recon = circ_mask(self.recon, axis=0)
             toc = time.perf_counter()
 
             self.metadata["reconstruction_time"] = {

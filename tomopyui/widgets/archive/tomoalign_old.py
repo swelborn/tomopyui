@@ -605,12 +605,7 @@ def simulate_projections(rec, sim, center, theta):
         vol_geom = astra.create_vol_geom(_rec.shape[1], _rec.shape[1], _rec.shape[0])
         phantom_id = astra.data3d.create("-vol", vol_geom, data=_rec)
         proj_geom = astra.create_proj_geom(
-            "parallel3d",
-            1,
-            1,
-            _rec.shape[0],
-            _rec.shape[1],
-            theta,
+            "parallel3d", 1, 1, _rec.shape[0], _rec.shape[1], theta,
         )
         if center is not None:
             center_shift = -(center - _rec.shape[1] / 2)
@@ -680,10 +675,7 @@ def batch_cross_correlation(
         # In the warping section, we have to now warp prj by (-50, 0), so the
         # SAME sign of the shift value given here.
         shift_gpu = phase_cross_correlation(
-            _sim_gpu,
-            _prj_gpu,
-            upsample_factor=upsample_factor,
-            return_error=False,
+            _sim_gpu, _prj_gpu, upsample_factor=upsample_factor, return_error=False,
         )
         shift_cpu.append(cp.asnumpy(shift_gpu))
     # shift_cpu = np.concatenate(shift_cpu, axis=1)

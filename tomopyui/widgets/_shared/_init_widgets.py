@@ -57,11 +57,7 @@ def init_widgets(obj):
     )
 
     obj.plotting_vbox = VBox(
-        [
-            obj.plot_prj_images_button,
-            VBox([]),
-            obj.prj_plotter.set_range_button,
-        ],
+        [obj.plot_prj_images_button, VBox([]), obj.prj_plotter.set_range_button,],
         layout=Layout(align_content="center"),
     )
 
@@ -78,9 +74,14 @@ def init_widgets(obj):
     )
 
     # -- Method Options -------------------------------------------------------
-    obj.methods_opts = {key: False for key in obj.methods_list}
-    obj.methods_checkboxes = helpers.create_checkboxes_from_opt_list(
-        obj.methods_list, obj.methods_opts, obj
+    obj.methods_opts = {
+        key: False for key in obj.tomopy_methods_list + obj.astra_cuda_methods_list
+    }
+    obj.tomopy_methods_checkboxes = helpers.create_checkboxes_from_opt_list(
+        obj.tomopy_methods_list, obj.methods_opts, obj
+    )
+    obj.astra_cuda_methods_checkboxes = helpers.create_checkboxes_from_opt_list(
+        obj.astra_cuda_methods_list, obj.methods_opts, obj
     )
 
     # -- Projection Range Sliders ---------------------------------------------
@@ -221,7 +222,9 @@ def _set_widgets_from_load_metadata(obj):
         obj.radio_fulldataset.value = "Full"
 
     # -- Saving Options -------------------------------------------------------
-    obj.save_opts_checkboxes = helpers.set_checkbox_bool(obj.save_opts_checkboxes, obj.metadata["save_opts"], obj)
+    obj.save_opts_checkboxes = helpers.set_checkbox_bool(
+        obj.save_opts_checkboxes, obj.metadata["save_opts"], obj
+    )
 
     # -- Method Options -------------------------------------------------------
     # for key in obj.metadata["methods"]:
@@ -234,10 +237,8 @@ def _set_widgets_from_load_metadata(obj):
     #             if checkbox.description == str(key):
     #                 checkbox.value = False
     obj.methods_checkboxes = helpers.set_checkbox_bool(
-                                                obj.methods_checkboxes, 
-                                                obj.metadata["methods"], 
-                                                obj)
-
+        obj.methods_checkboxes, obj.metadata["methods"], obj
+    )
 
     # -- Projection Range Sliders ---------------------------------------------
     # Not implemented in load metadata.

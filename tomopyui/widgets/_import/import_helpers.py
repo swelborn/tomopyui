@@ -38,8 +38,7 @@ def create_angles_textboxes(Import):
             )
 
         textbox.observe(
-            functools.partial(angle_callbacks, key=metadatakey),
-            names="value",
+            functools.partial(angle_callbacks, key=metadatakey), names="value",
         )
         return textbox
 

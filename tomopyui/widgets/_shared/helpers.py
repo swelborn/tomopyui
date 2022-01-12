@@ -12,6 +12,32 @@ import tifffile as tf
 import asyncio
 import logging
 import ipywidgets as widgets
+import importlib.util
+import sys
+
+
+def import_module_set_env(import_dict):
+    """
+    From https://stackoverflow.com/questions/1051254/check-if-python-package-is-installed
+
+    Safely imports a module or package and sets an environment variable if it 
+    imports (or is already imported). This is used in the main function for
+    checking whether or not `cupy` is installed. If it is not installed, then 
+    options for cuda-enabled functions will be greyed out.
+    """
+    for key in import_dict:
+        if key in sys.modules:
+            os.environ[import_dict[key]] = "True"
+            pass
+        elif (spec := importlib.util.find_spec(key)) is not None:
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[key] = module
+            spec.loader.exec_module(module)
+            os.environ[import_dict[key]] = "True"
+        else:
+            os.environ[import_dict[key]] = "False"
+            pass
+
 
 # From ipywidgets readthedocs
 class OutputWidgetHandler(logging.Handler):
@@ -117,7 +143,6 @@ def create_checkboxes_from_opt_list(opt_list, dictionary, obj):
 
 
 def set_checkbox_bool(checkbox_list, dictionary, obj):
-
     def create_opt_dict_on_check(change):
         dictionary[change.owner.description] = change.new
         obj.set_metadata()  # obj needs a set_metadata function

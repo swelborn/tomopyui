@@ -15,6 +15,9 @@ from mpl_interactions import (
 from tomopyui.backend.util.center import write_center
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
 from tomopyui.backend.util.metadata_io import save_metadata, load_metadata
+# includes astra_cuda_recon_algorithm_kwargs, tomopy_recon_algorithm_kwargs,
+# and tomopy_filter_names, extend_description_style
+from tomopyui._sharedvars import *
 
 import functools
 import os
@@ -23,52 +26,6 @@ import tomopyui.backend.tomodata as td
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
-
-extend_description_style = {"description_width": "auto"}
-
-# TODO: put this in its own file
-allowed_recon_kwargs = {
-    "art": ["num_gridx", "num_gridy", "num_iter"],
-    "bart": ["num_gridx", "num_gridy", "num_iter", "num_block", "ind_block"],
-    "fbp": ["num_gridx", "num_gridy", "filter_name", "filter_par"],
-    "gridrec": ["num_gridx", "num_gridy", "filter_name", "filter_par"],
-    "mlem": ["num_gridx", "num_gridy", "num_iter"],
-    "osem": ["num_gridx", "num_gridy", "num_iter", "num_block", "ind_block"],
-    "ospml_hybrid": [
-        "num_gridx",
-        "num_gridy",
-        "num_iter",
-        "reg_par",
-        "num_block",
-        "ind_block",
-    ],
-    "ospml_quad": [
-        "num_gridx",
-        "num_gridy",
-        "num_iter",
-        "reg_par",
-        "num_block",
-        "ind_block",
-    ],
-    "pml_hybrid": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-    "pml_quad": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-    "sirt": ["num_gridx", "num_gridy", "num_iter"],
-    "tv": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-    "grad": ["num_gridx", "num_gridy", "num_iter", "reg_par"],
-    "tikh": ["num_gridx", "num_gridy", "num_iter", "reg_data", "reg_par"],
-}
-
-filter_names = {
-    "none",
-    "shepp",
-    "cosine",
-    "hann",
-    "hamming",
-    "ramlak",
-    "parzen",
-    "butterworth",
-}
-
 
 class Import:
     """
@@ -246,17 +203,11 @@ class Import:
         """
         if self.fname.__contains__(".tif"):
             self.prj_shape = helpers.get_img_shape(
-                self.fpath,
-                self.fname,
-                "tiff",
-                self.metadata,
+                self.fpath, self.fname, "tiff", self.metadata,
             )
         elif self.fname.__contains__(".npy"):
             self.prj_shape = helpers.get_img_shape(
-                self.fpath,
-                self.fname,
-                "npy",
-                self.metadata,
+                self.fpath, self.fname, "npy", self.metadata,
             )
         elif self.fname == "":
             self.prj_shape = helpers.get_img_shape(
@@ -670,9 +621,7 @@ class Center:
     def _init_widgets(self):
 
         self.center_textbox = FloatText(
-            description="Center: ",
-            disabled=False,
-            style=extend_description_style,
+            description="Center: ", disabled=False, style=extend_description_style,
         )
         self.load_rough_center = Button(
             description="Click to load rough center from imported data.",
@@ -720,12 +669,12 @@ class Center:
             value=self.search_step,
         )
         self.algorithms_dropdown = Dropdown(
-            options=[key for key in allowed_recon_kwargs],
+            options=[key for key in tomopy_recon_algorithm_kwargs],
             value=self.algorithm,
             description="Algorithm:",
         )
         self.filters_dropdown = Dropdown(
-            options=[key for key in filter_names],
+            options=[key for key in tomopy_filter_names],
             value=self.filter,
             description="Algorithm:",
         )
@@ -962,12 +911,7 @@ class Center:
         self.automatic_center_vbox = VBox(
             [
                 HBox([self.find_center_button, self.find_center_vo_button]),
-                HBox(
-                    [
-                        self.center_guess_textbox,
-                        self.index_to_try_textbox,
-                    ]
-                ),
+                HBox([self.center_guess_textbox, self.index_to_try_textbox,]),
             ]
         )
         self.automatic_center_accordion = Accordion(
@@ -1133,14 +1077,9 @@ class Align:
         self.paddingX = 10
         self.paddingY = 10
         self.partial = False
-        self.methods_list = [
-            "FBP CUDA",
-            "SIRT CUDA",
-            "SART CUDA",
-            "CGLS CUDA",
-            "MLEM CUDA",
-            "SIRT Plugin",
-            "SIRT 3D",
+        self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
+        self.astra_cuda_methods_list = [
+            key for key in astra_cuda_recon_algorithm_kwargs
         ]
         self.prj_plotter = Plotter(self.Import)
         self.metadata = {}
@@ -1287,6 +1226,7 @@ class Align:
 
     # -- Button to start alignment ----------------------------------------
     def set_options_and_run(self, change):
+        change.button_style = "info"
         change.icon = "fas fa-cog fa-spin fa-lg"
         change.description = (
             "Setting options and loading data into alignment algorithm."
@@ -1433,14 +1373,32 @@ class Align:
         )
 
         self.save_options_accordion = Accordion(
-            children=[save_hbox],
-            selected_index=None,
-            titles=("Save Options",),
+            children=[save_hbox], selected_index=None, titles=("Save Options",),
         )
 
         # -- Methods ----------------------------------------------------------
+        tomopy_methods_hbox = HBox(
+            [
+                Label("Tomopy:", layout=Layout(width="200px", align_content="center")),
+                HBox(
+                    self.tomopy_methods_checkboxes,
+                    layout=widgets.Layout(flex_flow="row wrap"),
+                ),
+            ]
+        )
+        astra_methods_hbox = HBox(
+            [
+                Label("Astra:", layout=Layout(width="100px", align_content="center")),
+                HBox(
+                    self.astra_cuda_methods_checkboxes,
+                    layout=widgets.Layout(flex_flow="row wrap"),
+                ),
+            ]
+        )
+
         recon_method_box = VBox(
-            self.methods_checkboxes, layout=widgets.Layout(flex_flow="row wrap")
+            [tomopy_methods_hbox, astra_methods_hbox],
+            layout=widgets.Layout(flex_flow="row wrap"),
         )
         self.methods_accordion = Accordion(
             children=[recon_method_box], selected_index=None, titles=("Methods",)
@@ -1449,10 +1407,7 @@ class Align:
         # -- Box organization -------------------------------------------------
 
         pixel_range_slider_vb = VBox(
-            [
-                self.prj_range_x_slider,
-                self.prj_range_y_slider,
-            ],
+            [self.prj_range_x_slider, self.prj_range_y_slider,],
             layout=Layout(width="40%"),
             justify_content="center",
             align_items="space-between",
@@ -1519,9 +1474,7 @@ class Align:
                 self.options_accordion,
                 start_button_hb,
                 progress_hbox,
-                VBox(
-                    [self.plot_output1, self.plot_output2],
-                ),
+                VBox([self.plot_output1, self.plot_output2],),
             ]
         )
 
@@ -1584,14 +1537,34 @@ class Recon(Align):
         )
 
         self.save_options_accordion = Accordion(
-            children=[save_hbox],
-            selected_index=None,
-            titles=("Save Options",),
+            children=[save_hbox], selected_index=None, titles=("Save Options",),
         )
 
         # -- Methods ----------------------------------------------------------
+        tomopy_methods_hbox = HBox(
+            [
+                Label("Tomopy:", layout=Layout(width="200px", align_content="center")),
+                HBox(
+                    self.tomopy_methods_checkboxes,
+                    layout=widgets.Layout(flex_flow="row wrap"),
+                ),
+            ],
+            layout=Layout(align_content="center"),
+        )
+        astra_methods_hbox = HBox(
+            [
+                Label("Astra:", layout=Layout(width="100px", align_content="center")),
+                HBox(
+                    self.astra_cuda_methods_checkboxes,
+                    layout=widgets.Layout(flex_flow="row wrap"),
+                ),
+            ],
+            layout=Layout(align_content="center"),
+        )
+
         recon_method_box = VBox(
-            self.methods_checkboxes, layout=widgets.Layout(flex_flow="row wrap")
+            [tomopy_methods_hbox, astra_methods_hbox],
+            layout=widgets.Layout(flex_flow="row wrap"),
         )
         self.methods_accordion = Accordion(
             children=[recon_method_box], selected_index=None, titles=("Methods",)
@@ -1600,10 +1573,7 @@ class Recon(Align):
         # -- Box organization -------------------------------------------------
 
         pixel_range_slider_vb = VBox(
-            [
-                self.prj_range_x_slider,
-                self.prj_range_y_slider,
-            ],
+            [self.prj_range_x_slider, self.prj_range_y_slider,],
             layout=Layout(width="30%"),
             justify_content="center",
             align_items="space-between",

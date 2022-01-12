@@ -45,13 +45,7 @@ big_grid = pd.DataFrame(
         col2=[10, 20, 30, 40, 50],
         coord1=[6, 7, 8, 9, 10],
         coord2=[6, 7, 8, 9, 10],
-        info=[
-            "info1",
-            "info2",
-            "info3",
-            "info4",
-            "info5",
-        ],
+        info=["info1", "info2", "info3", "info4", "info5",],
     )
 )
 list_elem = ["col1", "col2", "info"]

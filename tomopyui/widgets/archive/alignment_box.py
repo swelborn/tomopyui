@@ -73,9 +73,7 @@ def alignment_box(meta, aligned_tomo_list, tomo, widget_linker, generalmetadata)
     )
 
     number_of_align_iterations = IntText(
-        description="Number of Iterations: ",
-        style=extend_description_style,
-        value=20,
+        description="Number of Iterations: ", style=extend_description_style, value=20,
     )
     center_of_rotation = IntText(
         description="Center of Rotation: ",
@@ -463,11 +461,7 @@ def alignment_box(meta, aligned_tomo_list, tomo, widget_linker, generalmetadata)
 
     def create_save_checkboxes(opts):
         checkboxes = [
-            Checkbox(
-                description=opt,
-                style=extend_description_style,
-            )
-            for opt in opts
+            Checkbox(description=opt, style=extend_description_style,) for opt in opts
         ]
         return checkboxes
 
@@ -477,8 +471,7 @@ def alignment_box(meta, aligned_tomo_list, tomo, widget_linker, generalmetadata)
         (
             opt.observe(
                 functools.partial(
-                    create_save_dict_on_checkmark,
-                    opt_list=save_checkboxes,
+                    create_save_dict_on_checkmark, opt_list=save_checkboxes,
                 ),
                 names=["value"],
             )

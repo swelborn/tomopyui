@@ -3,14 +3,13 @@
 from copy import copy, deepcopy
 from skimage.transform import rescale  # look for better option
 from time import perf_counter
-from ..tomocupy.prep.alignment import shift_prj_cp
-from ..tomocupy.prep.alignment import align_joint
+import os
+if os.environ["cuda_enabled"] == "True":
+    from ..tomocupy.prep.alignment import align_joint_cupy
+    from ..tomocupy.prep.alignment import shift_prj_cp
+from tomopy.prep.alignment import align_joint as align_joint_tomopy
 from .util.metadata_io import save_metadata, load_metadata
-from .util.pad_projections import pad_projections
-from .util.trim_padding import trim_padding
-
-
-# from tqdm.notebook import tnrange, tqdm
+from tomopyui.backend.util.padding import *
 
 import datetime
 import json
@@ -124,13 +123,21 @@ class TomoAlign:
             self.center = self.center * self.downsample_factor
 
         # Pad
-        self.prjs, self.pad_ds = pad_projections(self.prjs, self.pad_ds, 1)
+        self.prjs, self.pad_ds = pad_projections(self.prjs, self.pad_ds)
 
     def align(self):
         """
         Aligns a TomoData object using options in GUI.
         """
-        align_joint(self)
+        for key in self.metadata["methods"]:
+            if (key in self.Align.astra_cuda_methods_list and 
+                    os.environ["cuda_enabled"] == "True"
+                ):
+                align_joint_cupy(self)
+                self.current_align_is_cuda = True
+            else:
+                self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(self.prjs, self.tomo.theta, upsample_factor=self.upsample_factor, center=self.center, algorithm=key, iters=self.num_iter)
+                self.current_align_is_cuda = False
 
     def save_align_data(self):
 
@@ -175,6 +182,22 @@ class TomoAlign:
         np.save("sy", self.sy)
         np.save("conv", self.conv)
 
+    def _shift_prjs_after_alignment(self,):
+        new_prj_imgs = deepcopy(self.tomo.prj_imgs)
+        new_prj_imgs, self.pad = pad_projections(new_prj_imgs, self.pad, 1)
+        new_prj_imgs = shift_prj_cp(
+            new_prj_imgs,
+            self.sx,
+            self.sy,
+            self.num_batches,
+            self.pad,
+            use_corr_prj_gpu=False,
+        )
+        new_prj_imgs = trim_padding(new_prj_imgs)
+        self.tomo_aligned = td.TomoData(
+                prj_imgs=new_prj_imgs, metadata=self.Align.Import.metadata
+        )
+
     def _main(self):
         """
         Reconstructs a TomoData object using options in GUI.
@@ -187,20 +210,13 @@ class TomoAlign:
             tic = perf_counter()
             self.align()
             # make new dataset and pad/shift it
-            new_prj_imgs = deepcopy(self.tomo.prj_imgs)
-            new_prj_imgs, self.pad = pad_projections(new_prj_imgs, self.pad, 1)
-            new_prj_imgs = shift_prj_cp(
-                new_prj_imgs,
-                self.sx,
-                self.sy,
-                self.num_batches,
-                self.pad,
-                use_corr_prj_gpu=False,
-            )
-            new_prj_imgs = trim_padding(new_prj_imgs)
-            self.tomo_aligned = td.TomoData(
-                prj_imgs=new_prj_imgs, metadata=self.Align.Import.metadata
-            )
+            if self.current_align_is_cuda: 
+                self._shift_prjs_after_alignment()
+            else:
+                self.tomo_aligned = td.TomoData(
+                prj_imgs=self.prjs, metadata=self.Align.Import.metadata
+                )
+
             toc = perf_counter()
             self.metadata["alignment_time"] = {
                 "seconds": toc - tic,
