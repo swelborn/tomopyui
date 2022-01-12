@@ -147,10 +147,11 @@ class TomoAlign:
         dt_string = now.strftime("%Y%m%d-%H%M-")
         method_str = list(self.metadata["methods"].keys())[0]
         os.chdir(self.wd)
-        os.mkdir(dt_string + method_str)
-        os.chdir(dt_string + method_str)
+        savedir = dt_string + method_str
+        os.mkdir(savedir)
+        os.chdir(savedir)
+        self.metadata["savedir"] = os.getcwd()
         save_metadata("metadata.json", self.metadata)
-
         if self.metadata["save_opts"]["tomo_after"]:
             if self.metadata["save_opts"]["npy"]:
                 np.save("projections_after_alignment", self.tomo_aligned.prj_imgs)
@@ -177,7 +178,7 @@ class TomoAlign:
                 and not self.metadata["save_opts"]["npy"]
             ):
                 tf.imwrite("last_recon.tif", self.recon)
-
+        self.Align.run_list.append({savedir: self.metadata})
         np.save("sx", self.sx)
         np.save("sy", self.sy)
         np.save("conv", self.conv)
