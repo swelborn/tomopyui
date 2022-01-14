@@ -36,6 +36,12 @@ class TomoAlign:
         self.sy = None
         self.conv = None
         self.recon = None
+        # TODO: probably not great place to store
+        self.metadata["parent_fpath"] = self.Align.Import.fpath
+        self.metadata["parent_fname"] = self.Align.Import.fname
+        self.metadata["angle_start"] = self.Align.Import.angle_start
+        self.metadata["angle_end"] = self.Align.Import.angle_end
+
         self.make_wd()
         self._main()
 
@@ -217,11 +223,7 @@ class TomoAlign:
             self.metadata = metadata_list[i]
             self.init_prj()
             tic = perf_counter()
-            print(self.pad)
-            print(self.pad_ds)
             self.align()
-            print(self.pad)
-            print(self.pad_ds)
             # make new dataset and pad/shift it
             if self.current_align_is_cuda: 
                 self._shift_prjs_after_alignment()

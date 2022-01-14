@@ -39,10 +39,10 @@ def init_widgets(obj):
     # -- Button to load metadata ----------------------------------------------
     obj.load_metadata_button = Button(
         description="Click to load metadata.",
+        icon="upload",
         disabled=True,
         button_style="info",  # 'success', 'info', 'warning', 'danger' or ''
         tooltip="First choose a metadata file in the Import tab, then click here",
-        icon="",
         layout=Layout(width="auto", justify_content="center"),
     )
 

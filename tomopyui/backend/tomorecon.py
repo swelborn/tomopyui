@@ -15,13 +15,13 @@ import matplotlib.pyplot as plt
 import datetime
 import time
 import json
-import astra
 import os
 import tifffile as tf
 import tomopy
 import numpy as np
 
 if os.environ["cuda_enabled"] == "True":
+    import astra
     import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
     import cupy as cp
 
@@ -31,6 +31,10 @@ class TomoRecon(TomoAlign):
     def __init__(self, Recon, Align=None):
         # -- Creating attributes for reconstruction calcs ---------------------
         self._set_attributes_from_frontend(Recon)
+        self.metadata["parent_fpath"] = self.Recon.Import.fpath
+        self.metadata["parent_fname"] = self.Recon.Import.fname
+        self.metadata["angle_start"] = self.Recon.Import.angle_start
+        self.metadata["angle_end"] = self.Recon.Import.angle_end
         self.tomo = td.TomoData(metadata=Recon.Import.metadata)
         self.recon = None
         self.wd_parent = Recon.Import.wd

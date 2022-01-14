@@ -12,12 +12,14 @@ from mpl_interactions import (
     zoom_factory,
     panhandler,
 )
+from bqplot_image_gl import ImageGL
 from tomopyui.backend.util.center import write_center
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
-from tomopyui.backend.util.metadata_io import save_metadata, load_metadata
+from tomopyui.backend.util.metadata_io import save_metadata, load_metadata, metadata_to_DataFrame
 # includes astra_cuda_recon_algorithm_kwargs, tomopy_recon_algorithm_kwargs,
 # and tomopy_filter_names, extend_description_style
 from tomopyui._sharedvars import *
+from tomopyui.backend.tomodata import TomoData
 
 import functools
 import os
@@ -26,6 +28,11 @@ import tomopyui.backend.tomodata as td
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
+import bqplot as bq
+import pathlib
+
+
+
 
 class Import:
     """
@@ -160,12 +167,6 @@ class Import:
             "prj_range_y": self.prj_range_y,
         } | self.import_opts
 
-    def load_metadata(self):
-        """
-        TODO: each class should have their own loading function.
-        """
-        print("load metadata here")
-
     def update_file_information(self):
         """
         Callback for `Import`.filechooser.
@@ -268,6 +269,8 @@ class Plotter:
     ----------
     Import : `Import`
         Needs an import object to be constructed.
+    DataExplorer : `DataExplorer`
+        Optionally imports a `DataExplorer` object
     prj_range_x_slider : :doc:`IntRangeSlider <ipywidgets:index>`
         Used in both Align and Recon as their x range slider.
     prj_range_y_slider : :doc:`IntRangeSlider <ipywidgets:index>`
@@ -288,9 +291,13 @@ class Plotter:
         of the :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` with its current :doc:`histogram <mpl-interactions:examples/hist>` threshold range.
     """
 
-    def __init__(self, Import):
+    def __init__(self, Import, DataExplorer=None):
 
+        self.DataExplorer = DataExplorer
         self.Import = Import
+        self._init_widgets()
+
+    def _init_widgets(self):
         self.prj_range_x_slider = IntRangeSlider(
             value=[0, 10],
             min=0,
@@ -464,6 +471,132 @@ class Plotter:
         self.threshold_control_list = [
             slider for slider in threshold_control.vbox.children
         ]
+
+
+    def _remove_high_low_intensity_on_click(self, imagestack, scale, slider):
+        vmin, vmax = np.percentile(imagestack, q=(0.5, 99.5))
+        slider.min = vmin
+        slider.max = vmax
+        self._set_bqplot_hist_range(scale, vmin, vmax)
+
+
+    def _set_bqplot_hist_range(self, scale, vmin, vmax):
+        scale["image"].min = vmin
+        scale["image"].max = vmax
+
+
+    def _create_two_plots_with_two_sliders(self, imagestacks, titles):
+        fig1, plotted_image1, scale_image1 = self._create_bqplot_from_imagestack(imagestacks[0], titles[0])
+        fig2, plotted_image2, scale_image2 = self._create_bqplot_from_imagestack(imagestacks[1], titles[1])
+        figs = [fig1, fig2]
+        images = [plotted_image1, plotted_image2]
+        scales = [scale_image1, scale_image2]
+
+        # slider 1 + play button
+        def change_image1(change):
+            plotted_image1.image = imagestacks[0][change.new]
+
+        slider1 = IntSlider(
+            value=0,
+            min=0,
+            max=imagestacks[0].shape[0]-1,
+            step=1,
+            )
+        slider1.observe(change_image1, names="value")
+
+        play1 = Play(
+            value=0,
+            min=0,
+            max=imagestacks[0].shape[0]-1,
+            step=1,
+            interval=100,
+            disabled=False
+        )
+        jslink((play1, 'value'), (slider1, 'value'))
+
+        # slider 2 + play button
+        def change_image2(change):
+            plotted_image2.image = imagestacks[1][change.new]
+
+        slider2 = IntSlider(
+            value=0,
+            min=0,
+            max=imagestacks[1].shape[0]-1,
+            step=1,
+            )
+        slider2.observe(change_image2, names="value")
+        play2 = Play(
+            value=0,
+            min=0,
+            max=imagestacks[1].shape[0]-1,
+            step=1,
+            interval=100,
+            disabled=False
+        )
+        jslink((play2, 'value'), (slider2, 'value'))
+
+        sliders = [slider1, slider2]
+        plays = [play1, play2]
+
+        return figs, images, scales, sliders, plays
+
+    def _create_two_plots_with_single_slider(self, imagestacks, titles):
+
+        fig1, plotted_image1, scale_image1 = self._create_bqplot_from_imagestack(imagestacks[0], titles[0])
+        fig2, plotted_image2, scale_image2 = self._create_bqplot_from_imagestack(imagestacks[1], titles[1])
+        figs = [fig1, fig2]
+        images = [plotted_image1, plotted_image2]
+        scales = [scale_image1, scale_image2]
+
+        def change_image(change):
+            plotted_image1.image = imagestacks[0][change.new]
+            plotted_image2.image = imagestacks[1][change.new]
+
+        slider = IntSlider(
+            value=0,
+            min=0,
+            max=imagestacks[0].shape[0]-1,
+            step=1,
+            )
+        slider.observe(change_image, names="value")
+
+        play = Play(
+            value=0,
+            min=0,
+            max=imagestacks[0].shape[0]-1,
+            step=1,
+            interval=100,
+            disabled=False
+        )
+        jslink((play, 'value'), (slider, 'value'))
+
+
+        return figs, images, scales, slider, play
+
+    def _create_bqplot_from_imagestack(self, imagestack, title="title"):
+        scale_x = bq.LinearScale(min=0, max=1)
+        scale_y = bq.LinearScale(min=1, max=0)
+        scale_x_y = {"x": scale_x, "y": scale_y}
+        fig = bq.Figure(scales=scale_x_y)
+        projection_num = 0
+        scale_image = {
+            "x": scale_x,
+            "y": scale_y,
+            "image": bq.ColorScale(
+                min=float(np.min(imagestack)),
+                max=float(np.max(imagestack)),
+                scheme="viridis",
+            ),
+        }
+        plotted_image = ImageGL(
+            image=imagestack[projection_num], scales=scale_image,
+        )
+        fig.marks = (plotted_image,)
+        fig.layout.width = "550px"
+        fig.layout.height = "550px"
+        fig.title = f"{title}"
+
+        return fig, plotted_image, scale_image
 
     def save_prj_animation(self):
         """
@@ -1631,3 +1764,347 @@ class Recon(Align):
                 start_button_hb,
             ]
         )
+
+
+class DataExplorer:
+
+    def __init__(self, Import, image_metadata, obj: Align or Recon):
+        self.imagestacks = np.zeros((15,100,100))
+        self.titles = image_metadata["titles"]
+        self.linked_stacks = image_metadata["linked_stacks"]
+        self.Plotter = Plotter(Import)
+        self.figs = None
+        self.images = None
+        self.scales = None
+        self.projection_num_sliders = None
+        self.imagestacks_metadata = None
+        self.plays = None
+        self.app_output = Output()
+        self.button_style = {"font_size":"22px"}
+        self.button_layout = Layout(width="45px", height="40px")
+        self.tomos = [None for i in range(2)]
+        self.obj = obj
+        self.filebrowser = Filebrowser()
+        self.filebrowser.create_file_browser()
+        self.filebrowser.load_data_button.on_click(self.load_data_from_filebrowser)
+
+        if obj.widget_type == "Align":
+            self.run_list_selector = Select(
+                options=[],
+                rows=5,
+                description='Alignments:',
+                disabled=False
+            )
+        else:
+            self.run_list_selector = Select(
+                options=[],
+                rows=5,
+                description='Reconstructions:',
+                disabled=False
+            )
+        self.run_list_selector.observe(self.choose_file_to_plot, names="value")
+        self.load_run_list_button = Button(description="Load alignment list", icon="download", button_style="info", layout=Layout(width="auto"))
+        self.load_run_list_button.on_click(self._load_run_list_on_click)
+
+    def load_data_from_filebrowser(self, change):
+        metadata={}
+        metadata["fpath"] = self.filebrowser.metadata["parent_fpath"]
+        metadata["fname"] = self.filebrowser.metadata["parent_fname"]
+        metadata["angle_start"] = self.filebrowser.metadata["angle_start"]
+        metadata["angle_end"] = self.filebrowser.metadata["angle_end"]
+        self.tomos[0] = TomoData(metadata=metadata)
+        metadata["fpath"] = str(self.filebrowser.selected_method)
+        metadata["fname"] = str(self.filebrowser.selected_data_fname)
+        # TODO: make this agnostic to recon/tomo
+        self.tomos[1] = TomoData(metadata=metadata)
+        self.imagestacks = [self.tomos[0].prj_imgs, self.tomos[1].prj_imgs]
+        self.create_figures_and_widgets()
+        self._create_image_app()
+
+
+    def create_figures_and_widgets(self):
+        if self.linked_stacks:
+            (self.figs, 
+            self.images, 
+            self.scales, 
+            self.projection_num_sliders,
+            self.plays) = self.Plotter._create_two_plots_with_single_slider(
+                                                        self.imagestacks, 
+                                                        self.titles
+            )
+            self.projection_num_sliders = [self.projection_num_sliders]
+            self.plays = [self.plays]
+
+        else:
+            (self.figs, 
+            self.images, 
+            self.scales, 
+            self.projection_num_sliders,
+            self.plays) = self.Plotter._create_two_plots_with_two_sliders(
+                                                        self.imagestacks, 
+                                                        self.titles
+            )
+
+        self.vmin_vmax_sliders = self._create_vmin_vmax_sliders()
+        self.remove_high_low_intensity_buttons = self._create_remove_high_low_intensity_buttons()
+        self.reset_button = Button(icon="redo", style=self.button_style, layout=self.button_layout)
+        self.reset_button.on_click(self._reset_on_click)
+
+    def _create_vmin_vmax_sliders(self):
+        vmin = self.imagestacks[0].min()
+        vmax = self.imagestacks[0].max()
+        slider1 = (FloatRangeSlider(description="vmin-vmax:",
+            min=vmin,
+            max=vmax,
+            step=(vmax-vmin)/1000,
+            value=(vmin, vmax),
+            orientation="vertical"
+            )
+        )
+        def change_vmin_vmax1(change):
+            self.scales[0]["image"].min = change["new"][0]
+            self.scales[0]["image"].max = change["new"][1]
+        slider1.observe(change_vmin_vmax1, names="value")
+
+        vmin = self.imagestacks[1].min()
+        vmax = self.imagestacks[1].max()
+        slider2 = (FloatRangeSlider(description="vmin-vmax:",
+            min=vmin,
+            max=vmax,
+            step=(vmax-vmin)/1000,
+            value=(vmin, vmax),
+            orientation="vertical"
+            )
+        )
+        def change_vmin_vmax2(change):
+            self.scales[1]["image"].min = change["new"][0]
+            self.scales[1]["image"].max = change["new"][1]
+        slider2.observe(change_vmin_vmax2, names="value")
+
+        sliders = [slider1, slider2]
+
+        return sliders
+
+
+    def _create_remove_high_low_intensity_buttons(self):
+        """
+        Parameters
+        ----------
+        imagestack: np.ndarray
+            images that it will use to find vmin, vmax - this is found by 
+            getting the 0.5 and 99.5 percentiles of the data
+        scale: dict
+            
+        """
+        def remove_high_low_intensity_on_click1(change):
+            # defaults to going with the high/low value from 
+            self.Plotter._remove_high_low_intensity_on_click(self.imagestacks[0],
+                                                            self.scales[0], 
+                                                            self.vmin_vmax_sliders[0])
+        def remove_high_low_intensity_on_click2(change):
+            # defaults to going with the high/low value from 
+            self.Plotter._remove_high_low_intensity_on_click(self.imagestacks[1],
+                                                            self.scales[1], 
+                                                            self.vmin_vmax_sliders[1])
+
+        button1 = Button(icon="adjust", layout=self.button_layout, style=self.button_style)
+        button1.button_style = "info"
+        button2 = Button(icon="adjust", layout=self.button_layout, style=self.button_style)
+        button2.button_style = "info"
+        button1.on_click(remove_high_low_intensity_on_click1)
+        button2.on_click(remove_high_low_intensity_on_click2)
+        buttons = [button1, button2]
+        return buttons
+
+    def find_file_in_metadata(self, foldername):
+        for run in range(len(self.obj.run_list)):
+            if foldername in self.obj.run_list[run]:
+                metadata={}
+                metadata["fpath"] = self.obj.run_list[run][foldername]["parent_fpath"]
+                metadata["fname"] = self.obj.run_list[run][foldername]["parent_fname"]
+                metadata["angle_start"] = self.obj.run_list[run][foldername]["angle_start"]
+                metadata["angle_end"] = self.obj.run_list[run][foldername]["angle_end"]
+                self.tomos[0] = TomoData(metadata=metadata)
+                metadata["fpath"] = self.obj.run_list[run][foldername]["savedir"]
+                metadata["fname"] = "projections_after_alignment.tif"
+                self.tomos[1] = TomoData(metadata=metadata)
+                self.imagestacks = [self.tomos[0].prj_imgs, self.tomos[1].prj_imgs]
+                self.create_figures_and_widgets()
+                self._create_image_app()
+
+
+    def choose_file_to_plot(self, change):
+        self.find_file_in_metadata(change.new)
+        
+    def _load_run_list_on_click(self, change):
+        self.load_run_list_button.button_style = "info"
+        self.load_run_list_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.load_run_list_button.description = "Importing alignment list."
+        # creates a list from the keys in pythonic way
+        # from https://stackoverflow.com/questions/11399384/extract-all-keys-from-a-list-of-dictionaries
+        # don't know how it works
+        self.run_list_selector.options = list(set().union(*(d.keys() for d in self.obj.run_list)))
+        self.load_run_list_button.button_style = "success"
+        self.load_run_list_button.icon = "fa-check-square"
+        self.load_run_list_button.description = "Finished importing alignment list."
+
+
+    def _reset_on_click(self, change):
+        self.create_figures_and_widgets()
+        self._create_image_app()
+
+
+    def _create_image_app(self):
+        left_sidebar_layout = Layout(justify_content="space-around", align_items="center")
+        right_sidebar_layout = Layout(justify_content="space-around", align_items="center")
+        footer_layout = Layout(justify_content="center")
+        header = None
+
+        self.button_box1 = VBox([self.reset_button, self.remove_high_low_intensity_buttons[0]], layout=left_sidebar_layout)
+        self.button_box2 = VBox([self.reset_button, self.remove_high_low_intensity_buttons[1]], layout=right_sidebar_layout)
+        
+        left_sidebar = VBox([self.vmin_vmax_sliders[0],
+            self.button_box1],
+            layout=left_sidebar_layout)
+        center = HBox(self.figs,layout=Layout(justify_content="center"))
+        right_sidebar = VBox([self.vmin_vmax_sliders[1],
+            self.button_box2],
+            layout=right_sidebar_layout)
+        if self.linked_stacks:
+            footer = HBox(self.plays+self.projection_num_sliders, layout=footer_layout)
+        else:
+            footer = HBox([HBox([self.plays[0], self.projection_num_sliders[0]]),
+                HBox([self.plays[1], self.projection_num_sliders[1]])],layout=footer_layout)
+        self.image_app = AppLayout(header=header,
+                          left_sidebar=left_sidebar,
+                          center=center,
+                          right_sidebar=right_sidebar,
+                          footer=footer,
+                          pane_widths=[0.5,5,0.5],
+                          pane_heights=[0,10,"40px"],
+                          height="auto")
+        with self.app_output:
+            self.app_output.clear_output(wait=True)
+            display(self.image_app)
+
+
+    def _create_plotter_run_list(self):
+        self.create_figures_and_widgets()
+        self._create_image_app()
+        self.data_plotter = VBox([self.load_run_list_button, self.run_list_selector, self.app_output])
+
+    def _create_plotter_filebrowser(self):
+        self.create_figures_and_widgets()
+        self._create_image_app()
+        self.data_plotter = VBox([self.filebrowser.filebrowser, self.app_output])
+
+
+class Filebrowser:
+    
+    def __init__(self):
+        
+        # parent directory filechooser
+        self.orig_data_fc = FileChooser()
+        self.orig_data_fc.register_callback(self.update_orig_data_folder)
+        self.fc_label = Label("Original Data", layout=Layout(justify_content="Center"))
+        
+        # subdirectory selector
+        self.subdir_list = []
+        self.subdir_label = Label("Analysis Directories", layout=Layout(justify_content="Center"))
+        self.subdir_selector = Select(
+            options=self.subdir_list,
+            rows=5,
+            disabled=False
+        )
+        self.subdir_selector.observe(self.populate_methods_list, names="value")
+        self.selected_subdir = None
+        
+        # method selector
+        self.methods_label = Label("Methods", layout=Layout(justify_content="Center"))
+        self.methods_list = []
+        self.methods_selector = Select(
+            options=self.methods_list,
+            rows=5,
+            disabled=False
+        )
+        self.methods_selector.observe(self.populate_data_list, names="value")
+        self.selected_method = None
+        
+        # data selector
+        self.data_label = Label("Data", layout=Layout(justify_content="Center"))
+        self.data_list = []
+        self.data_selector = Select(
+            options=self.data_list,
+            rows=5,
+            disabled=False
+        )
+
+        self.data_selector.observe(self.set_data_filename, names="value")
+        self.allowed_extensions = (".npy", ".tif", ".tiff")
+        self.selected_data_fname = None
+        self.selected_data_ftype = None
+        self.selected_data_analysis_type = None
+
+        self.options_metadata_table_output = Output()
+
+        # load data button
+        self.load_data_button = Button(
+            icon="upload", 
+            style={"font_size": "35px"}, 
+            button_style="info",
+            layout=Layout(width="75px", height="86px"))
+
+                
+    def populate_subdirs_list(self):
+        self.subdir_list = [pathlib.PurePath(f) for f in os.scandir(self.root_fpath) if f.is_dir()]
+        self.subdir_list = [subdir.parts[-1] for subdir in self.subdir_list if any(x in subdir.parts[-1] for x in ("-align","-recon"))]
+        self.subdir_selector.options = self.subdir_list
+        
+    def update_orig_data_folder(self):
+        self.root_fpath = self.orig_data_fc.selected_path
+        self.populate_subdirs_list()
+        # self.data_selector.options = []
+        self.methods_selector.options = []
+        
+    def populate_methods_list(self, change):
+        self.selected_subdir = pathlib.PurePath(self.root_fpath) / change.new
+        self.methods_list = [pathlib.PurePath(f) for f in os.scandir(self.selected_subdir) if f.is_dir()]
+        self.methods_list = [subdir.parts[-1] for subdir in self.methods_list if not any(x in subdir.parts[-1] for x in ("-align","-recon"))]
+        self.methods_selector.options = self.methods_list
+
+    def populate_data_list(self, change):
+        if change.new is not None:
+            self.selected_method = pathlib.PurePath(self.root_fpath) / self.selected_subdir / change.new
+            self.file_list = [pathlib.PurePath(f) for f in os.scandir(self.selected_method) if not f.is_dir()]
+            self.data_list = [file.name for file in self.file_list if any(x in file.name for x in self.allowed_extensions)]
+            self.data_selector.options = self.data_list
+            self.load_metadata()
+        else:
+            self.data_selector.options = []
+
+    def set_data_filename(self, change):
+        self.selected_data_fname = change.new
+        self.selected_data_ftype = pathlib.PurePath(self.selected_data_fname).suffix
+        if "recon" in pathlib.PurePath(self.selected_data_fname).name:
+            self.selected_data_analysis_type = "recon"
+        elif "align" in pathlib.PurePath(self.selected_data_fname).name:
+            self.selected_data_analysis_type = "align"
+            
+    def load_metadata(self):
+        self.metadata_file = [self.selected_method / file.name for file in self.file_list if "metadata.json" in file.name]
+        if self.metadata_file != []:
+            self.metadata = load_metadata(fullpath=self.metadata_file[0])
+            self.options_table = metadata_to_DataFrame(self.metadata)
+            with self.options_metadata_table_output:
+                self.options_metadata_table_output.clear_output(wait=True)
+                display(self.options_table)
+            
+    def create_file_browser(self):
+        fc = VBox([self.fc_label,self.orig_data_fc])
+        subdir = VBox([self.subdir_label,self.subdir_selector])
+        methods = VBox([self.methods_label,self.methods_selector])
+        data = VBox([self.data_label,self.data_selector])
+        button = VBox([Label("Upload", layout=Layout(justify_content="center")), self.load_data_button])
+        top_hb = HBox([fc, subdir, methods, data, button], layout=Layout(justify_content="center"), align_items="stretch")
+        box = VBox([top_hb, self.options_metadata_table_output], layout=Layout(justify_content="center",align_items="center"))
+        self.filebrowser = box
