@@ -306,7 +306,7 @@ class Plotter:
         of the :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` with its current :doc:`histogram <mpl-interactions:examples/hist>` threshold range.
     """
 
-    def __init__(self, Import, DataExplorer=None):
+    def __init__(self, Import=None, DataExplorer=None):
 
         self.DataExplorer = DataExplorer
         self.Import = Import
@@ -486,6 +486,13 @@ class Plotter:
         self.threshold_control_list = [
             slider for slider in threshold_control.vbox.children
         ]
+
+    def _swap_axes_on_click(self, imagestack, image, slider):
+        imagestack = np.swapaxes(imagestack, 0, 1)
+        slider.max = imagestack.shape[0] - 1
+        slider.value = 0
+        image.image = imagestack[0]
+        return imagestack
 
     def _remove_high_low_intensity_on_click(self, imagestack, scale, slider):
         vmin, vmax = np.percentile(imagestack, q=(0.5, 99.5))
@@ -1805,43 +1812,105 @@ class Recon(Align):
         )
 
 
+class DataExplorerTab:
+    def __init__(
+        self,
+        Align,
+        Recon,
+    ):
+        self.align_de = DataExplorer(Align)
+        self.recon_de = DataExplorer(Recon)
+        self.fb_de = DataExplorer()
+
+    def create_data_explorer_tab(self):
+        self.recent_alignment_accordion = Accordion(
+            children=[self.align_de.data_plotter],
+            selected_index=None,
+            titles=("Plot Recent Alignments",),
+        )
+        self.recent_recon_accordion = Accordion(
+            children=[self.recon_de.data_plotter],
+            selected_index=None,
+            titles=("Plot Recent Reconstructions",),
+        )
+        self.analysis_browser_accordion = Accordion(
+            children=[self.fb_de.data_plotter],
+            selected_index=None,
+            titles=("Plot Any Analysis",),
+        )
+
+        self.tab = VBox(
+            children=[
+                self.analysis_browser_accordion,
+                self.recent_alignment_accordion,
+                self.recent_recon_accordion,
+            ]
+        )
+
+
 class DataExplorer:
-    def __init__(self, Import, image_metadata, obj: Align or Recon):
-        self.imagestacks = np.zeros((15, 100, 100))
-        self.titles = image_metadata["titles"]
-        self.linked_stacks = image_metadata["linked_stacks"]
-        self.Plotter = Plotter(Import)
+    def __init__(self, obj: (Align or Recon) = None):
         self.figs = None
         self.images = None
         self.scales = None
         self.projection_num_sliders = None
         self.imagestacks_metadata = None
         self.plays = None
-        self.app_output = Output()
+        self.imagestacks = [np.zeros((15, 100, 100)) for i in range(2)]
+        self.linked_stacks = False
+        self.obj = obj
+        self._init_widgets()
+
+    def _init_widgets(self):
         self.button_style = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
-        self.tomos = [None for i in range(2)]
-        self.obj = obj
-        self.filebrowser = Filebrowser()
-        self.filebrowser.create_file_browser()
-        self.filebrowser.load_data_button.on_click(self.load_data_from_filebrowser)
+        self.Plotter = Plotter()
+        self.app_output = Output()
+        if self.obj is not None:
+            if self.obj.widget_type == "Align":
+                self.run_list_selector = Select(
+                    options=[],
+                    rows=5,
+                    description="Alignments:",
+                    disabled=False,
+                    style=extend_description_style,
+                    layout=Layout(justify_content="center"),
+                )
+                self.linked_stacks = True
+                self.titles = ["Before Alignment", "After Alignment"]
+                self.load_run_list_button = Button(
+                    description="Load alignment list",
+                    icon="download",
+                    button_style="info",
+                    layout=Layout(width="auto"),
+                )
+            else:
+                self.run_list_selector = Select(
+                    options=[],
+                    rows=5,
+                    description="Reconstructions:",
+                    disabled=False,
+                    style=extend_description_style,
+                    layout=Layout(justify_content="center"),
+                )
+                self.linked_stacks = False
+                self.titles = ["Projections", "Reconstruction"]
+                self.load_run_list_button = Button(
+                    description="Load reconstruction list",
+                    icon="download",
+                    button_style="info",
+                    layout=Layout(width="auto"),
+                )
 
-        if obj.widget_type == "Align":
-            self.run_list_selector = Select(
-                options=[], rows=5, description="Alignments:", disabled=False
-            )
+            self.run_list_selector.observe(self.choose_file_to_plot, names="value")
+            self.load_run_list_button.on_click(self._load_run_list_on_click)
+            self._create_plotter_run_list()
         else:
-            self.run_list_selector = Select(
-                options=[], rows=5, description="Reconstructions:", disabled=False
-            )
-        self.run_list_selector.observe(self.choose_file_to_plot, names="value")
-        self.load_run_list_button = Button(
-            description="Load alignment list",
-            icon="download",
-            button_style="info",
-            layout=Layout(width="auto"),
-        )
-        self.load_run_list_button.on_click(self._load_run_list_on_click)
+            self.titles = ["Projections", "Reconstruction"]
+            self.filebrowser = Filebrowser()
+            self.filebrowser.create_file_browser()
+            self.filebrowser.load_data_button.on_click(self.load_data_from_filebrowser)
+            self._create_plotter_filebrowser()
 
     def load_data_from_filebrowser(self, change):
         metadata = {}
@@ -1849,14 +1918,39 @@ class DataExplorer:
         metadata["fname"] = self.filebrowser.metadata["parent_fname"]
         metadata["angle_start"] = self.filebrowser.metadata["angle_start"]
         metadata["angle_end"] = self.filebrowser.metadata["angle_end"]
-        self.tomos[0] = TomoData(metadata=metadata)
+        tomo = TomoData(metadata=metadata)
+        self.imagestacks[0] = tomo.prj_imgs
         metadata["fpath"] = str(self.filebrowser.selected_method)
         metadata["fname"] = str(self.filebrowser.selected_data_fname)
+        tomo = TomoData(metadata=metadata)
         # TODO: make this agnostic to recon/tomo
-        self.tomos[1] = TomoData(metadata=metadata)
-        self.imagestacks = [self.tomos[0].prj_imgs, self.tomos[1].prj_imgs]
+        self.imagestacks[1] = tomo.prj_imgs
+        if self.filebrowser.selected_analysis_type == "recon":
+            self.titles = ["Projections", "Reconstruction"]
+        else:
+            self.titles = ["Before Alignment", "After Alignment"]
         self.create_figures_and_widgets()
         self._create_image_app()
+
+    def find_file_in_metadata(self, foldername):
+        for run in range(len(self.obj.run_list)):
+            if foldername in self.obj.run_list[run]:
+                metadata = {}
+                metadata["fpath"] = self.obj.run_list[run][foldername]["parent_fpath"]
+                metadata["fname"] = self.obj.run_list[run][foldername]["parent_fname"]
+                metadata["angle_start"] = self.obj.run_list[run][foldername][
+                    "angle_start"
+                ]
+                metadata["angle_end"] = self.obj.run_list[run][foldername]["angle_end"]
+                self.imagestacks[0] = TomoData(metadata=metadata).prj_imgs
+                metadata["fpath"] = self.obj.run_list[run][foldername]["savedir"]
+                if self.obj.widget_type == "Align":
+                    metadata["fname"] = "projections_after_alignment.tif"
+                else:
+                    metadata["fname"] = "recon.tif"
+                self.imagestacks[1] = TomoData(metadata=metadata).prj_imgs
+                self.create_figures_and_widgets()
+                self._create_image_app()
 
     def create_figures_and_widgets(self):
         if self.linked_stacks:
@@ -1887,6 +1981,7 @@ class DataExplorer:
         self.remove_high_low_intensity_buttons = (
             self._create_remove_high_low_intensity_buttons()
         )
+        self.swapaxes_buttons = self._create_swapaxes_buttons()
         self.reset_button = Button(
             icon="redo", style=self.button_style, layout=self.button_layout
         )
@@ -1931,6 +2026,36 @@ class DataExplorer:
 
         return sliders
 
+    def _create_swapaxes_buttons(self):
+        def swapaxes_on_click1(change):
+            # defaults to going with the high/low value from
+            self.imagestacks[0] = self.Plotter._swap_axes_on_click(
+                self.imagestacks[0],
+                self.images[0],
+                self.projection_num_sliders[0],
+            )
+
+        def swapaxes_on_click2(change):
+            # defaults to going with the high/low value from
+            self.imagestacks[1] = self.Plotter._swap_axes_on_click(
+                self.imagestacks[1],
+                self.images[1],
+                self.projection_num_sliders[1],
+            )
+
+        button1 = Button(
+            icon="random", layout=self.button_layout, style=self.button_style
+        )
+        # button1.button_style = "info"
+        button2 = Button(
+            icon="random", layout=self.button_layout, style=self.button_style
+        )
+        # button2.button_style = "info"
+        button1.on_click(swapaxes_on_click1)
+        button2.on_click(swapaxes_on_click2)
+        buttons = [button1, button2]
+        return buttons
+
     def _create_remove_high_low_intensity_buttons(self):
         """
         Parameters
@@ -1967,31 +2092,13 @@ class DataExplorer:
         buttons = [button1, button2]
         return buttons
 
-    def find_file_in_metadata(self, foldername):
-        for run in range(len(self.obj.run_list)):
-            if foldername in self.obj.run_list[run]:
-                metadata = {}
-                metadata["fpath"] = self.obj.run_list[run][foldername]["parent_fpath"]
-                metadata["fname"] = self.obj.run_list[run][foldername]["parent_fname"]
-                metadata["angle_start"] = self.obj.run_list[run][foldername][
-                    "angle_start"
-                ]
-                metadata["angle_end"] = self.obj.run_list[run][foldername]["angle_end"]
-                self.tomos[0] = TomoData(metadata=metadata)
-                metadata["fpath"] = self.obj.run_list[run][foldername]["savedir"]
-                metadata["fname"] = "projections_after_alignment.tif"
-                self.tomos[1] = TomoData(metadata=metadata)
-                self.imagestacks = [self.tomos[0].prj_imgs, self.tomos[1].prj_imgs]
-                self.create_figures_and_widgets()
-                self._create_image_app()
-
     def choose_file_to_plot(self, change):
         self.find_file_in_metadata(change.new)
 
     def _load_run_list_on_click(self, change):
         self.load_run_list_button.button_style = "info"
         self.load_run_list_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.load_run_list_button.description = "Importing alignment list."
+        self.load_run_list_button.description = "Importing run list."
         # creates a list from the keys in pythonic way
         # from https://stackoverflow.com/questions/11399384/extract-all-keys-from-a-list-of-dictionaries
         # don't know how it works
@@ -2000,7 +2107,7 @@ class DataExplorer:
         )
         self.load_run_list_button.button_style = "success"
         self.load_run_list_button.icon = "fa-check-square"
-        self.load_run_list_button.description = "Finished importing alignment list."
+        self.load_run_list_button.description = "Finished importing run list."
 
     def _reset_on_click(self, change):
         self.create_figures_and_widgets()
@@ -2017,11 +2124,19 @@ class DataExplorer:
         header = None
 
         self.button_box1 = VBox(
-            [self.reset_button, self.remove_high_low_intensity_buttons[0]],
+            [
+                self.reset_button,
+                self.remove_high_low_intensity_buttons[0],
+                self.swapaxes_buttons[0],
+            ],
             layout=left_sidebar_layout,
         )
         self.button_box2 = VBox(
-            [self.reset_button, self.remove_high_low_intensity_buttons[1]],
+            [
+                self.reset_button,
+                self.remove_high_low_intensity_buttons[1],
+                self.swapaxes_buttons[1],
+            ],
             layout=right_sidebar_layout,
         )
 
@@ -2059,15 +2174,15 @@ class DataExplorer:
             display(self.image_app)
 
     def _create_plotter_run_list(self):
-        self.create_figures_and_widgets()
-        self._create_image_app()
+        # self.create_figures_and_widgets()
+        # self._create_image_app()
         self.data_plotter = VBox(
             [self.load_run_list_button, self.run_list_selector, self.app_output]
         )
 
     def _create_plotter_filebrowser(self):
-        self.create_figures_and_widgets()
-        self._create_image_app()
+        # self.create_figures_and_widgets()
+        # self._create_image_app()
         self.data_plotter = VBox([self.filebrowser.filebrowser, self.app_output])
 
 
@@ -2106,7 +2221,7 @@ class Filebrowser:
         self.allowed_extensions = (".npy", ".tif", ".tiff")
         self.selected_data_fname = None
         self.selected_data_ftype = None
-        self.selected_data_analysis_type = None
+        self.selected_analysis_type = None
 
         self.options_metadata_table_output = Output()
 
@@ -2132,7 +2247,6 @@ class Filebrowser:
     def update_orig_data_folder(self):
         self.root_fpath = self.orig_data_fc.selected_path
         self.populate_subdirs_list()
-        # self.data_selector.options = []
         self.methods_selector.options = []
 
     def populate_methods_list(self, change):
@@ -2170,10 +2284,10 @@ class Filebrowser:
     def set_data_filename(self, change):
         self.selected_data_fname = change.new
         self.selected_data_ftype = pathlib.PurePath(self.selected_data_fname).suffix
-        if "recon" in pathlib.PurePath(self.selected_data_fname).name:
-            self.selected_data_analysis_type = "recon"
-        elif "align" in pathlib.PurePath(self.selected_data_fname).name:
-            self.selected_data_analysis_type = "align"
+        if "recon" in pathlib.PurePath(self.selected_subdir).name:
+            self.selected_analysis_type = "recon"
+        elif "align" in pathlib.PurePath(self.selected_subdir).name:
+            self.selected_analysis_type = "align"
 
     def load_metadata(self):
         self.metadata_file = [

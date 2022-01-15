@@ -25,6 +25,7 @@ if os.environ["cuda_enabled"] == "True":
     import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
     import cupy as cp
 
+
 class TomoRecon(TomoAlign):
     """ """
 
@@ -78,8 +79,11 @@ class TomoRecon(TomoAlign):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y%m%d-%H%M-")
         method_str = list(self.metadata["methods"].keys())[0]
-        os.mkdir(dt_string + method_str)
-        os.chdir(dt_string + method_str)
+        os.chdir(self.wd)
+        savedir = dt_string + method_str
+        os.mkdir(savedir)
+        os.chdir(savedir)
+        self.metadata["savedir"] = os.getcwd()
         save_metadata("metadata.json", self.metadata)
 
         if self.metadata["save_opts"]["tomo_before"]:
@@ -102,17 +106,17 @@ class TomoRecon(TomoAlign):
                 and not self.metadata["save_opts"]["npy"]
             ):
                 tf.imwrite("recon.tif", self.recon)
-
-        os.chdir(self.wd)
+        self.Recon.run_list.append({savedir: self.metadata})
 
     def reconstruct(self):
 
         # ensure it only runs on 1 thread for CUDA
         os.environ["TOMOPY_PYTHON_THREADS"] = "1"
         method_str = list(self.metadata["methods"].keys())[0]
-        if (method_str in self.Recon.astra_cuda_methods_list and 
-                os.environ["cuda_enabled"] == "True"
-            ):
+        if (
+            method_str in self.Recon.astra_cuda_methods_list
+            and os.environ["cuda_enabled"] == "True"
+        ):
             self.current_recon_is_cuda = True
         else:
             self.current_recon_is_cuda = False
@@ -210,7 +214,7 @@ class TomoRecon(TomoAlign):
             self.recon = circ_mask(self.recon, axis=0)
             toc = time.perf_counter()
 
-            self.metadata["reconstruction_time"] = {
+            self.metadata["analysis_time"] = {
                 "seconds": toc - tic,
                 "minutes": (toc - tic) / 60,
                 "hours": (toc - tic) / 3600,

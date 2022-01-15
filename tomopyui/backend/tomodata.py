@@ -57,7 +57,7 @@ class TomoData:
         self.fpath = fpath
         self.fname = fname
 
-        if self.verbose_import == True:
+        if self.verbose_import is True:
             logging.getLogger("dxchange").setLevel(logging.INFO)
         else:
             logging.getLogger("dxchange").setLevel(logging.WARNING)

@@ -4,6 +4,7 @@ from copy import copy, deepcopy
 from skimage.transform import rescale  # look for better option
 from time import perf_counter
 import os
+
 if os.environ["cuda_enabled"] == "True":
     from ..tomocupy.prep.alignment import align_joint as align_joint_cupy
     from ..tomocupy.prep.alignment import shift_prj_cp
@@ -137,21 +138,35 @@ class TomoAlign:
         Aligns a TomoData object using options in GUI.
         """
         for method in self.metadata["methods"]:
-            if (method in astra_cuda_recon_algorithm_underscores and
-                    os.environ["cuda_enabled"] == "True"
-                ):
+            if (
+                method in astra_cuda_recon_algorithm_underscores
+                and os.environ["cuda_enabled"] == "True"
+            ):
                 self.current_align_is_cuda = True
                 align_joint_cupy(self)
             else:
                 self.current_align_is_cuda = False
                 os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
                 import scipy.fft as fft
-                fft.set_backend('scipy')
-                if method == "gridrec" or method == "fbp":
-                    self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(self.prjs, self.tomo.theta, upsample_factor=self.upsample_factor, center=self.center, algorithm=method)
-                else:
-                    self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(self.prjs, self.tomo.theta, upsample_factor=self.upsample_factor, center=self.center, algorithm=method, iters=self.num_iter)
 
+                fft.set_backend("scipy")
+                if method == "gridrec" or method == "fbp":
+                    self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
+                        self.prjs,
+                        self.tomo.theta,
+                        upsample_factor=self.upsample_factor,
+                        center=self.center,
+                        algorithm=method,
+                    )
+                else:
+                    self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
+                        self.prjs,
+                        self.tomo.theta,
+                        upsample_factor=self.upsample_factor,
+                        center=self.center,
+                        algorithm=method,
+                        iters=self.num_iter,
+                    )
 
     def save_align_data(self):
 
@@ -197,7 +212,9 @@ class TomoAlign:
         np.save("sy", self.sy)
         np.save("conv", self.conv)
 
-    def _shift_prjs_after_alignment(self,):
+    def _shift_prjs_after_alignment(
+        self,
+    ):
         new_prj_imgs = deepcopy(self.tomo.prj_imgs)
         new_prj_imgs, self.pad = pad_projections(new_prj_imgs, self.pad)
         new_prj_imgs = shift_prj_cp(
@@ -210,7 +227,7 @@ class TomoAlign:
         )
         new_prj_imgs = trim_padding(new_prj_imgs)
         self.tomo_aligned = td.TomoData(
-                prj_imgs=new_prj_imgs, metadata=self.Align.Import.metadata
+            prj_imgs=new_prj_imgs, metadata=self.Align.Import.metadata
         )
 
     def _main(self):
@@ -225,15 +242,15 @@ class TomoAlign:
             tic = perf_counter()
             self.align()
             # make new dataset and pad/shift it
-            if self.current_align_is_cuda: 
+            if self.current_align_is_cuda:
                 self._shift_prjs_after_alignment()
             else:
                 self.tomo_aligned = td.TomoData(
-                prj_imgs=self.prjs, metadata=self.Align.Import.metadata
+                    prj_imgs=self.prjs, metadata=self.Align.Import.metadata
                 )
 
             toc = perf_counter()
-            self.metadata["alignment_time"] = {
+            self.metadata["analysis_time"] = {
                 "seconds": toc - tic,
                 "minutes": (toc - tic) / 60,
                 "hours": (toc - tic) / 3600,
