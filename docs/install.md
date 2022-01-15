@@ -1,20 +1,14 @@
 # Installation
 
-:::{note}
-
-At the moment, this package only supports [tomopy](https://tomopy.readthedocs.io/en/latest/) and [astra-toolbox](http://www.astra-toolbox.com/docs/install.html) installed with CUDA. In the future, we will relax this requirement.  
-
-:::
-
 ## Prerequisites
 
-You will have to have the following set of hardware/software to run all of the current features of tomopyui:
+You will have to have the following set of hardware/software to run all of the features of tomopyui:
 
 - anaconda (to create a python environment)
 - NVIDIA graphics card capable of CUDA 10.2+
 - CUDA 10.2+
 
-If you just want to check out the UI, there is also a way to run that if you do not have a CUDA-enabled graphics card. See [this section](#installing-tomopyui-without-cuda).
+You can also install without cuda if you don't have a CUDA-enabled graphics card. See [this section](#installing-tomopyui-without-cuda).
 
 Below are the installation instructions given you do not have any of this installed on your computer.
 
@@ -141,20 +135,17 @@ pip install .
 
 ## Installing tomopyui without CUDA
 
-Without CUDA, this program is useless for aligning/reconstructing tomography data. 
-
 If you don't have CUDA and just want to check out the ipywidgets, you can still do that using the environment.yml in the docs folder:
 
 ```
 cd tomopyui
-cd docs
-conda env create -f environment.yml
+conda env create -f environment-nocuda.yml
 ```
 
 Then, activate the environment:
 
 ```
-conda activate tomopyui-docs
+conda activate tomopyui-nocuda
 ```
 
 ## Installing tomopyui for development
