@@ -1,5 +1,12 @@
 # tomopyui
 
+```{jupyter-execute}
+:hide-code:
+
+from ipywidgets import Video, HBox, Layout
+Video.from_file("_static/videos/front_page.mp4", autoplay=False)
+```
+
 Have you ever wondered to yourself one of the following:
 
 - "I really don't want to learn a python API to reconstruct my tomography data" 
@@ -31,15 +38,7 @@ dashboard
 
 You can click through the tabs that you will see on the dashboard to check out the options available. Most of the features cannot be used on this webpage, but it gives you a flavor of what comes with the app.
 
-Here is what it will look like when you open it on your computer:
-
-```{image} _static/images/frontpage_usage.gif
-
-```
-
-There will be more examples of usage [TK](https://en.wikipedia.org/wiki/To_come_(publishing)) in the {doc}`examples` page.
-
-This shows you how to upload your data and check it out using the [mpl-interactions](https://mpl-interactions.readthedocs.io/en/stable/index.html) interactive [hyperslicer](https://mpl-interactions.readthedocs.io/en/stable/examples/hyperslicer.html) and [histogram](https://mpl-interactions.readthedocs.io/en/stable/examples/hist.html) widgets.
+There is a video-guided tutorial on the {doc}`examples` page.
 
 ## Install
 
@@ -49,11 +48,6 @@ If you are new to installing conda/pip packages, and/or you do not currently hav
 
 :::
 
-:::{note}
-
-At the moment, this package only supports [tomopy](https://tomopy.readthedocs.io/en/latest/) and [astra-toolbox](http://www.astra-toolbox.com/docs/install.html) installed with CUDA. In the future, we will relax this requirement.  
-
-:::
 
 ### Installing with CUDA
 Once you are finished installing CUDA, navigate to the directory in which you would like to install tomopyui (use cd in the anaconda prompt to navigate):
@@ -100,20 +94,17 @@ pip install .
 
 ### Installing without CUDA
 
-Without CUDA, this program is useless for aligning/reconstructing tomography data. 
-
-If you don't have CUDA and you just want to check out the ipywidgets, you can still do that using the environment.yml in the docs folder:
+Without CUDA, you will miss out on some of the features in tomopyui. You can still install it by doing the following
 
 ```
 cd tomopyui
-cd docs
-conda env create -f environment.yml
+conda env create -f environment-nocuda.yml
 ```
 
 Then, activate the environment and install:
 
 ```
-conda activate tomopyui-docs
+conda activate tomopyui
 cd ..
 pip install .
 ```
