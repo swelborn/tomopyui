@@ -20,6 +20,11 @@ import tifffile as tf
 import tomopy
 import numpy as np
 
+# TODO: make this global
+from tomopyui.widgets._shared.helpers import import_module_set_env
+
+cuda_import_dict = {"cupy": "cuda_enabled"}
+import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
     import astra
     import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
