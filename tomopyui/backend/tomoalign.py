@@ -5,9 +5,6 @@ from skimage.transform import rescale  # look for better option
 from time import perf_counter
 import os
 
-if os.environ["cuda_enabled"] == "True":
-    from ..tomocupy.prep.alignment import align_joint as align_joint_cupy
-    from ..tomocupy.prep.alignment import shift_prj_cp
 from tomopy.prep.alignment import align_joint as align_joint_tomopy
 from .util.metadata_io import save_metadata, load_metadata
 from tomopyui.backend.util.padding import *
@@ -19,6 +16,15 @@ import os
 import tifffile as tf
 import tomopyui.backend.tomodata as td
 import numpy as np
+
+# TODO: make this global
+from tomopyui.widgets._shared.helpers import import_module_set_env
+
+cuda_import_dict = {"cupy": "cuda_enabled"}
+import_module_set_env(cuda_import_dict)
+if os.environ["cuda_enabled"] == "True":
+    from ..tomocupy.prep.alignment import align_joint as align_joint_cupy
+    from ..tomocupy.prep.alignment import shift_prj_cp
 
 
 class TomoAlign:
