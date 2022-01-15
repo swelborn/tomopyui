@@ -57,7 +57,11 @@ def init_widgets(obj):
     )
 
     obj.plotting_vbox = VBox(
-        [obj.plot_prj_images_button, VBox([]), obj.prj_plotter.set_range_button,],
+        [
+            obj.plot_prj_images_button,
+            VBox([]),
+            obj.prj_plotter.set_range_button,
+        ],
         layout=Layout(align_content="center"),
     )
 
@@ -236,8 +240,12 @@ def _set_widgets_from_load_metadata(obj):
     #         for checkbox in obj.methods_checkboxes:
     #             if checkbox.description == str(key):
     #                 checkbox.value = False
-    obj.methods_checkboxes = helpers.set_checkbox_bool(
-        obj.methods_checkboxes, obj.metadata["methods"], obj
+
+    obj.tomopy_methods_checkboxes = helpers.set_checkbox_bool(
+        obj.tomopy_methods_checkboxes, obj.metadata["methods"], obj
+    )
+    obj.astra_cuda_methods_checkboxes = helpers.set_checkbox_bool(
+        obj.astra_cuda_methods_checkboxes, obj.metadata["methods"], obj
     )
 
     # -- Projection Range Sliders ---------------------------------------------
