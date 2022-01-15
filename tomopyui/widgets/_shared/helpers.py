@@ -20,9 +20,9 @@ def import_module_set_env(import_dict):
     """
     From https://stackoverflow.com/questions/1051254/check-if-python-package-is-installed
 
-    Safely imports a module or package and sets an environment variable if it 
+    Safely imports a module or package and sets an environment variable if it
     imports (or is already imported). This is used in the main function for
-    checking whether or not `cupy` is installed. If it is not installed, then 
+    checking whether or not `cupy` is installed. If it is not installed, then
     options for cuda-enabled functions will be greyed out.
     """
     for key in import_dict:

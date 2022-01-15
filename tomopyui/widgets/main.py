@@ -11,7 +11,9 @@ import_module_set_env(cuda_import_dict)
 # TODO: can later add a bounded textbox for amount of CPUs user wants to use
 # for reconstruction. right now defaults to all cores being used.
 import multiprocessing
+
 os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
+
 
 def create_dashboard():
     """
@@ -33,7 +35,10 @@ def create_dashboard():
     prep_tab_obj = meta.Prep(file_import)
     recon_tab_obj = meta.Recon(file_import, center_tab_obj)
     align_tab_obj = meta.Align(file_import, center_tab_obj)
-    for checkbox in align_tab_obj.astra_cuda_methods_checkboxes + recon_tab_obj.astra_cuda_methods_checkboxes:
+    for checkbox in (
+        align_tab_obj.astra_cuda_methods_checkboxes
+        + recon_tab_obj.astra_cuda_methods_checkboxes
+    ):
         if os.environ["cuda_enabled"] == "True":
             checkbox.disabled = False
         else:
