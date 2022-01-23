@@ -33,7 +33,6 @@ def create_dashboard():
 
     file_import = meta.Import()
     center = meta.Center(file_import)
-    prep = meta.Prep(file_import)
     align = meta.Align(file_import, center)
     recon = meta.Recon(file_import, center)
     dataexplorer = meta.DataExplorerTab(align, recon)
@@ -77,7 +76,6 @@ def create_dashboard():
         dashboard,
         file_import,
         center,
-        prep,
         align,
         recon,
     )
