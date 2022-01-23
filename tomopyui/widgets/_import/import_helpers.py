@@ -18,8 +18,6 @@ def create_angles_textboxes(Import):
                 Import.angle_start = Import.metadata[key]
             if key == "angle_end":
                 Import.angle_end = Import.metadata[key]
-            if key == "num_theta":
-                Import.num_theta = Import.metadata[key]
 
         if int:
             textbox = IntText(
@@ -45,7 +43,6 @@ def create_angles_textboxes(Import):
 
     angle_start = create_textbox("Starting angle (\u00b0): ", -90, "angle_start")
     angle_end = create_textbox("Ending angle (\u00b0): ", 90, "angle_end")
-    num_projections = create_textbox("Number of Images: ", 360, "num_theta", int=True)
 
-    angles_textboxes = [angle_start, angle_end, num_projections]
+    angles_textboxes = [angle_start, angle_end]
     return angles_textboxes

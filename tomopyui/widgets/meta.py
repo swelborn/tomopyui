@@ -504,6 +504,43 @@ class Plotter:
         scale["image"].min = vmin
         scale["image"].max = vmax
 
+    def _create_one_plot(self, imagestack, title):
+        fig, plotted_image, scale_image = self._create_bqplot_from_imagestack(
+            imagestack[0], title[0]
+        )
+        figs = [fig]
+        images = [plotted_image]
+        scales = [scale_image]
+
+        def change_image(change):
+            plotted_image.image = imagestack[change.new]
+
+        slider = IntSlider(
+            value=0,
+            min=0,
+            max=imagestack.shape[0] - 1,
+            step=1,
+        )
+        slider.observe(change_image, names="value")
+        sliders = [slider]
+
+        play = Play(
+            value=0,
+            min=0,
+            max=imagestack.shape[0] - 1,
+            step=1,
+            interval=100,
+            disabled=False,
+        )
+        jslink((play, "value"), (slider, "value"))
+        plays = [play]
+
+        return figs, images, scales, sliders, plays
+
+    def _set_bqplot_hist_range(self, scale, vmin, vmax):
+        scale["image"].min = vmin
+        scale["image"].max = vmax
+
     def _create_two_plots_with_two_sliders(self, imagestacks, titles):
         fig1, plotted_image1, scale_image1 = self._create_bqplot_from_imagestack(
             imagestacks[0], titles[0]
@@ -652,63 +689,6 @@ class Plotter:
         )
 
         self.save_prj_animation_button.on_click(save_animation_on_click)
-
-
-class Prep:
-    def __init__(self, Import):
-
-        self.tomo = Import.tomo
-        self.dark = None
-        self.flat = None
-        self.darkfc = FileChooser()
-        self.darkfc.register_callback(self.set_fpath_dark)
-        self.flatfc = FileChooser()
-        self.flatfc.register_callback(self.set_fpath_flat)
-        self.fpathdark = None
-        self.fnamedark = None
-        self.fpathflat = None
-        self.fnameflat = None
-        self.rotate = Import.metadata["rotate"]
-        self.set_metadata_dark()
-        self.set_metadata_flat()
-
-    def set_metadata_dark(self):
-        self.darkmetadata = {
-            "fpath": self.fpathdark,
-            "fname": self.fnamedark,
-            "opts": {"rotate": self.rotate},
-        }
-
-    def set_metadata_flat(self):
-        self.flatmetadata = {
-            "fpath": self.fpathflat,
-            "fname": self.fnameflat,
-            "opts": {"rotate": self.rotate},
-        }
-
-    def set_fpath_dark(self):
-        self.fpathdark = self.darkfc.selected_path
-        self.fnamedark = self.darkfc.selected_filename
-        self.set_metadata()
-
-    def set_fpath_flat(self):
-        self.fpathflat = self.flatfc.selected_path
-        self.fnameflat = self.flatfc.selected_filename
-        self.set_metadata()
-
-    def normalize(self, rm_zeros_nans=True):
-        tomo_norm = tomopy.prep.normalize.normalize(
-            self.tomo.prj_imgs, self.flat.prj_imgs, self.dark.prj_imgs
-        )
-        tomo_norm = td.TomoData(prj_imgs=prj_imgs, raw="No")
-        tomo_norm_mlog = tomopy.prep.normalize.minus_log(tomo_norm)
-        tomo_norm_mlog = td.TomoData(prj_imgs=tomoNormMLogprj_imgs, raw="No")
-        if rm_zeros_nans == True:
-            tomo_norm_mlog.prj_imgs = tomopy.misc.corr.remove_nan(
-                tomo_norm_mlog.prj_imgs, val=0.0
-            )
-            tomo_norm_mlog.prj_imgs[tomo_norm_mlog.prj_imgs == np.inf] = 0
-        self.tomo = tomo_norm_mlog
 
 
 class Center:
@@ -1849,8 +1829,11 @@ class DataExplorerTab:
 
 
 class DataExplorer:
-    def __init__(self, obj: (Align or Recon) = None):
+    def __init__(
+        self, obj: (Align or Recon) = None, single_image=False, imagestacks=None
+    ):
         self.figs = None
+        self.single_image = single_image
         self.images = None
         self.scales = None
         self.projection_num_sliders = None
@@ -1905,7 +1888,11 @@ class DataExplorer:
             self.run_list_selector.observe(self.choose_file_to_plot, names="value")
             self.load_run_list_button.on_click(self._load_run_list_on_click)
             self._create_plotter_run_list()
+
+        elif self.single_image:
+            self.titles = ["Projections"]
         else:
+
             self.titles = ["Projections", "Reconstruction"]
             self.filebrowser = Filebrowser()
             self.filebrowser.create_file_browser()
@@ -1953,7 +1940,15 @@ class DataExplorer:
                 self._create_image_app()
 
     def create_figures_and_widgets(self):
-        if self.linked_stacks:
+        if self.single_image:
+            (
+                self.figs,
+                self.images,
+                self.scales,
+                self.projection_num_sliders,
+                self.plays,
+            ) = self.Plotter._create_one_plot(self.imagestacks, self.titles)
+        elif self.linked_stacks:
             (
                 self.figs,
                 self.images,
@@ -1986,6 +1981,11 @@ class DataExplorer:
             icon="redo", style=self.button_style, layout=self.button_layout
         )
         self.reset_button.on_click(self._reset_on_click)
+
+        self.reset_button_one_fig = Button(
+            icon="redo", style=self.button_style, layout=self.button_layout
+        )
+        self.reset_button_one_fig.on_click(self._reset_on_click_one_fig)
 
     def _create_vmin_vmax_sliders(self):
         vmin = self.imagestacks[0].min()
@@ -2113,6 +2113,10 @@ class DataExplorer:
         self.create_figures_and_widgets()
         self._create_image_app()
 
+    def _reset_on_click_one_fig(self, change):
+        self.create_figures_and_widgets()
+        self._create_image_app_raw_import()
+
     def _create_image_app(self):
         left_sidebar_layout = Layout(
             justify_content="space-around", align_items="center"
@@ -2173,6 +2177,50 @@ class DataExplorer:
             self.app_output.clear_output(wait=True)
             display(self.image_app)
 
+    def _create_image_app_raw_import(self):
+        left_sidebar_layout = Layout(
+            justify_content="space-around", align_items="center"
+        )
+        right_sidebar_layout = Layout(
+            justify_content="space-around", align_items="center"
+        )
+        footer_layout = Layout(justify_content="center")
+        header = None
+
+        self.button_box1 = VBox(
+            [
+                self.reset_button,
+                self.remove_high_low_intensity_buttons[0],
+                self.swapaxes_buttons[0],
+            ],
+            layout=left_sidebar_layout,
+        )
+
+        left_sidebar = VBox(
+            [self.vmin_vmax_sliders[0], self.button_box1], layout=left_sidebar_layout
+        )
+        center = HBox(self.figs, layout=Layout(justify_content="center"))
+        right_sidebar = None
+
+        if self.linked_stacks:
+            footer = HBox(
+                self.plays + self.projection_num_sliders, layout=footer_layout
+            )
+
+        self.image_app = AppLayout(
+            header=header,
+            left_sidebar=left_sidebar,
+            center=center,
+            right_sidebar=right_sidebar,
+            footer=footer,
+            pane_widths=[0.5, 5, 0.5],
+            pane_heights=[0, 10, "40px"],
+            height="auto",
+        )
+        with self.app_output:
+            self.app_output.clear_output(wait=True)
+            display(self.image_app)
+
     def _create_plotter_run_list(self):
         # self.create_figures_and_widgets()
         # self._create_image_app()
@@ -2216,7 +2264,6 @@ class Filebrowser:
         self.data_label = Label("Data", layout=Layout(justify_content="Center"))
         self.data_list = []
         self.data_selector = Select(options=self.data_list, rows=5, disabled=False)
-
         self.data_selector.observe(self.set_data_filename, names="value")
         self.allowed_extensions = (".npy", ".tif", ".tiff")
         self.selected_data_fname = None
