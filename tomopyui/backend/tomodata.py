@@ -23,65 +23,6 @@ import glob
 from tomopy.sim.project import angles as angle_maker
 
 
-class IO:
-    def __init__(self, prj_or_rec, raw=True, parent=None):
-
-        self.data = None
-        self.dtype = None
-        self.shape = None
-        self.pxX = None
-        self.pxY = None
-        self.pxZ = None
-        self.size_gb = None
-        self.fullpaths = None
-        self.folder = None
-        self.filenames = None
-        self.extensions = None
-        self.allowed_extensions = None
-        self.verbose_import = False
-        self.prj_or_rec = prj_or_rec
-        self.raw = raw
-        self.parent = None
-
-        if self.verbose_import is True:
-            logging.getLogger("dxchange").setLevel(logging.INFO)
-        else:
-            logging.getLogger("dxchange").setLevel(logging.WARNING)
-
-    def _get_size_gb(self):
-        self.size_gb = self.data.nbytes / 1e6
-
-    # change the location of this
-    def _file_finder(self, folder=None, extensions=None):
-        if folder is None:
-            folder = self.folder
-        if extensions is None:
-            extensions = self.extensions
-
-        files = [pathlib.PurePath(f) for f in os.scandir(folder) if not f.is_dir()]
-        files_with_ext = [
-            file.name for file in files if any(x in file.name for x in filetypes)
-        ]
-        return files_with_ext
-
-
-class ProjectionData(IO):
-    def __init__(
-        self, prjs=None, angles=None, angle_start=None, angle_end=None, normalized=False
-    ):
-        super().__init__("prj")
-        self.prjs = prjs
-        self.angles = angles
-        self.angle_start = angle_start
-        self.angle_end = angle_end
-        self.normalized = False
-
-
-class ReconstructionData(IO):
-    def __init__(self):
-        super().__init__("rec")
-
-
 # ----------------------------- Class TomoData -------------------------#
 
 

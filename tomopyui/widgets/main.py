@@ -2,6 +2,8 @@ from ipywidgets import *
 from tomopyui.widgets._shared.helpers import import_module_set_env
 import tomopyui.widgets.meta as meta
 import multiprocessing
+from tomopyui.widgets.imports import Import_SSRL62
+from tomopyui.widgets.center import Center
 
 # checks if cupy is installed. if not, disable cuda and certain gui aspects
 # TODO: can put this somewhere else (in meta?)
@@ -31,8 +33,8 @@ def create_dashboard():
 
     """
 
-    file_import = meta.Import()
-    center = meta.Center(file_import)
+    file_import = Import_SSRL62()
+    center = Center(file_import)
     align = meta.Align(file_import, center)
     recon = meta.Recon(file_import, center)
     dataexplorer = meta.DataExplorerTab(align, recon)
