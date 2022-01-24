@@ -8,23 +8,23 @@ import dxchange
 import re
 from tomopy.sim.project import angles as angle_maker
 import olefile
+import pandas as pd
 
 
 class IOBase:
     def __init__(self):
 
-        self._data = None
+        self._data = np.random.rand(10, 100, 100)
         self._fullpath = None
         self.dtype = None
         self.shape = None
-        self.pxX = None
-        self.pxY = None
-        self.pxZ = None
+        self.pxX = self._data.shape[2]
+        self.pxY = self._data.shape[1]
+        self.pxZ = self._data.shape[0]
         self.size_gb = None
         self.folder = None
         self.filename = None
         self.extension = None
-        self.allowed_extensions = None
         self.parent = None
         self.energy = None
         self.raw = False
@@ -46,6 +46,9 @@ class IOBase:
     # set data info whenever setting data
     def data(self, value):
         (self.pxZ, self.pxY, self.pxX) = self._data.shape
+        self.rangeX = (0, self.pxX - 1)
+        self.rangeY = (0, self.pxY - 1)
+        self.rangeZ = (0, self.pxZ - 1)
         self.size_gb = self._data.nbytes / 1073741824
         self.dtype = self._data.dtype
         self._data = value
@@ -77,17 +80,21 @@ class IOBase:
 
 class ProjectionsBase(IOBase, ABC):
     # https://stackoverflow.com/questions/4017572/how-can-i-make-an-alias-to-a-non-function-member-attribute-in-a-python-class
-    aliases = {"prj_imgs": "data", "num_angles": "pxZ", "width": "pxX", "height": "pxY"}
+    aliases = {
+        "prj_imgs": "data",
+        "num_angles": "pxZ",
+        "width": "pxX",
+        "height": "pxY",
+        "prj_range_x": "rangeX",
+        "prj_range_y": "rangeY",
+        "prj_range_z": "rangeZ",  # Could probably fix these
+    }
 
     def __init__(self):
         super().__init__()
         self.angles_rad = None
         self.angles_deg = None
-        self.flats = None
-        self.flats_ind = None
-        self.darks = None
-        self.normalized = False
-        self.angles_from_filenames = True
+        self.allowed_extensions = [".npy", ".tiff", ".tif"]
 
     def __setattr__(self, name, value):
         name = self.aliases.get(name, name)
@@ -98,6 +105,115 @@ class ProjectionsBase(IOBase, ABC):
             raise AttributeError  # http://nedbatchelder.com/blog/201010/surprising_getattr_recursion.html
         name = self.aliases.get(name, name)
         return object.__getattribute__(self, name)
+
+    @abstractmethod
+    def import_metadata(self, folder):
+        ...
+
+    @abstractmethod
+    def import_folder_projections(self, folder):
+        ...
+
+    @abstractmethod
+    def import_file_projections(self, fullpath):
+        ...
+
+    @abstractmethod
+    def set_options_from_frontend(self, Import):
+        ...
+
+
+class Projections_Prenormalized(ProjectionsBase):
+    def import_metadata(self, fullpath):
+        pass
+
+    def import_folder_projections(self, folder):
+        cwd = os.getcwd()
+        os.chdir(folder)
+        image_sequence = tf.TiffSequence()
+        self.num_theta = len(image_sequence.files)
+        self._data = image_sequence.asarray().astype(np.float32)
+        self.data = self._data
+        image_sequence.close()
+        os.chdir(cwd)
+
+    def import_file_projections(self, fullpath):
+
+        if ".tif" in fullpath:
+            # if there is a file name, checks to see if there are many more
+            # tiffs in the folder. If there are, will upload all of them.
+            filetypes = [".tif", ".tiff"]
+            textfiles = self._file_finder(folder, filetypes)
+            tiff_count_in_folder = len(textfiles)
+            if tiff_count_in_folder > 50:
+                self.import_folder_projections(fullpath.parent)
+                pass
+            self._data = dxchange.reader.read_tiff(fullpath).astype(np.float32)
+            self._fullpath = fullpath
+            self.fullpath = self._fullpath
+            self.data = self._data
+
+        elif ".npy" in fullpath:
+            self._data = np.load(fullpath).astype(np.float32)
+            self._fullpath = fullpath
+            self.fullpath = self._fullpath
+            self.data = self._data
+
+    def set_options_from_frontend(self, Import):
+        self.Import = Import
+        self.folder = Import.fpath
+        self.filename = Import.fname
+        if self.filename is not "":
+            self.fullpath = self.folder / self.filename
+
+    def get_img_shape(self):
+
+        if self.extension == ".tif" or self.extension == ".tiff":
+            allowed_extensions = [".tiff", ".tif"]
+            file_list = [
+                pathlib.PurePath(f) for f in os.scandir(self.folder) if not f.is_dir()
+            ]
+            tiff_file_list = [
+                file.name
+                for file in file_list
+                if any(x in file.name for x in self.allowed_extensions)
+            ]
+            tiff_count_in_folder = len(tiff_file_list)
+            with tf.TiffFile(self.fullpath) as tif:
+                # if you select a file instead of a file path, it will try to
+                # bring in the full folder
+                if tiff_count_in_folder > 50:
+                    sizeX = tif.pages[0].tags["ImageWidth"].value
+                    sizeY = tif.pages[0].tags["ImageLength"].value
+                    sizeZ = tiff_count_in_folder  # can maybe use this later
+                else:
+                    imagesize = tif.pages[0].tags["ImageDescription"]
+                    size = json.loads(imagesize.value)["shape"]
+                    sizeZ = size[0]
+                    sizeY = size[1]
+                    sizeX = size[2]
+
+        elif self.extension == ".npy":
+            size = np.load(self.fullpath, mmap_mode="r").shape
+            sizeZ = size[0]
+            sizeY = size[1]
+            sizeX = size[2]
+
+        return (sizeZ, sizeY, sizeX)
+
+    def set_prj_ranges(self):
+        self.prj_range_x = (0, self.prj_shape[2] - 1)
+        self.prj_range_y = (0, self.prj_shape[1] - 1)
+        self.prj_range_z = (0, self.prj_shape[0] - 1)
+
+
+class RawProjectionsBase(ProjectionsBase, ABC):
+    def __init__(self):
+        super().__init__()
+        self.flats = None
+        self.flats_ind = None
+        self.darks = None
+        self.normalized = False
 
     def normalize_nf(self):
         self._data = tomopy_normalize.normalize_nf(
@@ -114,7 +230,7 @@ class ProjectionsBase(IOBase, ABC):
         self.normalized = True
 
     @abstractmethod
-    def import_folder_metadata(self, folder):
+    def import_metadata(self, folder):
         ...
 
     @abstractmethod
@@ -154,14 +270,13 @@ class ProjectionsBase(IOBase, ABC):
         ...
 
 
-class ProjectionsXRM_SSRL62(ProjectionsBase):
-    def set_options_from_frontend(self, Import):
-        self.Import = Import
-        self.folder = Import.fpath
-        self.filename = Import.fname
-        self.angles_from_filenames = Import.angles_from_filenames
+class RawRawProjectionsXRM_SSRL62(RawProjectionsBase):
+    def __init__(self):
+        super().__init__()
+        self.allowed_extensions = self.allowed_extensions + [".xrm"]
+        self.angles_from_filenames = True
 
-    def import_folder_metadata(self, folder):
+    def import_metadata(self, folder):
         filetypes = [".txt"]
         textfiles = self._file_finder(folder, filetypes)
         scan_info_filepath = (
@@ -256,6 +371,12 @@ class ProjectionsXRM_SSRL62(ProjectionsBase):
     def import_file_darks(self, fullpath):
         pass
 
+    def set_options_from_frontend(self, Import):
+        self.Import = Import
+        self.folder = Import.fpath
+        self.filename = Import.fname
+        self.angles_from_filenames = Import.angles_from_filenames
+
     def parse_scan_info(self, scan_info):
         data_file_list = []
         self.metadata = []
@@ -318,7 +439,9 @@ class ProjectionsXRM_SSRL62(ProjectionsBase):
 
     def get_angles_from_filenames(self):
         reg_exp = re.compile("_[+-]\d\d\d.\d\d")
-        self.angles_deg = map(p.findall, [str(file) for file in self.data_filenames])
+        self.angles_deg = map(
+            reg_exp.findall, [str(file) for file in self.data_filenames]
+        )
         self.angles_deg = [float(angle[0][1:]) for angle in self.angles_deg]
         self.angles_rad = [x * np.pi / 180 for x in self.angles_deg]
 

@@ -63,7 +63,7 @@ class BqImPlotter(ImPlotterBase, ABC):
         "PuBuGn",
     ]
 
-    def __init__(self, imagestack=None, title=None, dimensions=("550px", "550px")):
+    def __init__(self, imagestack=None, title=None, dimensions=("1024px", "181px")):
         super().__init__(imagestack, title)
         self.dimensions = dimensions
         self.current_plot_axis = 0
@@ -179,8 +179,10 @@ class BqImPlotter(ImPlotterBase, ABC):
 
         # Image index slider and play button
         jslink((self.play, "value"), (self.image_index_slider, "value"))
+        jslink((self.play, "min"), (self.image_index_slider, "min"))
+        jslink((self.play, "max"), (self.image_index_slider, "max"))
 
-    # -- Observes -----------
+    # -- Callback functions ------------------------------------------------------------
 
     # Image index
     def change_image(self, change):
@@ -198,6 +200,7 @@ class BqImPlotter(ImPlotterBase, ABC):
     # Swap axes
     def swap_axes(self, *args):
         self.imagestack = np.swapaxes(self.imagestack, 0, 1)
+        self.change_aspect_ratio()
         self.image_index_slider.max = self.imagestack.shape[0] - 1
         self.image_index_slider.value = 0
         self.plotted_image.image = self.imagestack[self.image_index_slider.value]
@@ -208,7 +211,7 @@ class BqImPlotter(ImPlotterBase, ABC):
 
     # Removing high/low intensities
     def rm_high_low_int(self, change):
-        self.vmin, self.vmax = np.percentile(self.imagestack, q=(30.5, 50.5))
+        self.vmin, self.vmax = np.percentile(self.imagestack, q=(0.5, 99.5))
         self.color_range_slider.max = self.vmax
         self.color_range_slider.min = self.vmin
         self.color_range_slider.value = (self.vmin, self.vmax)
@@ -218,6 +221,7 @@ class BqImPlotter(ImPlotterBase, ABC):
         if self.current_plot_axis == 1:
             self.swap_axes()
         self.current_image_ind = 0
+        self.change_aspect_ratio()
         self.plotted_image.image = self.imagestack[0]
         self.vmin = np.min(self.imagestack)
         self.vmax = np.max(self.imagestack)
@@ -231,6 +235,7 @@ class BqImPlotter(ImPlotterBase, ABC):
     def plot(self, imagestack):
         self.imagestack = imagestack
         self.current_image_ind = 0
+        self.change_aspect_ratio()
         self.plotted_image.image = imagestack[0]
         self.vmin = np.min(self.imagestack)
         self.vmax = np.max(self.imagestack)
@@ -238,13 +243,28 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.image_index_slider.value = 0
         self.color_range_slider.min = self.vmin
         self.color_range_slider.max = self.vmax
+        self.color_range_slider.value = (self.vmin, self.vmax)
+
+    # -- Other methods -----------------------------------------------------------------
+
+    def change_aspect_ratio(self):
+        self.pxX = self.imagestack.shape[2]
+        self.pxY = self.imagestack.shape[1]
+        self.aspect_ratio = self.pxX / self.pxY
+        if self.aspect_ratio > self.fig.max_aspect_ratio:
+            self.fig.max_aspect_ratio = self.aspect_ratio
+            self.fig.min_aspect_ratio = self.aspect_ratio
+        else:
+            self.fig.min_aspect_ratio = self.aspect_ratio
+            self.fig.max_aspect_ratio = self.aspect_ratio
+        self.fig.layout.height = str(int(550 / self.aspect_ratio)) + "px"
 
     @abstractmethod
     def create_app(self):
         ...
 
 
-class BqImPlotter_ImportRaw(BqImPlotter):
+class BqImPlotter_Import(BqImPlotter):
     def __init__(self, dimensions=("550px", "550px")):
         super().__init__(dimensions=dimensions)
 
