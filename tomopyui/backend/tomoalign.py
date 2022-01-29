@@ -6,7 +6,7 @@ from time import perf_counter
 import os
 
 from tomopy.prep.alignment import align_joint as align_joint_tomopy
-from .util.metadata_io import save_metadata, load_metadata
+from tomopyui.backend.io import save_metadata, load_metadata
 from tomopyui.backend.util.padding import *
 from tomopyui._sharedvars import *
 
@@ -14,11 +14,10 @@ import datetime
 import json
 import os
 import tifffile as tf
-import tomopyui.backend.tomodata as td
 import numpy as np
 
 # TODO: make this global
-from tomopyui.widgets._shared.helpers import import_module_set_env
+from tomopyui.widgets.helpers import import_module_set_env
 
 cuda_import_dict = {"cupy": "cuda_enabled"}
 import_module_set_env(cuda_import_dict)

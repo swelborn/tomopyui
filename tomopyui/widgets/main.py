@@ -1,5 +1,5 @@
 from ipywidgets import *
-from tomopyui.widgets._shared.helpers import import_module_set_env
+from tomopyui.widgets.helpers import import_module_set_env
 import multiprocessing
 from tomopyui.widgets.imports import Import_SSRL62
 from tomopyui.widgets.center import Center

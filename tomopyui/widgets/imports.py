@@ -1,5 +1,4 @@
-from tomopyui.widgets._import import import_helpers
-from tomopyui.widgets._shared import helpers
+from tomopyui.widgets import helpers
 from ipyfilechooser import FileChooser
 import logging
 from ipywidgets import *
@@ -9,6 +8,7 @@ import time
 from tomopyui.widgets.plot import BqImPlotter_Import
 from tomopyui.backend.io import RawProjectionsXRM_SSRL62, Projections_Prenormalized
 import pathlib
+import functools
 
 
 class ImportBase(ABC):
@@ -23,7 +23,7 @@ class ImportBase(ABC):
         # Init textboxes
         self.angle_start = -90.0
         self.angle_end = 90.0
-        self.angles_textboxes = import_helpers.create_angles_textboxes(self)
+        self.angles_textboxes = self.create_angles_textboxes()
         self.prenorm_projections = Projections_Prenormalized()
         self.prenorm_uploader = PrenormUploader(self)
         self.wd = None
@@ -67,6 +67,38 @@ class ImportBase(ABC):
     #     self.get_prj_shape()
     #     self.set_prj_ranges()
     #     self.set_metadata()
+
+    def create_angles_textboxes(self):
+        """
+        Creates textboxes for angle start/angle end.
+        """
+
+        def create_textbox(description, value, metadatakey, int=False):
+            def angle_callbacks(change, key):
+                self.metadata[key] = change.new
+                if key == "angle_start":
+                    self.angle_start = self.metadata[key]
+                if key == "angle_end":
+                    self.angle_end = self.metadata[key]
+
+            textbox = FloatText(
+                value=value,
+                description=description,
+                disabled=False,
+                style=extend_description_style,
+            )
+
+            textbox.observe(
+                functools.partial(angle_callbacks, key=metadatakey),
+                names="value",
+            )
+            return textbox
+
+        angle_start = create_textbox("Starting angle (\u00b0): ", -90, "angle_start")
+        angle_end = create_textbox("Ending angle (\u00b0): ", 90, "angle_end")
+
+        angles_textboxes = [angle_start, angle_end]
+        return angles_textboxes
 
     @abstractmethod
     def make_tab(self):

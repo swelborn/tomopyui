@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from tomopyui.widgets.plot import BqImPlotter_Analysis
 from tomopyui.backend.tomoalign import TomoAlign
 from tomopyui.backend.tomorecon import TomoRecon
-from tomopyui.backend.util.metadata_io import save_metadata, load_metadata
+from tomopyui.backend.io import save_metadata, load_metadata
 from tomopyui.widgets import helpers
 
 
