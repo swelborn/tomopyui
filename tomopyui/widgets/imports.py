@@ -6,48 +6,31 @@ from ipywidgets import *
 from abc import ABC, abstractmethod
 from tomopyui._sharedvars import *
 import time
-from tomopyui.widgets.plot import BqImPlotter_ImportRaw
-from tomopyui.backend.io import RawProjectionsXRM_SSRL62
+from tomopyui.widgets.plot import BqImPlotter_Import
+from tomopyui.backend.io import RawProjectionsXRM_SSRL62, Projections_Prenormalized
 import pathlib
 
 
 class ImportBase(ABC):
+    """"""
+
     def __init__(self):
+
+        # Init buttons to switch between prenormalized data/raw data
+        self.raw_button = Button()
+        self.prenorm_button = Button()
 
         # Init textboxes
         self.angle_start = -90.0
         self.angle_end = 90.0
-        self.prj_shape = None
-        self.prj_range_x = (0, 100)
-        self.prj_range_y = (0, 100)
-        self.prj_range_z = (0, 100)
-        self.tomo = None
         self.angles_textboxes = import_helpers.create_angles_textboxes(self)
         self.prenorm_projections = Projections_Prenormalized()
-        self.projections = self.prenorm_projections
-
-        # Init filechooser
-        self.fpath = None
-        self.fname = None
-        self.ftype = None
-        self.filechooser = FileChooser()
-        self.filechooser.register_callback(self.update_file_information)
-        self.filechooser.title = "Import Normalized Tomogram:"
+        self.prenorm_uploader = PrenormUploader(self)
         self.wd = None
-
-        # Init filechooser for align metadata
-        self.fpath_align = None
-        self.fname_align = None
-        self.filechooser_align = FileChooser()
-        self.filechooser_align.register_callback(self.update_file_information_align)
-        self.filechooser_align.title = "Import Alignment Metadata:"
-
-        # Init filechooser for recon metadata
-        self.fpath_recon = None
-        self.fname_recon = None
-        self.filechooser_recon = FileChooser()
-        self.filechooser_recon.register_callback(self.update_file_information_recon)
-        self.filechooser_recon.title = "Import Reconstruction Metadata:"
+        self.alignmeta_uploader = MetadataUploader("Import Alignment Metadata:")
+        self.reconmeta_uploader = MetadataUploader("Import Reconstruction Metadata:")
+        self.projections = self.prenorm_projections
+        self.uploader = self.prenorm_uploader
 
         # Init logger to be used throughout the app.
         # TODO: This does not need to be under Import.
@@ -56,7 +39,7 @@ class ImportBase(ABC):
 
         # Init metadata
         self.metadata = {}
-        self.set_metadata()
+        # self.set_metadata()
 
     def set_wd(self, wd):
         """
@@ -66,49 +49,24 @@ class ImportBase(ABC):
         self.wd = wd
         os.chdir(wd)
 
-    def set_metadata(self):
-        """
-        Sets relevant metadata for `Import`
-        """
-        self.metadata = {
-            "fpath": self.fpath,
-            "fname": self.fname,
-            "angle_start": self.angle_start,
-            "angle_end": self.angle_end,
-            "num_theta": self.num_theta,
-            "prj_range_x": self.prj_range_x,
-            "prj_range_y": self.prj_range_y,
-        }
+    # def set_metadata(self):
+    #     """
+    #     Sets relevant metadata for `Import`
+    #     """
+    #     self.metadata = {
+    #         "filedir": self.filedir,
+    #         "filename": self.filename,
+    #         "angle_start": self.angle_start,
+    #         "angle_end": self.angle_end,
+    #         "num_theta": self.num_theta,
+    #         "pixel_range_x": self.pixel_range_x,
+    #         "pixel_range_y": self.pixel_range_y,
+    #     }
 
-    def update_file_information(self):
-        """
-        Callback for `Import`.filechooser.
-        """
-        self.fpath = self.filechooser.selected_path
-        self.fname = self.filechooser.selected_filename
-        self.set_wd(self.fpath)
-        # metadata must be set here in case tomodata is created (for folder
-        # import). this can be changed later.
-        self.set_metadata()
-        self.get_prj_shape()
-        self.set_prj_ranges()
-        self.set_metadata()
-
-    def update_file_information_align(self):
-        """
-        Callback for filechooser_align.
-        """
-        self.fpath_align = self.filechooser_align.selected_path
-        self.fname_align = self.filechooser_align.selected_filename
-        self.set_metadata()
-
-    def update_file_information_recon(self):
-        """
-        Callback for filechooser_recon.
-        """
-        self.fpath_recon = self.filechooser_recon.selected_path
-        self.fname_recon = self.filechooser_recon.selected_filename
-        self.set_metadata()
+    #     self.set_metadata()
+    #     self.get_prj_shape()
+    #     self.set_prj_ranges()
+    #     self.set_metadata()
 
     @abstractmethod
     def make_tab(self):
@@ -116,155 +74,89 @@ class ImportBase(ABC):
 
 
 class Import_SSRL62(ImportBase):
+    """"""
+
     def __init__(self):
         super().__init__()
-        # Init normalizing folder chooser
-        self.fpath_raw = None
-        self.fname_raw = None
-        self.filechooser_raw = FileChooser()
-        self.filechooser_raw.register_callback(self.update_raw_file_information)
-        self.filechooser_raw.title = "Import Raw XRM Folder"
         self.angles_from_filenames = True
-        self._init_widgets()
         self.raw_projections = RawProjectionsXRM_SSRL62()
-        self.raw_projections.set_options_from_frontend(self)
+        self.raw_uploader = RawUploader_SSRL62(self)
+        self.use_raw_button = Button(
+            description="Click to use raw/normalized data from the first tab.",
+            button_style="info",
+            layout=Layout(width="auto", height="auto", align_items="stretch"),
+            # style={"font_size": "18px"},
+        )
+        self.use_raw_button.on_click(self.enable_raw)
+        self.use_prenorm_button = Button(
+            description="Click to use prenormalized data from the second tab.",
+            button_style="info",
+            layout=Layout(width="auto", height="auto", align_items="stretch"),
+            # style={"font_size": "18px"},
+        )
+        self.use_prenorm_button.on_click(self.disable_raw)
         self.make_tab()
 
-    def _init_widgets(self):
-        self.metadata_table_output = Output()
-        self.import_button = Button(
-            icon="upload",
-            style={"font_size": "35px"},
-            button_style="",
-            layout=Layout(width="75px", height="86px"),
-            disabled=True,
+    def disable_raw(self, *args):
+        self.use_prenorm_button.description = (
+            "Prenormalized data from second tab in use for alignment/reconstruction."
         )
-        self.import_button.on_click(self.import_and_normalize_onclick)
-        self.quick_path_search = Textarea(
-            placeholder=r"Z:\swelborn",
-            style=extend_description_style,
-            disabled=False,
-            layout=Layout(align_items="stretch"),
+        self.use_prenorm_button.icon = "fa-check-square"
+        self.use_prenorm_button.button_style = "success"
+        self.use_raw_button.description = (
+            "Click to use raw/normalized data from the first tab."
         )
-        self.progress_output = Output()
-        self.upload_progress = IntProgress(
-            description="Uploading: ",
-            value=0,
-            min=0,
-            max=100,
-            layout=Layout(justify_content="center"),
-        )
-        self.quick_path_label = Label("Quick path search")
-        self.quick_path_search.observe(
-            self.update_filechooser_from_quicksearch, names="value"
-        )
-        self.bq_plotter_raw = BqImPlotter_ImportRaw()
-        self.bq_plotter_raw.create_app()
-
-    def import_and_normalize_onclick(self, change):
-        tic = time.perf_counter()
-        self.import_button.button_style = "info"
-        self.import_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.progress_output.clear_output()
-        self.upload_progress.value = 0
-        self.upload_progress.max = self.raw_projections.pxZ + len(
-            self.raw_projections.flats_ind
-        )
-        with self.progress_output:
-            display(self.upload_progress)
-        self.raw_projections.import_folder_all(self.fpath_raw)
-        with self.progress_output:
-            display(Label("Normalizing", layout=Layout(justify_content="center")))
-
-        self.raw_projections.normalize_nf()
-        toc = time.perf_counter()
-        self.import_button.button_style = "success"
-        self.import_button.icon = "fa-check-square"
-
-        with self.progress_output:
-            display(
-                Label(
-                    f"Import and normalization took {toc-tic:.0f}s",
-                    layout=Layout(justify_content="center"),
-                )
-            )
-        self.bq_plotter_raw.plot(self.raw_projections.prj_imgs)
-
-    def update_filechooser_from_quicksearch(self, change):
-        path = pathlib.Path(change.new)
-        self.fpath_raw = path
-        self.filechooser_raw.reset(path=path)
-        textfiles = self.raw_projections._file_finder(path, [".txt"])
-        if textfiles == []:
-            with self.metadata_table_output:
-                self.metadata_table_output.clear_output(wait=True)
-                print(
-                    "This folder doesn't have any .txt files, please try another one."
-                )
-            return
-        scan_info_filepath = (
-            path / [file for file in textfiles if "ScanInfo" in file][0]
-        )
-        if scan_info_filepath != []:
-            self.raw_projections.import_metadata(path)
-            self.metadata_table = self.raw_projections.metadata_to_DataFrame()
-            with self.metadata_table_output:
-                self.metadata_table_output.clear_output(wait=True)
-                display(self.metadata_table)
-            self.import_button.button_style = "info"
-            self.import_button.disabled = False
-        else:
-            with self.metadata_table_output:
-                self.metadata_table_output.clear_output(wait=True)
-                print(
-                    "This folder doesn't have a ScanInfo file, please try another one."
-                )
-
-    def update_raw_file_information(self):
-
-        self.fpath_raw = pathlib.Path(self.filechooser_raw.selected_path)
-        self.fname_raw = self.filechooser_raw.selected_filename
-        self.set_wd(self.fpath_raw)
-        # metadata must be set here in case tomodata is created (for folder
-        # import). this can be changed later.
-        self.raw_projections.import_metadata(self.fpath_raw)
-        self.metadata_table = self.raw_projections.metadata_to_DataFrame()
-        self.quick_path_search.value = str(self.fpath_raw)
-        with self.metadata_table_output:
-            self.metadata_table_output.clear_output(wait=True)
-            display(self.metadata_table)
-            self.import_button.button_style = "info"
-            self.import_button.disabled = False
-
-    def disable_raw(self):
-
+        self.use_raw_button.icon = ""
+        self.use_raw_button.button_style = "info"
         self.use_raw = False
         self.use_prenorm = True
         self.raw_accordion.selected_index = None
-        self.prenormalized_accordion.selected_index = 0
+        self.prenorm_accordion.selected_index = 0
+        self.projections = self.prenorm_projections
+        self.uploader = self.prenorm_uploader
 
-    def enable_raw(self):
-
+    def enable_raw(self, *args):
+        self.use_raw_button.description = (
+            "Raw/normalized data from first tab in use for alignment/reconstruction."
+        )
+        self.use_raw_button.icon = "fa-check-square"
+        self.use_raw_button.button_style = "success"
+        self.use_prenorm_button.description = (
+            "Click to use prenormalized data from the second tab."
+        )
+        self.use_prenorm_button.icon = ""
+        self.use_prenorm_button.button_style = "info"
         self.use_raw = True
         self.use_prenorm = False
         self.raw_accordion.selected_index = 0
         self.prenorm_accordion.selected_index = None
+        self.projections = self.raw_projections
+        self.uploader = self.raw_uploader
 
     def make_tab(self):
 
-        raw_or_norm_button_box = HBox([])
+        self.switch_data_buttons = HBox(
+            [self.use_raw_button, self.use_prenorm_button],
+            layout=Layout(justify_content="center"),
+        )
 
         raw_import = HBox(
             [
                 VBox(
                     [
-                        self.quick_path_label,
-                        HBox([self.quick_path_search, self.import_button]),
-                        self.filechooser_raw,
+                        self.raw_uploader.quick_path_label,
+                        HBox(
+                            [
+                                self.raw_uploader.quick_path_search,
+                                self.raw_uploader.import_button,
+                            ]
+                        ),
+                        self.raw_uploader.filechooser,
                     ],
                 ),
-                self.bq_plotter_raw.app,
-            ]
+                self.raw_uploader.plotter.app,
+            ],
+            layout=Layout(justify_content="center"),
         )
 
         # raw_import = HBox([item for sublist in raw_import for item in sublist])
@@ -273,63 +165,83 @@ class Import_SSRL62(ImportBase):
                 VBox(
                     [
                         HBox(
-                            [self.metadata_table_output],
+                            [self.raw_uploader.metadata_table_output],
                             layout=Layout(justify_content="center"),
                         ),
                         HBox(
-                            [self.progress_output],
+                            [self.raw_uploader.progress_output],
                             layout=Layout(justify_content="center"),
                         ),
                         raw_import,
                     ]
                 ),
             ],
-            selected_index=None,
+            selected_index=0,
             titles=("Import and Normalize Raw Data",),
         )
-        norm_import = [[self.filechooser], self.angles_textboxes]
         norm_import = HBox(
-            [item for sublist in norm_import for item in sublist],
+            [
+                VBox(
+                    [
+                        self.prenorm_uploader.quick_path_label,
+                        HBox(
+                            [
+                                self.prenorm_uploader.quick_path_search,
+                                self.prenorm_uploader.import_button,
+                            ]
+                        ),
+                        self.prenorm_uploader.filechooser,
+                        HBox(self.angles_textboxes),
+                    ],
+                ),
+                self.prenorm_uploader.plotter.app,
+            ],
             layout=Layout(justify_content="center"),
         )
+
         self.prenorm_accordion = Accordion(
             children=[norm_import],
-            selected_index=None,
-            titles=("Import Pre-normalized Data",),
+            selected_index=0,
+            titles=("Import Prenormalized Data",),
         )
+
         self.meta_accordion = Accordion(
             children=[
                 HBox(
-                    [self.filechooser_align, self.filechooser_recon],
+                    [
+                        self.alignmeta_uploader.filechooser,
+                        self.reconmeta_uploader.filechooser,
+                    ],
                     layout=Layout(justify_content="center"),
                 )
             ],
-            selected_index=None,
+            selected_index=0,
             titles=("Import Alignment/Reconstruction Settings",),
         )
         self.tab = VBox(
             [
-                raw_import,
-                norm_import,
-                meta_import,
+                self.switch_data_buttons,
+                self.raw_accordion,
+                self.prenorm_accordion,
+                self.meta_accordion,
             ]
         )
 
 
 class UploaderBase(ABC):
-    def __init__(self):
+    """"""
 
+    def __init__(self):
+        self.filedir = None
+        self.filename = None
+        self.filechooser = FileChooser()
         self.quick_path_search = Textarea(
             placeholder=r"Z:\swelborn",
             style=extend_description_style,
             disabled=False,
             layout=Layout(align_items="stretch"),
         )
-
         self.quick_path_label = Label("Quick path search")
-        self.filepath = None
-        self.filename = None
-        self.filechooser = FileChooser()
         self.import_button = Button(
             icon="upload",
             style={"font_size": "35px"},
@@ -347,48 +259,99 @@ class UploaderBase(ABC):
         ...
 
     @abstractmethod
-    def import_data(self):
+    def import_data(UploaderBase):
         ...
 
 
-class PrenormUploader(UploaderBase):
-    def __init__(self, PrenormProjections, Import):
+class MetadataUploader(UploaderBase):
+    """"""
+
+    def __init__(self, title):
         super().__init__()
-        self.projections = PrenormProjections
+
+        self.filedir = None
+        self.filename = None
+        self.filechooser = FileChooser()
+        self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
+        self.filechooser.title = title
+        self.quick_path_search = Textarea(
+            placeholder=r"Z:\swelborn\data\metadata.json",
+            style=extend_description_style,
+            disabled=False,
+            layout=Layout(align_items="stretch"),
+        )
+
+        self.quick_path_label = Label("Quick path search")
+        self.quick_path_search.observe(
+            self.update_filechooser_from_quicksearch, names="value"
+        )
+
+    def update_filechooser_from_quicksearch(self, change):
+        path = pathlib.Path(change.new)
+        self.filedir = path
+        self.filechooser.reset(path=path)
+
+    def update_quicksearch_from_filechooser(self):
+        self.filedir = pathlib.Path(self.filechooser.selected_path)
+        self.filename = self.filechooser.selected_filename
+        self.quick_path_search.value = str(self.filedir / self.filename)
+
+    def import_data(self):
+        pass
+
+
+class PrenormUploader(UploaderBase):
+    """"""
+
+    def __init__(self, Import):
+        super().__init__()
+        self.projections = Import.prenorm_projections
         self.Import = Import
         self.quick_path_search.observe(
             self.update_filechooser_from_quicksearch, names="value"
         )
         self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
-        self.filechooser.title = "Import Prenormalized Data"
+        self.filechooser.title = "Import prenormalized data:"
         self.import_button.on_click(self.import_data)
+        self._tmp_disable_reset = False
+        self.plotter = BqImPlotter_Import()
+        self.plotter.create_app()
 
     def update_filechooser_from_quicksearch(self, change):
-        path = pathlib.Path(change.new)
-        self.filepath = path
-        self.filechooser.reset(path=path)
-        if self.check_for_data():
-            self.import_button.button_style = "info"
-            self.import_button.disabled = False
+        if not self._tmp_disable_reset:
+            path = pathlib.Path(change.new)
+            if path.is_dir():
+                self.filedir = path
+                self.filechooser.reset(path=self.filedir)
+            elif any(x in file.name for x in self.projections.allowed_extensions):
+                self.filedir = path.parent
+                self.filename = path.name
+            self.filechooser.reset(path=self.filedir)
+            if self.check_for_data():
+                self.import_button.button_style = "info"
+                self.import_button.disabled = False
 
     def update_quicksearch_from_filechooser(self):
-
-        self.filepath = pathlib.Path(self.filechooser.selected_path)
+        self.filedir = pathlib.Path(self.filechooser.selected_path)
         self.filename = self.filechooser.selected_filename
-        self.quick_path_search.value = str(self.filepath)
+        self._tmp_disable_reset = True
+        self.quick_path_search.value = str(self.filedir / self.filename)
+        self._tmp_disable_reset = False
         if self.check_for_data():
             self.import_button.button_style = "info"
             self.import_button.disabled = False
 
     def import_data(self, change):
+        self.projections.set_options_from_frontend(self.Import, self)
         if self.filechooser.selected_filename == "":
-            self.projections.import_folder_projections(self.filepath)
+            self.projections.import_filedir_projections(self.filedir)
         else:
-            self.projections.import_file_projections(self.filepath / self.filename)
+            self.projections.import_file_projections(self.filedir / self.filename)
+        self.plotter.plot(self.projections.prj_imgs)
 
     def check_for_data(self):
         file_list = self.projections._file_finder(
-            self.filepath, self.projections.allowed_extensions
+            self.filedir, self.projections.allowed_extensions
         )
 
         if len(file_list) > 0:
@@ -398,8 +361,24 @@ class PrenormUploader(UploaderBase):
 
 
 class RawUploader_SSRL62(UploaderBase):
-    def __init__(self, RawProjections, Import):
+    """"""
+
+    def __init__(self, Import):
         super().__init__()
+        self._init_widgets()
+        self.projections = Import.raw_projections
+        self.Import = Import
+        self.import_button.on_click(self.import_data)
+        self.projections.set_options_from_frontend(self.Import, self)
+        self.plotter = BqImPlotter_Import()
+        self.plotter.create_app()
+        self.quick_path_search.observe(
+            self.update_filechooser_from_quicksearch, names="value"
+        )
+        self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
+        self.filechooser.title = "Import Raw XRM filedir"
+
+    def _init_widgets(self):
         self.metadata_table_output = Output()
         self.progress_output = Output()
         self.upload_progress = IntProgress(
@@ -409,16 +388,6 @@ class RawUploader_SSRL62(UploaderBase):
             max=100,
             layout=Layout(justify_content="center"),
         )
-        self.plotter = BqImPlotter_ImportRaw()
-        self.plotter.create_app()
-        self.projections = RawProjections
-        self.Import = Import
-        self.quick_path_search.observe(
-            self.update_filechooser_from_quicksearch, names="value"
-        )
-        self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
-        self.filechooser.title = "Import Raw XRM Folder"
-        self.import_button.on_click(self.import_data)
 
     def import_data(self, change):
         tic = time.perf_counter()
@@ -426,20 +395,19 @@ class RawUploader_SSRL62(UploaderBase):
         self.import_button.icon = "fas fa-cog fa-spin fa-lg"
         self.progress_output.clear_output()
         self.upload_progress.value = 0
-        self.upload_progress.max = self.raw_projections.pxZ + len(
-            self.raw_projections.flats_ind
+        self.upload_progress.max = self.projections.pxZ + len(
+            self.projections.flats_ind
         )
         with self.progress_output:
             display(self.upload_progress)
-        self.raw_projections.import_folder_all(self.fpath_raw)
+
+        self.projections.import_filedir_all(self.filedir)
         with self.progress_output:
             display(Label("Normalizing", layout=Layout(justify_content="center")))
-
-        self.raw_projections.normalize_nf()
+        self.projections.normalize_nf()
         toc = time.perf_counter()
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
-
         with self.progress_output:
             display(
                 Label(
@@ -447,18 +415,18 @@ class RawUploader_SSRL62(UploaderBase):
                     layout=Layout(justify_content="center"),
                 )
             )
-        self.bq_plotter_raw.plot(self.raw_projections.prj_imgs)
+        self.plotter.plot(self.projections.prj_imgs)
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
-        self.filepath = path
+        self.filedir = path
         self.filechooser.reset(path=path)
         textfiles = self.projections._file_finder(path, [".txt"])
         if textfiles == []:
             with self.metadata_table_output:
                 self.metadata_table_output.clear_output(wait=True)
                 print(
-                    "This folder doesn't have any .txt files, please try another one."
+                    "This filedir doesn't have any .txt files, please try another one."
                 )
             return
 
@@ -477,17 +445,17 @@ class RawUploader_SSRL62(UploaderBase):
             with self.metadata_table_output:
                 self.metadata_table_output.clear_output(wait=True)
                 print(
-                    "This folder doesn't have a ScanInfo file, please try another one."
+                    "This filedir doesn't have a ScanInfo file, please try another one."
                 )
 
     def update_quicksearch_from_filechooser(self):
 
-        self.filepath = pathlib.Path(self.filechooser.selected_path)
+        self.filedir = pathlib.Path(self.filechooser.selected_path)
         self.filename = self.filechooser.selected_filename
-        self.quick_path_search.value = str(self.filepath)
-        # metadata must be set here in case tomodata is created (for folder
+        self.quick_path_search.value = str(self.filedir)
+        # metadata must be set here in case tomodata is created (for filedir
         # import). this can be changed later.
-        self.projections.import_metadata(self.filepath)
+        self.projections.import_metadata(self.filedir)
         self.metadata_table = self.projections.metadata_to_DataFrame()
 
         with self.metadata_table_output:

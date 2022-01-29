@@ -36,8 +36,8 @@ def metadata_to_DataFrame(metadata):
     ]
     metadata_frame["Headers"] = metadata_frame["Headers"] + extra_headers
     extra_values = [
-        metadata["prj_range_x"],
-        metadata["prj_range_y"],
+        metadata["pixel_range_x"],
+        metadata["pixel_range_y"],
         metadata["angle_start"],
         metadata["angle_end"],
         time,

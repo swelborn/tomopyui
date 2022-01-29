@@ -2,13 +2,15 @@ import numpy as np
 
 # https://stackoverflow.com/questions/54567986/python-numpy-remove-empty-zeroes-border-of-3d-array
 
+
 def pad_projections(prj, pad):
     npad = ((0, 0), ((pad[1]), pad[1]), (pad[0], pad[0]))
     prj = np.pad(prj, npad, mode="constant", constant_values=0)
     return prj, pad
 
+
 def trim_padding(prj):
-    
+
     xs, ys, zs = np.where(np.absolute(prj) > 1e-7)
 
     minxs = np.min(xs)
@@ -23,6 +25,7 @@ def trim_padding(prj):
     # not sure why +1 here.
 
     return result
+
 
 # https://stackoverflow.com/questions/24806174/is-there-an-opposite-inverse-to-numpy-pad-function
 def unpad_rec_with_pad(rec, pad):
