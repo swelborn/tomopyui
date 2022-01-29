@@ -5,12 +5,11 @@ from tomopy.prep.alignment import scale as scale_tomo
 from contextlib import nullcontext
 from tomopy.recon import algorithm
 from tomopy.misc.corr import circ_mask
-from .util.metadata_io import save_metadata, load_metadata
+from tomopyui.backend.io import save_metadata, load_metadata
 from tomopy.recon import algorithm as tomopy_algorithm
 from tomopyui.backend.tomoalign import TomoAlign
 from tomopyui.backend.util.padding import *
 
-import tomopyui.backend.tomodata as td
 import matplotlib.pyplot as plt
 import datetime
 import time
@@ -21,7 +20,7 @@ import tomopy
 import numpy as np
 
 # TODO: make this global
-from tomopyui.widgets._shared.helpers import import_module_set_env
+from tomopyui.widgets.helpers import import_module_set_env
 
 cuda_import_dict = {"cupy": "cuda_enabled"}
 import_module_set_env(cuda_import_dict)
