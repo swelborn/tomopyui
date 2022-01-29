@@ -27,6 +27,7 @@ if os.environ["cuda_enabled"] == "True":
     from ..tomocupy.prep.alignment import shift_prj_cp
 
 
+# TODO: create superclass for TomoRecon and TomoAlign, as they basically do the same thing.
 class TomoAlign:
     """ """
 
@@ -45,7 +46,7 @@ class TomoAlign:
         self.metadata["angle_end"] = self.projections.angles_deg[-1]
 
         self.make_wd()
-        self._main()
+        self.run()
 
     def _set_attributes_from_frontend(self, Align):
         self.Align = Align
@@ -88,7 +89,7 @@ class TomoAlign:
     def make_metadata_list(self):
         """
         Creates a metadata list for all of the methods check-marked in the UI.
-        This is put into the for loop in _main. Each item in the list is a
+        This is put into the for loop in run. Each item in the list is a
         separate metadata dictionary.
         """
         metadata_list = []
@@ -223,7 +224,7 @@ class TomoAlign:
         self.projections_aligned = deepcopy(self.projections)
         self.projections_aligned.data = new_prj_imgs
 
-    def _main(self):
+    def run(self):
         """
         Reconstructs a TomoData object using options in GUI.
         """
