@@ -1,20 +1,18 @@
 from ipywidgets import *
 from tomopyui.widgets._shared.helpers import import_module_set_env
-import tomopyui.widgets.meta as meta
 import multiprocessing
 from tomopyui.widgets.imports import Import_SSRL62
 from tomopyui.widgets.center import Center
+from tomopyui.widgets.analysis import Align, Recon
 
 # checks if cupy is installed. if not, disable cuda and certain gui aspects
-# TODO: can put this somewhere else (in meta?)
+# TODO: can put this somewhere else
 cuda_import_dict = {"cupy": "cuda_enabled"}
 import_module_set_env(cuda_import_dict)
 
 # checks how many cpus available for compute on CPU
 # TODO: can later add a bounded textbox for amount of CPUs user wants to use
 # for reconstruction. right now defaults to all cores being used.
-
-
 os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
 
 
@@ -35,10 +33,10 @@ def create_dashboard():
 
     file_import = Import_SSRL62()
     center = Center(file_import)
-    align = meta.Align(file_import, center)
-    recon = meta.Recon(file_import, center)
-    dataexplorer = meta.DataExplorerTab(align, recon)
-    dataexplorer.create_data_explorer_tab()
+    align = Align(file_import, center)
+    recon = Recon(file_import, center)
+    # dataexplorer = DataExplorerTab(align, recon)
+    # dataexplorer.create_data_explorer_tab()
 
     for checkbox in (
         align.astra_cuda_methods_checkboxes + recon.astra_cuda_methods_checkboxes
@@ -55,10 +53,10 @@ def create_dashboard():
 
     dashboard_tabs = [
         file_import.tab,
-        center.center_tab,
+        center.tab,
         align.tab,
         recon.tab,
-        dataexplorer.tab,
+        # dataexplorer.tab,
         file_import.log_handler.out,
     ]
 
@@ -67,7 +65,7 @@ def create_dashboard():
         "Center",
         "Align",
         "Reconstruct",
-        "Data Explorer",
+        # "Data Explorer",
         "Log",
     ]
 

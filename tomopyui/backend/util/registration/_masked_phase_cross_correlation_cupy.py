@@ -17,9 +17,9 @@ import numpy as np
 from .fft import fftmodule, next_fast_len
 
 
-def _masked_phase_cross_correlation(reference_image, moving_image,
-                                    reference_mask, moving_mask=None,
-                                    overlap_ratio=0.3):
+def _masked_phase_cross_correlation(
+    reference_image, moving_image, reference_mask, moving_mask=None, overlap_ratio=0.3
+):
     """Masked image translation registration by masked normalized
     cross-correlation.
 
@@ -66,19 +66,24 @@ def _masked_phase_cross_correlation(reference_image, moving_image,
         if reference_image.shape != moving_image.shape:
             raise ValueError(
                 "Input images have different shapes, moving_mask must "
-                "be explicitely set.")
+                "be explicitely set."
+            )
         moving_mask = cp.array(reference_mask, dtype=bool, copy=True)
 
     # We need masks to be of the same size as their respective images
-    for (im, mask) in [(reference_image, reference_mask),
-                       (moving_image, moving_mask)]:
+    for (im, mask) in [(reference_image, reference_mask), (moving_image, moving_mask)]:
         if im.shape != mask.shape:
-            raise ValueError(
-                "Image sizes must match their respective mask sizes.")
+            raise ValueError("Image sizes must match their respective mask sizes.")
 
-    xcorr = cross_correlate_masked(moving_image, reference_image, moving_mask,
-                                   reference_mask, axes=(0, 1), mode='full',
-                                   overlap_ratio=overlap_ratio)
+    xcorr = cross_correlate_masked(
+        moving_image,
+        reference_image,
+        moving_mask,
+        reference_mask,
+        axes=(0, 1),
+        mode="full",
+        overlap_ratio=overlap_ratio,
+    )
 
     # Generalize to the average of multiple equal maxima
     maxima = cp.stack(cp.nonzero(xcorr == xcorr.max()), axis=1)
@@ -87,16 +92,15 @@ def _masked_phase_cross_correlation(reference_image, moving_image,
 
     # The mismatch in size will impact the center location of the
     # cross-correlation
-    size_mismatch = [
-        t - s for t, s in zip(moving_image.shape, reference_image.shape)
-    ]
+    size_mismatch = [t - s for t, s in zip(moving_image.shape, reference_image.shape)]
     size_mismatch = cp.asarray(size_mismatch)
 
     return -shifts + (size_mismatch / 2)
 
 
-def cross_correlate_masked(arr1, arr2, m1, m2, mode='full', axes=(-2, -1),
-                           overlap_ratio=0.3):
+def cross_correlate_masked(
+    arr1, arr2, m1, m2, mode="full", axes=(-2, -1), overlap_ratio=0.3
+):
     """
     Masked normalized cross-correlation between arrays.
 
@@ -150,7 +154,7 @@ def cross_correlate_masked(arr1, arr2, m1, m2, mode='full', axes=(-2, -1),
            Pattern Recognition, pp. 2918-2925 (2010).
            :DOI:`10.1109/CVPR.2010.5540032`
     """
-    if mode not in {'full', 'same'}:
+    if mode not in {"full", "same"}:
         raise ValueError("Correlation mode '{}' is not valid.".format(mode))
 
     if arr1.dtype.kind == "c" or arr2.dtype.kind == "c":
@@ -167,11 +171,12 @@ def cross_correlate_masked(arr1, arr2, m1, m2, mode='full', axes=(-2, -1),
 
     # Array dimensions along non-transformation axes should be equal.
     all_axes = set(range(fixed_image.ndim))
-    for axis in (all_axes - set(axes)):
+    for axis in all_axes - set(axes):
         if fixed_image.shape[axis] != moving_image.shape[axis]:
             raise ValueError(
                 "Array shapes along non-transformation axes should be "
-                "equal, but dimensions along axis {a} are not".format(a=axis))
+                "equal, but dimensions along axis {a} are not".format(a=axis)
+            )
 
     # Determine final size along transformation axes
     # Note that it might be faster to compute Fourier transform in a slightly
@@ -179,8 +184,7 @@ def cross_correlate_masked(arr1, arr2, m1, m2, mode='full', axes=(-2, -1),
     # we slice back to`final_shape` using `final_slice`.
     final_shape = list(arr1.shape)
     for axis in axes:
-        final_shape[axis] = fixed_image.shape[axis] + \
-            moving_image.shape[axis] - 1
+        final_shape[axis] = fixed_image.shape[axis] + moving_image.shape[axis] - 1
     final_shape = tuple(final_shape)
     final_slice = tuple([slice(0, int(sz)) for sz in final_shape])
 
@@ -211,30 +215,30 @@ def cross_correlate_masked(arr1, arr2, m1, m2, mode='full', axes=(-2, -1),
 
     # Calculate overlap of masks at every point in the convolution.
     # Locations with high overlap should not be taken into account.
-    number_overlap_masked_px = cp.real(
-        ifft(rotated_moving_mask_fft * fixed_mask_fft)
-    )
+    number_overlap_masked_px = cp.real(ifft(rotated_moving_mask_fft * fixed_mask_fft))
     number_overlap_masked_px[:] = cp.around(number_overlap_masked_px)
     number_overlap_masked_px[:] = cp.fmax(number_overlap_masked_px, eps)
     masked_correlated_fixed_fft = ifft(rotated_moving_mask_fft * fixed_fft)
-    masked_correlated_rotated_moving_fft = ifft(
-        fixed_mask_fft * rotated_moving_fft)
+    masked_correlated_rotated_moving_fft = ifft(fixed_mask_fft * rotated_moving_fft)
 
     numerator = ifft(rotated_moving_fft * fixed_fft)
-    numerator -= masked_correlated_fixed_fft * \
-        masked_correlated_rotated_moving_fft / number_overlap_masked_px
+    numerator -= (
+        masked_correlated_fixed_fft
+        * masked_correlated_rotated_moving_fft
+        / number_overlap_masked_px
+    )
 
     fixed_squared_fft = fft(cp.square(fixed_image))
     fixed_denom = ifft(rotated_moving_mask_fft * fixed_squared_fft)
-    fixed_denom -= cp.square(masked_correlated_fixed_fft) / \
-        number_overlap_masked_px
+    fixed_denom -= cp.square(masked_correlated_fixed_fft) / number_overlap_masked_px
 
     fixed_denom[:] = cp.fmax(fixed_denom, 0.0)
 
     rotated_moving_squared_fft = fft(cp.square(rotated_moving_image))
     moving_denom = ifft(fixed_mask_fft * rotated_moving_squared_fft)
-    moving_denom -= cp.square(masked_correlated_rotated_moving_fft) / \
-        number_overlap_masked_px
+    moving_denom -= (
+        cp.square(masked_correlated_rotated_moving_fft) / number_overlap_masked_px
+    )
 
     moving_denom[:] = cp.fmax(moving_denom, 0.0)
 
@@ -245,9 +249,8 @@ def cross_correlate_masked(arr1, arr2, m1, m2, mode='full', axes=(-2, -1),
     denom = denom[final_slice]
     number_overlap_masked_px = number_overlap_masked_px[final_slice]
 
-    if mode == 'same':
-        _centering = partial(_centered,
-                             newshape=fixed_image.shape, axes=axes)
+    if mode == "same":
+        _centering = partial(_centered, newshape=fixed_image.shape, axes=axes)
         denom = _centering(denom)
         numerator = _centering(numerator)
         number_overlap_masked_px = _centering(number_overlap_masked_px)
@@ -267,8 +270,9 @@ def cross_correlate_masked(arr1, arr2, m1, m2, mode='full', axes=(-2, -1),
     cp.clip(out, a_min=-1, a_max=1, out=out)
 
     # Apply overlap ratio threshold
-    number_px_threshold = overlap_ratio * np.max(number_overlap_masked_px,
-                                                 axis=axes, keepdims=True)
+    number_px_threshold = overlap_ratio * np.max(
+        number_overlap_masked_px, axis=axes, keepdims=True
+    )
     out[number_overlap_masked_px < number_px_threshold] = 0.0
 
     return out

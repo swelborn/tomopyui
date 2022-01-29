@@ -32,32 +32,29 @@ class TomoAlign:
 
     def __init__(self, Align):
 
-        # -- Creating attributes for alignment calcs --------------------------
         self._set_attributes_from_frontend(Align)
-        self.tomo = td.TomoData(metadata=Align.Import.metadata)
-        self.wd_parent = Align.Import.wd
-        self.plot_output1 = Align.plot_output1
-        self.plot_output2 = Align.plot_output2
         self.shift = None
         self.sx = None
         self.sy = None
         self.conv = None
         self.recon = None
         # TODO: probably not great place to store
-        self.metadata["parent_fpath"] = self.Align.Import.fpath
-        self.metadata["parent_fname"] = self.Align.Import.fname
-        self.metadata["angle_start"] = self.Align.Import.angle_start
-        self.metadata["angle_end"] = self.Align.Import.angle_end
+        self.metadata["parent_filedir"] = self.projections.filedir
+        self.metadata["parent_filename"] = self.projections.filename
+        self.metadata["angle_start"] = self.projections.angles_deg[0]
+        self.metadata["angle_end"] = self.projections.angles_deg[-1]
 
         self.make_wd()
         self._main()
 
     def _set_attributes_from_frontend(self, Align):
         self.Align = Align
+        self.projections = Align.projections
+        self.angles_rad = Align.projections.angles_rad
+        self.wd_parent = Align.projections.filedir
         self.metadata = Align.metadata.copy()
-        if Align.partial:
-            self.prj_range_x = Align.prj_range_x
-            self.prj_range_y = Align.prj_range_y
+        self.pixel_range_x = Align.projections.pixel_range_x
+        self.pixel_range_y = Align.projections.pixel_range_y
         self.pad = (Align.paddingX, Align.paddingY)
         self.downsample = Align.downsample
         if self.downsample:
@@ -69,6 +66,8 @@ class TomoAlign:
         self.center = Align.center + self.pad_ds[0]
         self.num_iter = Align.num_iter
         self.upsample_factor = Align.upsample_factor
+        self.plot_output1 = Align.plot_output1
+        self.plot_output2 = Align.plot_output2
 
     def make_wd(self):
         now = datetime.datetime.now()
@@ -81,9 +80,9 @@ class TomoAlign:
             os.mkdir(dt_string + "alignment-1")
             os.chdir(dt_string + "alignment-1")
         save_metadata("overall_alignment_metadata.json", self.metadata)
-        #!!!!!!!!!! make option for tiff file save
+        # !!!!!!!!!! make option for tiff file save
         if self.metadata["save_opts"]["tomo_before"]:
-            np.save("projections_before_alignment", self.tomo.prj_imgs)
+            np.save("projections_before_alignment", self.projections.data)
         self.wd = os.getcwd()
 
     def make_metadata_list(self):
@@ -109,22 +108,9 @@ class TomoAlign:
         return metadata_list
 
     def init_prj(self):
-        if self.metadata["partial"]:
-            prj_range_x_low = self.prj_range_x[0]
-            prj_range_x_high = self.prj_range_x[1]
-            prj_range_y_low = self.prj_range_y[0]
-            prj_range_y_high = self.prj_range_y[1]
-            self.prjs = deepcopy(
-                self.tomo.prj_imgs[
-                    :,
-                    prj_range_y_low:prj_range_y_high:1,
-                    prj_range_x_low:prj_range_x_high:1,
-                ]
-            )
-            # center of rotation change to fit new range
-            self.center = self.center - prj_range_x_low
-        else:
-            self.prjs = deepcopy(self.tomo.prj_imgs)
+        self.prjs = deepcopy(self.projections.data)
+        # center of rotation change to fit new range
+        self.center = self.center - self.pixel_range_x[0]
 
         # Downsample
         if self.downsample:
@@ -159,7 +145,7 @@ class TomoAlign:
                 if method == "gridrec" or method == "fbp":
                     self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
                         self.prjs,
-                        self.tomo.theta,
+                        self.angles_rad,
                         upsample_factor=self.upsample_factor,
                         center=self.center,
                         algorithm=method,
@@ -167,7 +153,7 @@ class TomoAlign:
                 else:
                     self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
                         self.prjs,
-                        self.tomo.theta,
+                        self.angles_rad,
                         upsample_factor=self.upsample_factor,
                         center=self.center,
                         algorithm=method,
@@ -189,10 +175,10 @@ class TomoAlign:
         save_metadata("metadata.json", self.metadata)
         if self.metadata["save_opts"]["tomo_after"]:
             if self.metadata["save_opts"]["npy"]:
-                np.save("projections_after_alignment", self.tomo_aligned.prj_imgs)
+                np.save("projections_after_alignment", self.projections_aligned.data)
             if self.metadata["save_opts"]["tiff"]:
                 tf.imwrite(
-                    "projections_after_alignment.tif", self.tomo_aligned.prj_imgs
+                    "projections_after_alignment.tif", self.projections_aligned.data
                 )
 
             # defaults to at least saving tiff if none are checked
@@ -201,7 +187,7 @@ class TomoAlign:
                 and not self.metadata["save_opts"]["npy"]
             ):
                 tf.imwrite(
-                    "projections_after_alignment.tif", self.tomo_aligned.prj_imgs
+                    "projections_after_alignment.tif", self.projections_aligned.data
                 )
         if self.metadata["save_opts"]["recon"] and self.current_align_is_cuda:
             if self.metadata["save_opts"]["npy"]:
@@ -218,23 +204,24 @@ class TomoAlign:
         np.save("sy", self.sy)
         np.save("conv", self.conv)
 
-    def _shift_prjs_after_alignment(
-        self,
-    ):
-        new_prj_imgs = deepcopy(self.tomo.prj_imgs)
+    def _shift_prjs_after_alignment(self):
+        new_prj_imgs = deepcopy(self.projections.data)
         new_prj_imgs, self.pad = pad_projections(new_prj_imgs, self.pad)
-        new_prj_imgs = shift_prj_cp(
-            new_prj_imgs,
-            self.sx,
-            self.sy,
-            self.num_batches,
-            self.pad,
-            use_corr_prj_gpu=False,
-        )
+        if self.current_align_is_cuda:
+            new_prj_imgs = shift_prj_cp(
+                new_prj_imgs,
+                self.sx,
+                self.sy,
+                self.num_batches,
+                self.pad,
+                use_corr_prj_gpu=False,
+            )
+        else:
+            # TODO: make shift projections without cupy
+            pass
         new_prj_imgs = trim_padding(new_prj_imgs)
-        self.tomo_aligned = td.TomoData(
-            prj_imgs=new_prj_imgs, metadata=self.Align.Import.metadata
-        )
+        self.projections_aligned = deepcopy(self.projections)
+        self.projections_aligned.data = new_prj_imgs
 
     def _main(self):
         """
@@ -248,13 +235,7 @@ class TomoAlign:
             tic = perf_counter()
             self.align()
             # make new dataset and pad/shift it
-            if self.current_align_is_cuda:
-                self._shift_prjs_after_alignment()
-            else:
-                self.tomo_aligned = td.TomoData(
-                    prj_imgs=self.prjs, metadata=self.Align.Import.metadata
-                )
-
+            self._shift_prjs_after_alignment()
             toc = perf_counter()
             self.metadata["analysis_time"] = {
                 "seconds": toc - tic,

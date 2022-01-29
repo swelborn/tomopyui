@@ -52,7 +52,9 @@ def _upsampled_dft(data, upsampled_region_size, upsample_factor=1, axis_offsets=
 
     # if people pass in an integer, expand it to a list of equal-sized sections
     if not hasattr(upsampled_region_size, "__iter__"):
-        upsampled_region_size = [upsampled_region_size,] * data.ndim
+        upsampled_region_size = [
+            upsampled_region_size,
+        ] * data.ndim
         upsampled_region_size = cp.asarray(upsampled_region_size, dtype=cp.float64)
     else:
         if len(upsampled_region_size) != data.ndim:
@@ -61,7 +63,9 @@ def _upsampled_dft(data, upsampled_region_size, upsample_factor=1, axis_offsets=
                 "to input data's number of dimensions."
             )
     if axis_offsets is None:
-        axis_offsets = [0,] * data.ndim
+        axis_offsets = [
+            0,
+        ] * data.ndim
     else:
         if len(axis_offsets) != data.ndim:
             raise ValueError(

@@ -3,7 +3,9 @@
 from tomopy.misc.corr import circ_mask
 from tomopy.recon import wrappers
 from cupyx.scipy import ndimage as ndi_cp
-from tomopyui.backend.util.registration._phase_cross_correlation_cupy import phase_cross_correlation
+from tomopyui.backend.util.registration._phase_cross_correlation_cupy import (
+    phase_cross_correlation,
+)
 from tomopy.prep.alignment import scale as scale_tomo
 from tomopy.recon import algorithm as tomopy_algorithm
 from bqplot_image_gl import ImageGL
@@ -70,10 +72,12 @@ def align_joint(TomoAlign):
     }
 
     image_projection = ImageGL(
-        image=TomoAlign.prjs[projection_num], scales=scales_image,
+        image=TomoAlign.prjs[projection_num],
+        scales=scales_image,
     )
     image_simulated = ImageGL(
-        image=np.zeros_like(TomoAlign.prjs[projection_num]), scales=scales_image,
+        image=np.zeros_like(TomoAlign.prjs[projection_num]),
+        scales=scales_image,
     )
 
     projection_fig.marks = (image_projection,)
@@ -173,7 +177,7 @@ def align_joint(TomoAlign):
         if method_str == "SIRT_Plugin":
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_plugin(
                 TomoAlign.prjs,
-                TomoAlign.tomo.theta,
+                TomoAlign.angles_rad,
                 num_iter=1,
                 rec=_rec,
                 center=center,
@@ -181,7 +185,7 @@ def align_joint(TomoAlign):
         elif method_str == "SIRT_3D":
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
                 TomoAlign.prjs,
-                TomoAlign.tomo.theta,
+                TomoAlign.angles_rad,
                 num_iter=1,
                 rec=_rec,
                 center=center,
@@ -189,7 +193,7 @@ def align_joint(TomoAlign):
         elif method_str == "CGLS_3D":
             TomoAlign.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
                 TomoAlign.prjs,
-                TomoAlign.tomo.theta,
+                TomoAlign.angles_rad,
                 num_iter=1,
                 rec=_rec,
                 center=center,
@@ -206,7 +210,7 @@ def align_joint(TomoAlign):
             kwargs["options"] = options
             TomoAlign.recon = tomopy_algorithm.recon(
                 TomoAlign.prjs,
-                TomoAlign.tomo.theta,
+                TomoAlign.angles_rad,
                 algorithm=wrappers.astra,
                 init_recon=_rec,
                 center=center,
@@ -232,7 +236,7 @@ def align_joint(TomoAlign):
             _rec,
             sim,
             center,
-            TomoAlign.tomo.theta,
+            TomoAlign.angles_rad,
             progress=TomoAlign.Align.progress_reprj,
         )
         sim = np.concatenate(sim, axis=1)
@@ -301,7 +305,9 @@ def align_joint(TomoAlign):
         TomoAlign.sy /= TomoAlign.downsample_factor
         TomoAlign.shift /= TomoAlign.downsample_factor
 
-    TomoAlign.pad = tuple([int(x / TomoAlign.downsample_factor) for x in TomoAlign.pad_ds])
+    TomoAlign.pad = tuple(
+        [int(x / TomoAlign.downsample_factor) for x in TomoAlign.pad_ds]
+    )
     return TomoAlign
 
 
@@ -312,7 +318,12 @@ def simulate_projections(rec, sim, center, theta, progress=None):
         vol_geom = astra.create_vol_geom(_rec.shape[1], _rec.shape[1], _rec.shape[0])
         phantom_id = astra.data3d.create("-vol", vol_geom, data=_rec)
         proj_geom = astra.create_proj_geom(
-            "parallel3d", 1, 1, _rec.shape[0], _rec.shape[1], theta,
+            "parallel3d",
+            1,
+            1,
+            _rec.shape[0],
+            _rec.shape[1],
+            theta,
         )
         if center is not None:
             center_shift = -(center - _rec.shape[1] / 2)
@@ -384,7 +395,10 @@ def batch_cross_correlation(
         # In the warping section, we have to now warp prj by (-50, 0), so the
         # SAME sign of the shift value given here.
         shift_gpu = phase_cross_correlation(
-            _sim_gpu, _prj_gpu, upsample_factor=upsample_factor, return_error=False,
+            _sim_gpu,
+            _prj_gpu,
+            upsample_factor=upsample_factor,
+            return_error=False,
         )
         shift_cpu.append(cp.asnumpy(shift_gpu))
         if progress is not None:
@@ -463,7 +477,7 @@ def shift_prj_update_shift_cp(
     pad,
     center,
     downsample_factor=1,
-    smart_shift=True,
+    smart_shift=False,
     smart_pad=True,
     progress=None,
 ):
@@ -473,7 +487,7 @@ def shift_prj_update_shift_cp(
     # TODO: add checks for sx, sy having the same dimension as prj
     #
     # If the shift starts to get larger than the padding in one direction,
-    # shift it to the center of the sx values. This should help to avoid
+    # shift it to the center of the sx values.
     average_sx = None
     average_sy = None
     if smart_shift:

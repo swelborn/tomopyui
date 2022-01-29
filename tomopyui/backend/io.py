@@ -15,6 +15,7 @@ class IOBase:
     def __init__(self):
 
         self._data = np.random.rand(10, 100, 100)
+        self.imported = False
         self._fullpath = None
         self.dtype = None
         self.shape = None
@@ -22,7 +23,7 @@ class IOBase:
         self.pxY = self._data.shape[1]
         self.pxZ = self._data.shape[0]
         self.size_gb = None
-        self.folder = None
+        self.filedir = None
         self.filename = None
         self.extension = None
         self.parent = None
@@ -30,13 +31,6 @@ class IOBase:
         self.raw = False
         self.single_file = False
         self.metadata = {}
-
-    def _change_dtype(self, dtype):
-        try:
-            self._data = self._data.astype(dtype)
-            self.dtype = dtype
-        except TypeError:
-            print("That's not a type accepted by numpy arrays")
 
     @property
     def data(self):
@@ -59,19 +53,19 @@ class IOBase:
 
     @fullpath.setter
     def fullpath(self, value):
-        self.folder = value.parent
+        self.filedir = value.parent
         self.filename = value.name
         self.extension = value.suffix
         self._fullpath = value
 
-    def _write_data_npy(self, folder: pathlib.Path, name: str):
-        np.save(folder / name, self.data)
+    def _write_data_npy(self, filedir: pathlib.Path, name: str):
+        np.save(filedir / name, self.data)
 
-    def _write_data_tiff(self, folder: pathlib.Path, name: str):
-        tf.imwrite(folder / name, self.data)
+    def _write_data_tiff(self, filedir: pathlib.Path, name: str):
+        tf.imwrite(filedir / name, self.data)
 
-    def _file_finder(self, folder, filetypes: list):
-        files = [pathlib.PurePath(f) for f in os.scandir(folder) if not f.is_dir()]
+    def _file_finder(self, filedir, filetypes: list):
+        files = [pathlib.PurePath(f) for f in os.scandir(filedir) if not f.is_dir()]
         files_with_ext = [
             file.name for file in files if any(x in file.name for x in filetypes)
         ]
@@ -85,9 +79,9 @@ class ProjectionsBase(IOBase, ABC):
         "num_angles": "pxZ",
         "width": "pxX",
         "height": "pxY",
-        "prj_range_x": "rangeX",
-        "prj_range_y": "rangeY",
-        "prj_range_z": "rangeZ",  # Could probably fix these
+        "pixel_range_x": "rangeX",
+        "pixel_range_y": "rangeY",
+        "pixel_range_z": "rangeZ",  # Could probably fix these
     }
 
     def __init__(self):
@@ -107,11 +101,11 @@ class ProjectionsBase(IOBase, ABC):
         return object.__getattribute__(self, name)
 
     @abstractmethod
-    def import_metadata(self, folder):
+    def import_metadata(self, filedir):
         ...
 
     @abstractmethod
-    def import_folder_projections(self, folder):
+    def import_filedir_projections(self, filedir):
         ...
 
     @abstractmethod
@@ -127,65 +121,71 @@ class Projections_Prenormalized(ProjectionsBase):
     def import_metadata(self, fullpath):
         pass
 
-    def import_folder_projections(self, folder):
+    def import_filedir_projections(self, filedir):
         cwd = os.getcwd()
-        os.chdir(folder)
+        os.chdir(filedir)
         image_sequence = tf.TiffSequence()
-        self.num_theta = len(image_sequence.files)
         self._data = image_sequence.asarray().astype(np.float32)
         self.data = self._data
         image_sequence.close()
+        self.make_angles()
         os.chdir(cwd)
 
     def import_file_projections(self, fullpath):
 
-        if ".tif" in fullpath:
+        if ".tif" in str(fullpath):
             # if there is a file name, checks to see if there are many more
-            # tiffs in the folder. If there are, will upload all of them.
+            # tiffs in the filedir. If there are, will upload all of them.
             filetypes = [".tif", ".tiff"]
-            textfiles = self._file_finder(folder, filetypes)
-            tiff_count_in_folder = len(textfiles)
-            if tiff_count_in_folder > 50:
-                self.import_folder_projections(fullpath.parent)
+            textfiles = self._file_finder(fullpath.parent, filetypes)
+            tiff_count_in_filedir = len(textfiles)
+            if tiff_count_in_filedir > 50:
+                self.import_filedir_projections(fullpath.parent)
                 pass
-            self._data = dxchange.reader.read_tiff(fullpath).astype(np.float32)
+            self._data = np.array(
+                dxchange.reader.read_tiff(fullpath).astype(np.float32)
+            )
             self._fullpath = fullpath
             self.fullpath = self._fullpath
             self.data = self._data
+            self.make_angles()
+            self.imported = True
 
-        elif ".npy" in fullpath:
+        elif ".npy" in str(fullpath):
             self._data = np.load(fullpath).astype(np.float32)
             self._fullpath = fullpath
             self.fullpath = self._fullpath
             self.data = self._data
+            self.imported = True
 
-    def set_options_from_frontend(self, Import):
-        self.Import = Import
-        self.folder = Import.fpath
-        self.filename = Import.fname
-        if self.filename is not "":
-            self.fullpath = self.folder / self.filename
+    def set_options_from_frontend(self, Import, Uploader):
+        self.angle_start = Import.angle_start
+        self.angle_end = Import.angle_end
+        self.filedir = Uploader.filedir
+        self.filename = Uploader.filename
+        if self.filename != "":
+            self.fullpath = self.filedir / self.filename
 
     def get_img_shape(self):
 
         if self.extension == ".tif" or self.extension == ".tiff":
             allowed_extensions = [".tiff", ".tif"]
             file_list = [
-                pathlib.PurePath(f) for f in os.scandir(self.folder) if not f.is_dir()
+                pathlib.PurePath(f) for f in os.scandir(self.filedir) if not f.is_dir()
             ]
             tiff_file_list = [
                 file.name
                 for file in file_list
                 if any(x in file.name for x in self.allowed_extensions)
             ]
-            tiff_count_in_folder = len(tiff_file_list)
+            tiff_count_in_filedir = len(tiff_file_list)
             with tf.TiffFile(self.fullpath) as tif:
                 # if you select a file instead of a file path, it will try to
-                # bring in the full folder
-                if tiff_count_in_folder > 50:
+                # bring in the full filedir
+                if tiff_count_in_filedir > 50:
                     sizeX = tif.pages[0].tags["ImageWidth"].value
                     sizeY = tif.pages[0].tags["ImageLength"].value
-                    sizeZ = tiff_count_in_folder  # can maybe use this later
+                    sizeZ = tiff_count_in_filedir  # can maybe use this later
                 else:
                     imagesize = tif.pages[0].tags["ImageDescription"]
                     size = json.loads(imagesize.value)["shape"]
@@ -202,9 +202,17 @@ class Projections_Prenormalized(ProjectionsBase):
         return (sizeZ, sizeY, sizeX)
 
     def set_prj_ranges(self):
-        self.prj_range_x = (0, self.prj_shape[2] - 1)
-        self.prj_range_y = (0, self.prj_shape[1] - 1)
-        self.prj_range_z = (0, self.prj_shape[0] - 1)
+        self.pixel_range_x = (0, self.prj_shape[2] - 1)
+        self.pixel_range_y = (0, self.prj_shape[1] - 1)
+        self.pixel_range_z = (0, self.prj_shape[0] - 1)
+
+    def make_angles(self):
+        self.angles_rad = angle_maker(
+            self.pxZ,
+            ang1=self.angle_start,
+            ang2=self.angle_end,
+        )
+        self.angles_deg = [x * 180 / np.pi for x in self.angles_rad]
 
 
 class RawProjectionsBase(ProjectionsBase, ABC):
@@ -219,34 +227,36 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         self._data = tomopy_normalize.normalize_nf(
             self._data, self.flats, self.darks, self.flats_ind
         )
+        self._data = tomopy_normalize.minus_log(self._data)
         self.data = self._data
         self.raw = False
         self.normalized = True
 
     def normalize(self):
         self._data = tomopy_normalize.normalize(self._data, self.flats, self.darks)
+        self._data = tomopy_normalize.minus_log(self._data)
         self.data = self._data
         self.raw = False
         self.normalized = True
 
     @abstractmethod
-    def import_metadata(self, folder):
+    def import_metadata(self, filedir):
         ...
 
     @abstractmethod
-    def import_folder_all(self, folder):
+    def import_filedir_all(self, filedir):
         ...
 
     @abstractmethod
-    def import_folder_projections(self, folder):
+    def import_filedir_projections(self, filedir):
         ...
 
     @abstractmethod
-    def import_folder_flats(self, folder):
+    def import_filedir_flats(self, filedir):
         ...
 
     @abstractmethod
-    def import_folder_darks(self, folder):
+    def import_filedir_darks(self, filedir):
         ...
 
     @abstractmethod
@@ -270,22 +280,22 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         ...
 
 
-class RawRawProjectionsXRM_SSRL62(RawProjectionsBase):
+class RawProjectionsXRM_SSRL62(RawProjectionsBase):
     def __init__(self):
         super().__init__()
         self.allowed_extensions = self.allowed_extensions + [".xrm"]
         self.angles_from_filenames = True
 
-    def import_metadata(self, folder):
+    def import_metadata(self, filedir):
         filetypes = [".txt"]
-        textfiles = self._file_finder(folder, filetypes)
-        scan_info_filepath = (
-            folder / [file for file in textfiles if "ScanInfo" in file][0]
+        textfiles = self._file_finder(filedir, filetypes)
+        scan_info_filedir = (
+            filedir / [file for file in textfiles if "ScanInfo" in file][0]
         )
-        run_script_filepath = (
-            folder / [file for file in textfiles if "ScanInfo" not in file][0]
+        run_script_filedir = (
+            filedir / [file for file in textfiles if "ScanInfo" not in file][0]
         )
-        self.parse_scan_info(scan_info_filepath)
+        self.parse_scan_info(scan_info_filedir)
         (
             self.flats_filenames,
             self.flats_ind,
@@ -300,18 +310,18 @@ class RawRawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.pxZ = len(self.data_filenames)
         self.pxY = self.metadata["PROJECTIONS"][0]["image_height"]
         self.pxX = self.metadata["PROJECTIONS"][0]["image_width"]
-        self.folder = folder
+        self.filedir = filedir
 
-    def import_folder_all(self, folder):
+    def import_filedir_all(self, filedir):
         filetypes = [".txt"]
-        textfiles = self._file_finder(folder, filetypes)
-        scan_info_filepath = (
-            folder / [file for file in textfiles if "ScanInfo" in file][0]
+        textfiles = self._file_finder(self.filedir, filetypes)
+        scan_info_filedir = (
+            filedir / [file for file in textfiles if "ScanInfo" in file][0]
         )
-        run_script_filepath = (
-            folder / [file for file in textfiles if "ScanInfo" not in file][0]
+        run_script_filedir = (
+            filedir / [file for file in textfiles if "ScanInfo" not in file][0]
         )
-        self.parse_scan_info(scan_info_filepath)
+        self.parse_scan_info(scan_info_filedir)
         (
             self.flats_filenames,
             self.flats_ind,
@@ -325,38 +335,40 @@ class RawRawProjectionsXRM_SSRL62(RawProjectionsBase):
             self.get_angles_from_filenames()
         else:
             self.get_angles_from_metadata()
-        self.folder = folder
+        self.filedir = filedir
+        self.imported = True
 
-    def import_folder_projections(self, folder):
+    def import_filedir_projections(self, filedir):
         filetypes = [".txt"]
-        textfiles = self._file_finder(folder, filetypes)
-        scan_info_filepath = (
-            folder / [file for file in textfiles if "ScanInfo" in file][0]
+        textfiles = self._file_finder(filedir, filetypes)
+        scan_info_filedir = (
+            filedir / [file for file in textfiles if "ScanInfo" in file][0]
         )
-        run_script_filepath = (
-            folder / [file for file in textfiles if "ScanInfo" not in file][0]
+        run_script_filedir = (
+            filedir / [file for file in textfiles if "ScanInfo" not in file][0]
         )
-        self.parse_scan_info(scan_info_filepath)
+        self.parse_scan_info(scan_info_filedir)
         _, _, self.data_filenames = self.separate_flats_projs()
         self._data, self.metadata["PROJECTIONS"] = self.load_xrms(self.data_filenames)
         self.data = self._data
-        self.folder = folder
+        self.filedir = filedir
+        self.imported = True
 
-    def import_folder_flats(self, folder):
+    def import_filedir_flats(self, filedir):
         filetypes = [".txt"]
-        textfiles = self._file_finder(folder, filetypes)
-        scan_info_filepath = (
-            folder / [file for file in textfiles if "ScanInfo" in file][0]
+        textfiles = self._file_finder(filedir, filetypes)
+        scan_info_filedir = (
+            filedir / [file for file in textfiles if "ScanInfo" in file][0]
         )
-        run_script_filepath = (
-            folder / [file for file in textfiles if "ScanInfo" not in file][0]
+        run_script_filedir = (
+            filedir / [file for file in textfiles if "ScanInfo" not in file][0]
         )
-        self.parse_scan_info(scan_info_filepath)
+        self.parse_scan_info(scan_info_filedir)
         self.flats_filenames, self.flats_ind, _ = self.separate_flats_projs()
         self.flats, self.metadata["FLATS"] = self.load_xrms(self.flats_filenames)
-        self.folder = folder
+        self.filedir = filedir
 
-    def import_folder_darks(self, folder):
+    def import_filedir_darks(self, filedir):
         pass
 
     def import_file_all(self, fullpath):
@@ -371,11 +383,11 @@ class RawRawProjectionsXRM_SSRL62(RawProjectionsBase):
     def import_file_darks(self, fullpath):
         pass
 
-    def set_options_from_frontend(self, Import):
-        self.Import = Import
-        self.folder = Import.fpath
-        self.filename = Import.fname
+    def set_options_from_frontend(self, Import, Uploader):
+        self.filedir = Uploader.filedir
+        self.filename = Uploader.filename
         self.angles_from_filenames = Import.angles_from_filenames
+        self.upload_progress = Uploader.upload_progress
 
     def parse_scan_info(self, scan_info):
         data_file_list = []
@@ -481,7 +493,7 @@ class RawRawProjectionsXRM_SSRL62(RawProjectionsBase):
                 data_stack = np.zeros((len(xrm_list),) + data.shape, data.dtype)
             data_stack[i] = data
             metadatas.append(metadata)
-            self.Import.upload_progress.value += 1
+            self.upload_progress.value += 1
         data_stack = np.flip(data_stack, axis=1)
         return data_stack, metadatas
 

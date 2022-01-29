@@ -30,6 +30,9 @@ if os.environ["cuda_enabled"] == "True":
     import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
     import cupy as cp
 
+# TODO: create superclass for TomoRecon and TomoAlign, as they basically do the same
+# thing.
+
 
 class TomoRecon(TomoAlign):
     """ """
@@ -37,23 +40,24 @@ class TomoRecon(TomoAlign):
     def __init__(self, Recon, Align=None):
         # -- Creating attributes for reconstruction calcs ---------------------
         self._set_attributes_from_frontend(Recon)
-        self.metadata["parent_fpath"] = self.Recon.Import.fpath
-        self.metadata["parent_fname"] = self.Recon.Import.fname
-        self.metadata["angle_start"] = self.Recon.Import.angle_start
-        self.metadata["angle_end"] = self.Recon.Import.angle_end
-        self.tomo = td.TomoData(metadata=Recon.Import.metadata)
+        self.metadata["parent_filedir"] = self.projections.filedir
+        self.metadata["parent_filename"] = self.projections.filename
+        self.metadata["angle_start"] = self.projections.angles_deg[0]
+        self.metadata["angle_end"] = self.projections.angles_deg[-1]
         self.recon = None
-        self.wd_parent = Recon.Import.wd
         self.make_wd()
-        self._main()
+        self.run()
 
     def _set_attributes_from_frontend(self, Recon):
+        # TODO: Not good to pass the whole object in. This is only passed in here for
+        # updating progress bars. Probably can pass references.
         self.Recon = Recon
+        self.projections = Recon.projections
+        self.angles_rad = Recon.projections.angles_rad
+        self.wd_parent = Recon.projections.filedir
         self.metadata = Recon.metadata.copy()
-        self.partial = Recon.partial
-        if self.partial:
-            self.prj_range_x = Recon.prj_range_x
-            self.prj_range_y = Recon.prj_range_y
+        self.pixel_range_x = Recon.projections.pixel_range_x
+        self.pixel_range_y = Recon.projections.pixel_range_y
         self.pad = (Recon.paddingX, Recon.paddingY)
         self.downsample = Recon.downsample
         if self.downsample:
@@ -77,7 +81,7 @@ class TomoRecon(TomoAlign):
             os.chdir(dt_string + "recon-1")
         save_metadata("overall_recon_metadata.json", self.metadata)
         if self.metadata["save_opts"]["tomo_before"]:
-            np.save("projections_before_alignment", self.tomo.prj_imgs)
+            np.save("projections_before_alignment", self.projections.data)
         self.wd = os.getcwd()
 
     def save_reconstructed_data(self):
@@ -93,14 +97,14 @@ class TomoRecon(TomoAlign):
 
         if self.metadata["save_opts"]["tomo_before"]:
             if self.metadata["save_opts"]["npy"]:
-                np.save("tomo", self.tomo.prj_imgs)
+                np.save("tomo", self.projections.data)
             if self.metadata["save_opts"]["tiff"]:
-                tf.imwrite("tomo.tif", self.tomo.prj_imgs)
+                tf.imwrite("tomo.tif", self.projections.data)
             if (
                 not self.metadata["save_opts"]["tiff"]
                 and not self.metadata["save_opts"]["npy"]
             ):
-                tf.imwrite("tomo.tif", self.tomo.prj_imgs)
+                tf.imwrite("tomo.tif", self.projections.data)
         if self.metadata["save_opts"]["recon"]:
             if self.metadata["save_opts"]["npy"]:
                 np.save("recon", self.recon)
@@ -140,7 +144,7 @@ class TomoRecon(TomoAlign):
         if method_str == "SIRT_Plugin":
             self.recon = tomocupy_algorithm.recon_sirt_plugin(
                 self.prjs,
-                self.tomo.theta,
+                self.angles_rad,
                 num_iter=self.num_iter,
                 rec=self.recon,
                 center=self.center,
@@ -148,7 +152,7 @@ class TomoRecon(TomoAlign):
         elif method_str == "SIRT_3D":
             self.recon = tomocupy_algorithm.recon_sirt_3D(
                 self.prjs,
-                self.tomo.theta,
+                self.angles_rad,
                 num_iter=self.num_iter,
                 rec=self.recon,
                 center=self.center,
@@ -156,7 +160,7 @@ class TomoRecon(TomoAlign):
         elif method_str == "CGLS_3D":
             self.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
                 self.prjs,
-                self.tomo.theta,
+                self.angles_rad,
                 num_iter=self.num_iter,
                 rec=self.recon,
                 center=self.center,
@@ -173,7 +177,7 @@ class TomoRecon(TomoAlign):
             kwargs["options"] = options
             self.recon = tomopy_algorithm.recon(
                 self.prjs,
-                self.tomo.theta,
+                self.angles_rad,
                 algorithm=wrappers.astra,
                 init_recon=self.recon,
                 center=self.center,
@@ -181,13 +185,13 @@ class TomoRecon(TomoAlign):
                 **kwargs,
             )
         else:
-            # defined in _main.py
+            # defined in run.py
             os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
             if algorithm == "gridrec" or algorithm == "fbp":
 
                 self.recon = tomopy_algorithm.recon(
                     self.prjs,
-                    self.tomo.theta,
+                    self.angles_rad,
                     algorithm=method_str,
                     init_recon=self.recon,
                     center=self.center,
@@ -195,7 +199,7 @@ class TomoRecon(TomoAlign):
             else:
                 self.recon = tomopy_algorithm.recon(
                     self.prjs,
-                    self.tomo.theta,
+                    self.angles_rad,
                     algorithm=method_str,
                     init_recon=self.recon,
                     center=self.center,
@@ -204,7 +208,7 @@ class TomoRecon(TomoAlign):
 
         return self
 
-    def _main(self):
+    def run(self):
         """
         Reconstructs a TomoData object using options in GUI.
         """

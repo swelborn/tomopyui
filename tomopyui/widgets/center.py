@@ -1,4 +1,3 @@
-from tomopyui.widgets.meta import Plotter
 from ipywidgets import *
 
 # includes astra_cuda_recon_algorithm_kwargs, tomopy_recon_algorithm_kwargs,
@@ -6,6 +5,8 @@ from ipywidgets import *
 from tomopyui._sharedvars import *
 import numpy as np
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
+from tomopyui.widgets.plot import BqImPlotter_Center
+from tomopyui.backend.util.center import write_center
 
 
 class Center:
@@ -45,7 +46,7 @@ class Center:
     def __init__(self, Import):
 
         self.Import = Import
-        self.current_center = self.Import.projections.pxX / 2
+        self.current_center = self.Import.prenorm_projections.pxX / 2
         self.center_guess = None
         self.index_to_try = None
         self.search_step = 0.5
@@ -55,7 +56,8 @@ class Center:
         self.algorithm = "gridrec"
         self.filter = "parzen"
         self.metadata = {}
-        self.center_plotter = Plotter(Import=self.Import)
+        self.plotter = BqImPlotter_Center()
+        self.plotter.create_app()
         self._init_widgets()
         self._set_observes()
         self.make_tab()
@@ -135,7 +137,7 @@ class Center:
         self.filters_dropdown = Dropdown(
             options=[key for key in tomopy_filter_names],
             value=self.filter,
-            description="Algorithm:",
+            description="Filter:",
         )
         self.find_center_vo_button = Button(
             description="Click to automatically find center (Vo).",
@@ -163,11 +165,13 @@ class Center:
         self.set_metadata()
 
     def _load_rough_center_onclick(self, change):
-        self.center_guess = self.Import.prj_range_x[1] / 2
+        self.center_guess = self.Import.projections.pxX / 2
         self.current_center = self.center_guess
         self.center_textbox.value = self.center_guess
         self.center_guess_textbox.value = self.center_guess
-        self.index_to_try_textbox.value = int(np.around(self.Import.prj_range_y[1] / 2))
+        self.index_to_try_textbox.value = int(
+            np.around(self.Import.projections.pxY / 2)
+        )
         self.index_to_try = self.index_to_try_textbox.value
         self.set_metadata()
 
@@ -207,26 +211,22 @@ class Center:
         This method has worked better for me, if I use a good index_to_try
         and center_guess.
         """
+        prj_imgs = self.Import.projections.prj_imgs
+        angles_rad = self.Import.projections.angles_rad
+
         self.find_center_button.button_style = "info"
         self.find_center_button.icon = "fa-spin fa-cog fa-lg"
         self.find_center_button.description = "Importing data..."
-        try:
-            tomo = td.TomoData(metadata=self.Import.metadata)
-            self.Import.log.info("Imported tomo")
+        if self.Import.projections.imported is True:
+            prj_imgs = self.Import.projections.prj_imgs
+            angles_rad = self.Import.projections.angles_rad
             self.Import.log.info("Finding center...")
             self.Import.log.info(f"Using index: {self.index_to_try}")
-        except:
-            self.find_center_button.description = (
-                "Please choose a file first. Try again after you do that."
-            )
-            self.find_center_button.button_style = "warning"
-            self.find_center_button.icon = "exclamation-triangle"
-        try:
             self.find_center_button.description = "Finding center..."
             self.find_center_button.button_style = "info"
             self.current_center = find_center(
-                tomo.prj_imgs,
-                tomo.theta,
+                prj_imgs,
+                angles_rad,
                 ratio=0.9,
                 ind=self.index_to_try,
                 init=self.center_guess,
@@ -236,10 +236,8 @@ class Center:
             self.find_center_button.description = "Found center."
             self.find_center_button.icon = "fa-check-square"
             self.find_center_button.button_style = "success"
-        except:
-            self.find_center_button.description = (
-                "Something went wrong with finding center."
-            )
+        else:
+            self.find_center_button.description = "Please import some data first."
             self.find_center_button.icon = "exclamation-triangle"
             self.find_center_button.button_style = "warning"
 
@@ -249,35 +247,26 @@ class Center:
         `tomopy.recon.rotation.find_center_vo`. Note: this method has not worked
         well for me.
         """
+        prj_imgs = self.Import.projections.prj_imgs
+        angles_rad = self.Import.projections.angles_rad
         self.find_center_vo_button.button_style = "info"
         self.find_center_vo_button.icon = "fa-spin fa-cog fa-lg"
         self.find_center_vo_button.description = "Importing data..."
-        try:
-            tomo = td.TomoData(metadata=self.Import.metadata)
-            self.Import.log.info("Imported tomo")
-            self.Import.log.info("Finding center...")
+        if self.Import.projections.imported is True:
+            self.Import.log.info("Finding center using Vo method...")
             self.Import.log.info(f"Using index: {self.index_to_try}")
-        except:
-            self.find_center_vo_button.description = (
-                "Please choose a file first. Try again after you do that."
-            )
-            self.find_center_vo_button.button_style = "warning"
-            self.find_center_vo_button.icon = "exclamation-triangle"
-        try:
             self.find_center_vo_button.description = "Finding center using Vo method..."
             self.find_center_vo_button.button_style = "info"
-            self.current_center = find_center_vo(tomo.prj_imgs, ncore=1)
+            self.current_center = find_center_vo(prj_imgs, ncore=1)
             self.center_textbox.value = self.current_center
             self.Import.log.info(f"Found center. {self.current_center}")
             self.find_center_vo_button.description = "Found center."
             self.find_center_vo_button.icon = "fa-check-square"
             self.find_center_vo_button.button_style = "success"
-        except:
-            self.find_center_vo_button.description = (
-                "Something went wrong with finding center."
-            )
-            self.find_center_vo_button.icon = "exclamation-triangle"
+        else:
+            self.find_center_vo_button.description = "Please import some data first."
             self.find_center_vo_button.button_style = "warning"
+            self.find_center_vo_button.icon = "exclamation-triangle"
 
     def find_center_manual_on_click(self, change):
         """
@@ -292,8 +281,8 @@ class Center:
         self.find_center_manual_button.description = "Starting reconstruction."
 
         # TODO: for memory, add only desired slice
-        tomo = td.TomoData(metadata=self.Import.metadata)
-        theta = tomo.theta
+        prj_imgs = self.Import.projections.prj_imgs
+        angles_rad = self.Import.projections.angles_rad
         cen_range = [
             self.center_guess - self.search_range,
             self.center_guess + self.search_range,
@@ -302,9 +291,9 @@ class Center:
 
         # reconstruct, but also pull the centers used out to map to center
         # textbox
-        rec, self.cen_range = write_center(
-            tomo.prj_imgs,
-            theta,
+        self.rec, self.cen_range = write_center(
+            prj_imgs,
+            angles_rad,
             cen_range=cen_range,
             ind=self.index_to_try,
             mask=True,
@@ -312,40 +301,10 @@ class Center:
             filter_name=self.filter,
             num_iter=self.num_iter,
         )
-        self.center_plotter.create_slicer_with_hist(
-            plot_type="center", imagestack=rec, Center=self
-        )
-
-        # this maps the threshold_control slider to center texbox
-        self.center_plotter.threshold_control.vbox.children[0].children[1].observe(
-            self._center_textbox_slider_update, names="value"
-        )
+        self.plotter.plot(self.rec)
         self.find_center_manual_button.button_style = "success"
         self.find_center_manual_button.icon = "fa-check-square"
         self.find_center_manual_button.description = "Finished reconstruction."
-
-        # Make VBox instantiated outside into the plot
-        self.center_tab.children[2].children[0].children[2].children = [
-            HBox(
-                [self.center_plotter.slicer_with_hist_fig.canvas],
-                layout=Layout(justify_content="center"),
-            ),
-            HBox(
-                [
-                    HBox(
-                        [self.center_plotter.threshold_control_list[0]],
-                        layout=Layout(align_items="center"),
-                    ),
-                    VBox(self.center_plotter.threshold_control_list[1::]),
-                ],
-                layout=Layout(justify_content="center"),
-            ),
-        ]
-        self.manual_center_accordion = Accordion(
-            children=[self.manual_center_vbox],
-            selected_index=None,
-            titles=("Find center through plotting",),
-        )
 
     def _set_observes(self):
         self.center_textbox.observe(self._center_update, names="value")
@@ -360,66 +319,83 @@ class Center:
         self.find_center_button.on_click(self.find_center_on_click)
         self.find_center_vo_button.on_click(self.find_center_vo_on_click)
         self.find_center_manual_button.on_click(self.find_center_manual_on_click)
+        # Callback for index going to center
+        self.plotter.image_index_slider.observe(
+            self._center_textbox_slider_update, names="value"
+        )
 
     def make_tab(self):
         """
-        Function to create a Center object's :doc:`Tab <ipywidgets:index>`. TODO: make the tab look better.
+        Function to create a Center object's :doc:`Tab <ipywidgets:index>`.
         """
 
         # Accordion to find center automatically
         self.automatic_center_vbox = VBox(
             [
-                HBox([self.find_center_button, self.find_center_vo_button]),
+                HBox(
+                    [self.find_center_button, self.find_center_vo_button],
+                    layout=Layout(justify_content="center"),
+                ),
                 HBox(
                     [
                         self.center_guess_textbox,
                         self.index_to_try_textbox,
-                    ]
+                    ],
+                    layout=Layout(justify_content="center"),
                 ),
             ]
         )
         self.automatic_center_accordion = Accordion(
             children=[self.automatic_center_vbox],
-            selected_index=None,
+            selected_index=0,
             titles=("Find center automatically",),
         )
 
         # Accordion to find center manually
         self.manual_center_vbox = VBox(
             [
-                self.find_center_manual_button,
+                HBox(
+                    [self.find_center_manual_button],
+                    layout=Layout(justify_content="center"),
+                ),
                 HBox(
                     [
-                        self.center_guess_textbox,
-                        self.index_to_try_textbox,
-                        self.num_iter_textbox,
-                        self.search_range_textbox,
-                        self.search_step_textbox,
-                        self.algorithms_dropdown,
-                        self.filters_dropdown,
+                        VBox(
+                            [
+                                self.center_guess_textbox,
+                                self.index_to_try_textbox,
+                                self.num_iter_textbox,
+                                self.search_range_textbox,
+                                self.search_step_textbox,
+                                self.algorithms_dropdown,
+                                self.filters_dropdown,
+                            ],
+                            layout=Layout(
+                                # display="flex",
+                                # flex_flow="row wrap",
+                                align_content="center",
+                                justify_content="flex-start",
+                            ),
+                        ),
+                        self.plotter.app,
                     ],
-                    layout=Layout(
-                        display="flex",
-                        flex_flow="row wrap",
-                        align_content="center",
-                        justify_content="flex-start",
-                    ),
+                    layout=Layout(justify_content="center"),
                 ),
-                VBox(
-                    [], layout=Layout(justify_content="center", align_content="center")
-                ),
-            ]
+            ],
         )
 
         self.manual_center_accordion = Accordion(
             children=[self.manual_center_vbox],
-            selected_index=None,
+            selected_index=0,
             titles=("Find center through plotting",),
         )
 
-        self.center_tab = VBox(
+        self.tab = VBox(
             [
-                HBox([self.center_textbox, self.load_rough_center]),
+                HBox(
+                    [self.center_textbox, self.load_rough_center],
+                    layout=Layout(justify_content="center"),
+                ),
                 self.automatic_center_accordion,
                 self.manual_center_accordion,
             ]
