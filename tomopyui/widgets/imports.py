@@ -379,6 +379,7 @@ class PrenormUploader(UploaderBase):
             self.projections.import_filedir_projections(self.filedir)
         else:
             self.projections.import_file_projections(self.filedir / self.filename)
+        self.projections.save_normalized_as_npy()
         self.plotter.plot(self.projections.prj_imgs)
 
     def check_for_data(self):
@@ -437,6 +438,14 @@ class RawUploader_SSRL62(UploaderBase):
         with self.progress_output:
             display(Label("Normalizing", layout=Layout(justify_content="center")))
         self.projections.normalize_nf()
+        with self.progress_output:
+            display(
+                Label(
+                    "Saving projections as npy for faster IO",
+                    layout=Layout(justify_content="center"),
+                )
+            )
+        self.projections.save_normalized_as_npy()
         toc = time.perf_counter()
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
