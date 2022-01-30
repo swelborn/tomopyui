@@ -1,4 +1,4 @@
-name: tomopyui-nocuda-test
+name: tomopyui-nocuda-test1
 channels:
   - conda-forge/label/widgetsnbextension_dev
   - conda-forge/label/jupyterlab_widgets_rc
@@ -11,12 +11,12 @@ dependencies:
   - pip
   - tomopy
   - dxchange
-  - jupyterlab=3.2.6
-  - ipykernel=6.6.1
-  - jsonschema=4.3.3
-  - jupyter_server=1.13.1
-  - nbclient=0.5.9
-  - notebook=6.4.6
+  - jupyterlab
+  - ipykernel
+  - jsonschema
+  - jupyter_server
+  - nbclient
+  - notebook
   - astropy
   - ipyfilechooser
   - ipywidgets=8
