@@ -591,14 +591,14 @@ class Align(AnalysisBase):
     #         self.Import.filedir_align, self.Import.filename_align
     #     )
 
-    def update_num_batches(self, *args):
+    def update_num_batches(self, change):
         self.num_batches = change.new
         self.progress_phase_cross_corr.max = change.new
         self.progress_shifting.max = change.new
         self.progress_reprj.max = change.new
         self.set_metadata()
 
-    def update_num_iter(self, *args):
+    def update_num_iter(self, change):
         self.num_iter = change.new
         self.progress_total.max = change.new
         self.set_metadata()
