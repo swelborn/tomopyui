@@ -208,7 +208,7 @@ class Import_SSRL62(ImportBase):
                     ]
                 ),
             ],
-            selected_index=0,
+            selected_index=None,
             titles=("Import and Normalize Raw Data",),
         )
         norm_import = HBox(
@@ -233,7 +233,7 @@ class Import_SSRL62(ImportBase):
 
         self.prenorm_accordion = Accordion(
             children=[norm_import],
-            selected_index=0,
+            selected_index=None,
             titles=("Import Prenormalized Data",),
         )
 
@@ -247,7 +247,7 @@ class Import_SSRL62(ImportBase):
                     layout=Layout(justify_content="center"),
                 )
             ],
-            selected_index=0,
+            selected_index=None,
             titles=("Import Alignment/Reconstruction Settings",),
         )
         self.tab = VBox(

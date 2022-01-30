@@ -347,7 +347,7 @@ class Center:
         )
         self.automatic_center_accordion = Accordion(
             children=[self.automatic_center_vbox],
-            selected_index=0,
+            selected_index=None,
             titles=("Find center automatically",),
         )
 
@@ -386,7 +386,7 @@ class Center:
 
         self.manual_center_accordion = Accordion(
             children=[self.manual_center_vbox],
-            selected_index=0,
+            selected_index=None,
             titles=("Find center through plotting",),
         )
 

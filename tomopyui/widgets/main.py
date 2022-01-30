@@ -77,7 +77,22 @@ def create_dashboard():
         with dashboard_output:
             dashboard_output.clear_output(wait=True)
             display(dashboard)
-        
+
+    accordions = [
+        file_import.raw_accordion,
+        file_import.prenorm_accordion,
+        center.manual_center_accordion,
+        align.plotter_accordion,
+        recon.plotter_accordion,
+        dataexplorer.analysis_browser_accordion,
+        dataexplorer.recent_alignment_accordion,
+        dataexplorer.recent_recon_accordion,
+    ]
+
+    [
+        accordion.observe(update_dashboard, names="selected_index")
+        for accordion in accordions
+    ]
 
     dashboard.observe(update_dashboard, names="selected_index")
     dashboard_output = Output()

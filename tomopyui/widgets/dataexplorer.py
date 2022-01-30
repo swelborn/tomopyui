@@ -23,17 +23,17 @@ class DataExplorerTab:
         self.any.create_app()
         self.analysis_browser_accordion = Accordion(
             children=[self.any.app],
-            selected_index=0,
+            selected_index=None,
             titles=("Plot Any Analysis",),
         )
         self.recent_alignment_accordion = Accordion(
             children=[self.align.app],
-            selected_index=0,
+            selected_index=None,
             titles=("Plot Recent Alignments",),
         )
         self.recent_recon_accordion = Accordion(
             children=[self.recon.app],
-            selected_index=0,
+            selected_index=None,
             titles=("Plot Recent Reconstructions",),
         )
         self.tab = VBox(
