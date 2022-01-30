@@ -12,6 +12,7 @@ from tomopyui.widgets import helpers
 
 class AnalysisBase(ABC):
     def init_attributes(self, Import, Center):
+
         self.Import = Import
         self.Center = Center
         self.projections = copy.deepcopy(Import.projections)
@@ -45,18 +46,20 @@ class AnalysisBase(ABC):
             "font_variant": "small-caps",
             # "text_color": "#0F52BA",
         }
+        self.accordions_open = False
 
     def init_widgets(self):
         """
         Initializes many of the widgets in the Alignment and Recon tabs.
         """
+        self.button_font = {"font_size": "22px"}
+        self.button_layout = Layout(width="45px", height="40px")
 
-        # -- Radio to turn on tab ---------------------------------------------
-        self.radio_tab = RadioButtons(
-            options=["Yes", "No"],
-            style=extend_description_style,
-            layout=Layout(width="20%"),
-            value="No",
+        # -- Button to turn on tab ---------------------------------------------
+        self.open_accordions_button = Button(
+            icon="lock-open",
+            layout=self.button_layout,
+            style=self.button_font,
         )
 
         # -- Headers for plotting -------------------------------------
@@ -77,7 +80,7 @@ class AnalysisBase(ABC):
 
         # -- Button for using edited dataset  ---------------------------------
         self.use_altered_button = Button(
-            description="Click here to use the altered datas for analysis.",
+            description="Click here to use the altered data for analysis.",
             layout=Layout(width="auto"),
         )
 
@@ -123,7 +126,7 @@ class AnalysisBase(ABC):
 
         self.plotter_accordion = Accordion(
             children=[self.plotter_hbox],
-            selected_index=0,
+            selected_index=None,
             titles=("Plot Projection Images",),
         )
 
@@ -222,7 +225,7 @@ class AnalysisBase(ABC):
     def set_observes(self):
 
         # -- Radio to turn on tab ---------------------------------------------
-        self.radio_tab.observe(self._activate_tab, names="index")
+        self.open_accordions_button.on_click(self.activate_tab)
 
         # -- Button for using imported dataset  ---------------------------------
         self.use_imported_button.on_click(self.use_imported)
@@ -274,26 +277,32 @@ class AnalysisBase(ABC):
         self.upsample_factor = self.metadata["opts"]["upsample_factor"]
 
     # -- Radio to turn on tab ---------------------------------------------
-    def _activate_tab(self, change):
-        if change.new == 0:
+    def activate_tab(self, *args):
+        if self.accordions_open is False:
+            self.open_accordions_button.icon = "fa-lock"
+            self.open_accordions_button.button_style = "success"
             self.projections = self.Import.projections
             self.center = self.Center.current_center
             self.center_textbox.value = self.Center.current_center
             self.set_metadata()
             self.load_metadata_button.disabled = False
             self.start_button.disabled = False
-            self.plotter_accordion.selected_index = 0
             self.save_options_accordion.selected_index = 0
             self.options_accordion.selected_index = 0
             self.methods_accordion.selected_index = 0
+            self.plotter_accordion.selected_index = 0
             self.log.info("Activated alignment.")
-        elif change.new == 1:
+            self.accordions_open = True
+        else:
+            self.open_accordions_button.icon = "fa-lock-open"
+            self.open_accordions_button.button_style = "info"
+            self.accordions_open = False
             self.load_metadata_button.disabled = True
-            self.plotter_accordion.selected_index = None
             self.start_button.disabled = True
             self.save_options_accordion.selected_index = None
             self.options_accordion.selected_index = None
             self.methods_accordion.selected_index = None
+            self.plotter_accordion.selected_index = None
             self.log.info("Deactivated alignment.")
 
     # -- Button for using imported dataset  ---------------------------------
@@ -527,13 +536,6 @@ class Align(AnalysisBase):
 
     def init_widgets(self):
         super().init_widgets()
-        # -- Description of turn-on radio -------------------------------------
-        self.radio_description = "Would you like to align this dataset?"
-        self.radio_description = HTML(
-            value="<style>p{word-wrap: break-word}</style> <p>"
-            + self.radio_description
-            + " </p>"
-        )
 
         # -- Progress bars and plotting output --------------------------------
         self.progress_total = IntProgress(description="Recon: ", value=0, min=0, max=1)
@@ -652,14 +654,11 @@ class Align(AnalysisBase):
 
         top_of_box_hb = HBox(
             [
-                self.radio_description,
-                self.radio_tab,
+                self.open_accordions_button,
             ],
             layout=Layout(
                 width="auto",
-                justify_content="center",
-                align_items="center",
-                flex="flex-grow",
+                justify_content="flex-start",
             ),
         )
         start_button_hb = HBox(
@@ -695,7 +694,8 @@ class Align(AnalysisBase):
                 self.progress_reprj,
                 self.progress_phase_cross_corr,
                 self.progress_shifting,
-            ]
+            ],
+            layout=Layout(justify_content="center"),
         )
 
         self.tab = VBox(
@@ -729,13 +729,6 @@ class Recon(AnalysisBase):
         super().init_widgets()
         self.plot_output1 = Output()
         self.plot_output2 = Output()
-        # -- Description of turn-on radio -------------------------------------
-        self.radio_description = "Would you like to reconstruct this dataset?"
-        self.radio_description = HTML(
-            value="<style>p{word-wrap: break-word}</style> <p>"
-            + self.radio_description
-            + " </p>"
-        )
 
         # -- Button to start alignment ----------------------------------------
         self.start_button = Button(
@@ -822,14 +815,11 @@ class Recon(AnalysisBase):
 
         top_of_box_hb = HBox(
             [
-                self.radio_description,
-                self.radio_tab,
+                self.open_accordions_button,
             ],
             layout=Layout(
                 width="auto",
-                justify_content="center",
-                align_items="center",
-                flex="flex-grow",
+                justify_content="flex-start",
             ),
         )
         start_button_hb = HBox(

@@ -150,6 +150,7 @@ class BqImPlotter(ImPlotterBase, ABC):
             icon="random",
             layout=self.button_layout,
             style=self.button_font,
+            tooltip="Swap axes",
         )
         # Remove high/low intensities button
         self.rm_high_low_int_button = Button(
