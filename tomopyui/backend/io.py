@@ -101,6 +101,9 @@ class ProjectionsBase(IOBase, ABC):
         name = self.aliases.get(name, name)
         return object.__getattribute__(self, name)
 
+    def save_normalized_as_npy(self):
+        np.save(self.filedir / "normalized_projections.npy", self.data)
+
     @abstractmethod
     def import_metadata(self, filedir):
         ...
@@ -157,6 +160,7 @@ class Projections_Prenormalized(ProjectionsBase):
             self._fullpath = fullpath
             self.fullpath = self._fullpath
             self.data = self._data
+            self.make_angles()
             self.imported = True
 
     def set_options_from_frontend(self, Import, Uploader):
