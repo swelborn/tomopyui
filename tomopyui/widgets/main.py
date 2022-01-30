@@ -71,5 +71,17 @@ def create_dashboard():
 
     dashboard = Tab(titles=dashboard_titles)
     dashboard.children = dashboard_tabs
+    # workaround for nested bqplot issue
+    def update_dashboard(change):
+        dashboard.children = dashboard_tabs
+        with dashboard_output:
+            dashboard_output.clear_output(wait=True)
+            display(dashboard)
+        
 
-    return (dashboard, file_import, center, align, recon, dataexplorer)
+    dashboard.observe(update_dashboard, names="selected_index")
+    dashboard_output = Output()
+    with dashboard_output:
+        display(dashboard)
+
+    return (dashboard_output, file_import, center, align, recon, dataexplorer)
