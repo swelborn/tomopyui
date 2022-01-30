@@ -4,6 +4,7 @@ import multiprocessing
 from tomopyui.widgets.imports import Import_SSRL62
 from tomopyui.widgets.center import Center
 from tomopyui.widgets.analysis import Align, Recon
+from tomopyui.widgets.dataexplorer import DataExplorerTab
 
 # checks if cupy is installed. if not, disable cuda and certain gui aspects
 # TODO: can put this somewhere else
@@ -35,8 +36,7 @@ def create_dashboard():
     center = Center(file_import)
     align = Align(file_import, center)
     recon = Recon(file_import, center)
-    # dataexplorer = DataExplorerTab(align, recon)
-    # dataexplorer.create_data_explorer_tab()
+    dataexplorer = DataExplorerTab(align, recon)
 
     for checkbox in (
         align.astra_cuda_methods_checkboxes + recon.astra_cuda_methods_checkboxes
@@ -56,7 +56,7 @@ def create_dashboard():
         center.tab,
         align.tab,
         recon.tab,
-        # dataexplorer.tab,
+        dataexplorer.tab,
         file_import.log_handler.out,
     ]
 
@@ -65,17 +65,11 @@ def create_dashboard():
         "Center",
         "Align",
         "Reconstruct",
-        # "Data Explorer",
+        "Data Explorer",
         "Log",
     ]
 
     dashboard = Tab(titles=dashboard_titles)
     dashboard.children = dashboard_tabs
 
-    return (
-        dashboard,
-        file_import,
-        center,
-        align,
-        recon,
-    )
+    return (dashboard, file_import, center, align, recon, dataexplorer)
