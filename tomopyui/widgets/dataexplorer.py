@@ -1,7 +1,7 @@
 # TODO: reimplement this
 from ipywidgets import *
 from abc import ABC, abstractmethod
-from tomopyui.widgets.plot import BqImPlotter_Analysis, BqImPlotter_DataExplorer
+from tomopyui.widgets.plot import BqImPlotter_Import, BqImPlotter_DataExplorer
 from tomopyui.backend.io import load_metadata, metadata_to_DataFrame
 from tomopyui.widgets.analysis import Align, Recon
 from ipyfilechooser import FileChooser
@@ -50,7 +50,7 @@ class DataExplorerBase(ABC):
         self.metadata = None
         self.plotter_initial = BqImPlotter_DataExplorer()
         self.plotter_initial.create_app()
-        self.plotter_analyzed = BqImPlotter_DataExplorer()
+        self.plotter_analyzed = BqImPlotter_DataExplorer(self.plotter_initial)
         self.plotter_analyzed.create_app()
 
     @abstractmethod

@@ -9,6 +9,7 @@ from tomopyui.backend.io import save_metadata, load_metadata
 from tomopy.recon import algorithm as tomopy_algorithm
 from tomopyui.backend.tomoalign import TomoAlign
 from tomopyui.backend.util.padding import *
+from tomopyui._sharedvars import *
 
 import matplotlib.pyplot as plt
 import datetime
@@ -121,8 +122,9 @@ class TomoRecon(TomoAlign):
         # ensure it only runs on 1 thread for CUDA
         os.environ["TOMOPY_PYTHON_THREADS"] = "1"
         method_str = list(self.metadata["methods"].keys())[0]
+        print(method_str)
         if (
-            method_str in self.Recon.astra_cuda_methods_list
+            method_str in astra_cuda_recon_algorithm_underscores
             and os.environ["cuda_enabled"] == "True"
         ):
             self.current_recon_is_cuda = True
