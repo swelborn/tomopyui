@@ -254,12 +254,12 @@ def align_joint(TomoAlign):
         shift_cpu = []
         batch_cross_correlation(
             TomoAlign.prjs,
-            sim,
+            sim,        
             shift_cpu,
             num_batches,
             upsample_factor,
-            subset_correlation=False,
-            blur=False,
+            subset_correlation=True,
+            blur=True,
             pad=TomoAlign.pad_ds,
             progress=TomoAlign.Align.progress_phase_cross_corr,
         )
