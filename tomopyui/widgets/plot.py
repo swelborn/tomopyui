@@ -4,6 +4,7 @@ from ipywidgets import *
 import bqplot as bq
 import numpy as np
 import copy
+from skimage.transform import rescale  # look for better option
 
 
 class ImPlotterBase(ABC):
@@ -542,6 +543,139 @@ class BqImPlotter_Analysis(BqImPlotter):
         self.hist.selector.observe(self.hist.update_crange_selector, "selected")
         self.hist.fig.interaction = self.hist.selector
         self.hist.update()
+
+    def copy_parent_projections(self, *args):
+        self.plot(self.plotter_parent.imagestack)
+        self.link_plotted_projections_button.button_style = "info"
+        self.link_plotted_projections_button.disabled = False
+        self.range_from_parent_button.disabled = False
+
+    def link_plotted_projections(self, *args):
+        if not self.plots_linked:
+            self.plot_link = jsdlink(
+                (self.plotter_parent.image_index_slider, "value"),
+                (self.image_index_slider, "value"),
+            )
+            self.link_plotted_projections_button.button_style = "success"
+            self.link_plotted_projections_button.icon = "link"
+        else:
+            self.plot_link.unlink()
+            self.link_plotted_projections_button.button_style = "info"
+            self.link_plotted_projections_button.icon = "unlink"
+
+    def range_from_parent(self, *args):
+        if (
+            self.plotter_parent.rectangle_selector_button.button_style == "success"
+            and self.plotter_parent.rectangle_selector.selected is not None
+        ):
+            imtemp = self.plotter_parent.imagestack
+            lowerY = self.plotter_parent.pixel_range_y[0]
+            upperY = self.plotter_parent.pixel_range_y[1]
+            lowerX = self.plotter_parent.pixel_range_x[0]
+            upperX = self.plotter_parent.pixel_range_x[1]
+            self.imagestack = copy.deepcopy(imtemp[:, lowerY:upperY, lowerX:upperX])
+            self.change_aspect_ratio()
+            self.plotted_image.image = self.imagestack[
+                self.plotter_parent.current_image_ind
+            ]
+            # This is confusing - decide on better names. The actual dimensions are
+            # stored in self.projections.pixel_range_x, but this will eventually set the
+            # Analysis attributes for pixel_range_x, pixel_range_y to input into
+            # algorithms
+            self.pixel_range_x = (lowerX, upperX)
+            self.pixel_range_y = (lowerY, upperY)
+
+    def remove_data_outside(self, *args):
+        self.remove_high_indexes = self.imagestack > self.vmax
+        self.imagestack[self.remove_high_indexes] = 1e-9
+        self.remove_low_indexes = self.imagestack < self.vmin
+        self.imagestack[self.remove_low_indexes] = 1e-9
+        self.plotted_image.image = self.imagestack[0]
+        self.hist.preflatten_imagestack(self.imagestack)
+        self.hist.update()
+
+
+class BqImPlotter_DataExplorer(BqImPlotter):
+    def __init__(self):
+        super().__init__(dimensions=dimensions)
+        self.plotter_parent = plotter_parent
+        self.link_plotted_projections_button = Button(
+            icon="unlink",
+            layout=self.button_layout,
+            style=self.button_font,
+            disabled=True,
+        )
+        self.link_plotted_projections_button.on_click(self.link_plotted_projections)
+        self.plots_linked = False
+
+        self.remove_data_outside_button = Button(
+            description="Set data = 0 outside of current histogram range.",
+            layout=Layout(width="auto"),
+        )
+        self.remove_data_outside_button.on_click(self.remove_data_outside)
+        self.downsample_factor = 0.5
+
+    def create_app(self):
+
+        left_sidebar_layout = Layout(
+            justify_content="space-around", align_items="center"
+        )
+        right_sidebar_layout = Layout(
+            justify_content="space-around", align_items="center"
+        )
+        header_layout = Layout(justify_content="center")
+        footer_layout = Layout(justify_content="center")
+        center_layout = Layout(justify_content="center")
+        header = HBox([self.scheme_dropdown], layout=header_layout)
+        left_sidebar = None
+        right_sidebar = None
+        center = HBox([self.fig, self.hist.fig], layout=center_layout)
+        self.button_box = HBox(
+            [
+                self.plus_button,
+                self.minus_button,
+                self.reset_button,
+                self.rm_high_low_int_button,
+                self.swap_axes_button,
+                self.copy_button,
+                self.link_plotted_projections_button,
+                self.range_from_parent_button,
+            ],
+            layout=footer_layout,
+        )
+        footer1 = HBox([self.play, self.image_index_slider], layout=footer_layout)
+        footer2 = VBox(
+            [
+                self.button_box,
+                HBox(
+                    [self.remove_data_outside_button],
+                    layout=Layout(justify_content="center"),
+                ),
+            ]
+        )
+
+        footer = VBox([footer1, footer2])
+
+        self.app = VBox([header, center, footer])
+
+    # Image plot
+    def plot(self, imagestack):
+        self.imagestack = imagestack
+        self.imagestack = rescale(
+            self.imagestack,
+            (1, self.downsample_factor, self.downsample_factor),
+            anti_aliasing=True,
+        )
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = imagestack[0]
+        self.vmin = np.min(self.imagestack)
+        self.vmax = np.max(self.imagestack)
+        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.value = 0
+        self.pxX = self.imagestack.shape[2]
+        self.pxY = self.imagestack.shape[1]
+        self.hist.preflatten_imagestack(self.imagestack)
 
     def copy_parent_projections(self, *args):
         self.plot(self.plotter_parent.imagestack)
