@@ -449,7 +449,6 @@ def shift_prj_cp(prj, sx, sy, num_batches, pad, use_corr_prj_gpu=False):
     _sx = np.array_split(sx, num_batches, axis=0)
     _sy = np.array_split(sy, num_batches, axis=0)
     for batch in range(len(prj_cpu)):
-        # for batch in tnrange(len(prj_cpu), desc="Shifting", leave=True):
         _prj_gpu = cp.array(prj_cpu[batch], dtype=cp.float32)
         num_theta = _prj_gpu.shape[0]
         shift_y_condition = pad[1]
