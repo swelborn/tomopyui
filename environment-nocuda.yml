@@ -9,6 +9,7 @@ channels:
 dependencies:
   - python=3.9
   - matplotlib
+  - ffmpeg
   - git
   - pip
   - tomopy
