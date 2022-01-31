@@ -53,8 +53,8 @@ class TomoAlign:
         self.angles_rad = Align.projections.angles_rad
         self.wd_parent = Align.projections.filedir
         self.metadata = Align.metadata.copy()
-        self.pixel_range_x = Align.projections.pixel_range_x
-        self.pixel_range_y = Align.projections.pixel_range_y
+        self.pixel_range_x = Align.pixel_range_x
+        self.pixel_range_y = Align.pixel_range_y
         self.pad = (Align.paddingX, Align.paddingY)
         self.downsample = Align.downsample
         if self.downsample:

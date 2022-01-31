@@ -301,7 +301,7 @@ class Center:
             filter_name=self.filter,
             num_iter=self.num_iter,
         )
-        self.plotter.plot(self.rec)
+        self.plotter.plot(self.rec, self.Import.projections.filedir)
         self.find_center_manual_button.button_style = "success"
         self.find_center_manual_button.icon = "fa-check-square"
         self.find_center_manual_button.description = "Finished reconstruction."

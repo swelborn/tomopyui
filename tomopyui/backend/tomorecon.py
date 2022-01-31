@@ -56,8 +56,8 @@ class TomoRecon(TomoAlign):
         self.angles_rad = Recon.projections.angles_rad
         self.wd_parent = Recon.projections.filedir
         self.metadata = Recon.metadata.copy()
-        self.pixel_range_x = Recon.projections.pixel_range_x
-        self.pixel_range_y = Recon.projections.pixel_range_y
+        self.pixel_range_x = Recon.pixel_range_x
+        self.pixel_range_y = Recon.pixel_range_y
         self.pad = (Recon.paddingX, Recon.paddingY)
         self.downsample = Recon.downsample
         if self.downsample:
@@ -122,7 +122,6 @@ class TomoRecon(TomoAlign):
         # ensure it only runs on 1 thread for CUDA
         os.environ["TOMOPY_PYTHON_THREADS"] = "1"
         method_str = list(self.metadata["methods"].keys())[0]
-        print(method_str)
         if (
             method_str in astra_cuda_recon_algorithm_underscores
             and os.environ["cuda_enabled"] == "True"
