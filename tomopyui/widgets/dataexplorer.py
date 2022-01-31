@@ -68,9 +68,13 @@ class AnalysisExplorer(DataExplorerBase):
     def load_data_from_filebrowser(self, change):
         metadata = {}
         self.plotter_initial.plot(
-            np.load(self.filebrowser.root_filedir / "normalized_projections.npy")
+            np.load(self.filebrowser.root_filedir / "normalized_projections.npy"),
+            self.filebrowser.root_filedir,
         )
-        self.plotter_analyzed.plot(np.load(self.filebrowser.selected_data_fullpath))
+        self.plotter_analyzed.plot(
+            np.load(self.filebrowser.selected_data_fullpath),
+            self.filebrowser.selected_data_fullpath.parent,
+        )
 
     def create_app(self):
         plots = HBox(

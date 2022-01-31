@@ -380,7 +380,7 @@ class PrenormUploader(UploaderBase):
         else:
             self.projections.import_file_projections(self.filedir / self.filename)
         self.projections.save_normalized_as_npy()
-        self.plotter.plot(self.projections.prj_imgs)
+        self.plotter.plot(self.projections.prj_imgs, self.filedir)
 
     def check_for_data(self):
         file_list = self.projections._file_finder(

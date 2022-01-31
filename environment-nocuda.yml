@@ -1,4 +1,4 @@
-name: tomopyui-nocuda-test1
+name: tomopyui-nocuda
 channels:
   - conda-forge/label/widgetsnbextension_dev
   - conda-forge/label/jupyterlab_widgets_rc
@@ -8,6 +8,8 @@ channels:
   - defaults
 dependencies:
   - python=3.9
+  - matplotlib
+  - git
   - pip
   - tomopy
   - dxchange
