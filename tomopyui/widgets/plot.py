@@ -571,7 +571,7 @@ class BqImPlotter_Analysis(BqImPlotter):
             icon="file-import",
             layout=self.button_layout,
             style=self.button_font,
-            tooltip="Copy data from 'Imported Projections'",
+            tooltip="Copy data from 'Imported Projections'.",
         )
         self.copy_button.on_click(self.copy_parent_projections)
 
@@ -590,6 +590,7 @@ class BqImPlotter_Analysis(BqImPlotter):
             layout=self.button_layout,
             style=self.button_font,
             disabled=True,
+            tooltip="Get range from 'Imported Projections'.",
         )
         self.range_from_parent_button.on_click(self.range_from_parent)
 
@@ -607,7 +608,7 @@ class BqImPlotter_Analysis(BqImPlotter):
         right_sidebar_layout = Layout(
             justify_content="space-around", align_items="center"
         )
-        header_layout = Layout(justify_content="center")
+        header_layout = Layout(justify_content="center", align_items="center")
         footer_layout = Layout(justify_content="center")
         center_layout = Layout(justify_content="center")
         header = HBox(
@@ -631,6 +632,7 @@ class BqImPlotter_Analysis(BqImPlotter):
                 self.copy_button,
                 self.link_plotted_projections_button,
                 self.range_from_parent_button,
+                self.save_movie_button,
             ],
             layout=footer_layout,
         )
@@ -762,7 +764,7 @@ class BqImPlotter_DataExplorer(BqImPlotter):
         right_sidebar_layout = Layout(
             justify_content="space-around", align_items="center"
         )
-        header_layout = Layout(justify_content="center")
+        header_layout = Layout(justify_content="center", align_items="center")
         footer_layout = Layout(justify_content="center")
         center_layout = Layout(justify_content="center")
         header = HBox(
