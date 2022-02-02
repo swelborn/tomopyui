@@ -410,6 +410,7 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.image_index_slider.max = self.imagestack.shape[0] - 1
         self.image_index_slider.value = 0
         self.hist.preflatten_imagestack(self.imagestack)
+        self.rm_high_low_int(None)
 
     # -- Other methods -----------------------------------------------------------------
     def change_aspect_ratio(self):
@@ -659,6 +660,8 @@ class BqImPlotter_Analysis(BqImPlotter):
         self.plotted_image.image = self.imagestack[0]
         self.vmin = self.plotter_parent.vmin
         self.vmax = self.plotter_parent.vmax
+        self.update_color_range([self.vmin, self.vmax])
+        self.hist.selector.selected = None
         self.image_index_slider.max = self.imagestack.shape[0] - 1
         self.image_index_slider.value = 0
 
