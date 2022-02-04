@@ -301,6 +301,13 @@ class Center:
             filter_name=self.filter,
             num_iter=self.num_iter,
         )
+        if self.rec is None:
+            self.find_center_manual_button.button_style = "warning"
+            self.find_center_manual_button.icon = ""
+            self.find_center_manual_button.description = (
+                "Your projections do not have associated theta values."
+            )
+
         self.plotter.plot(self.rec, self.Import.projections.filedir)
         self.find_center_manual_button.button_style = "success"
         self.find_center_manual_button.icon = "fa-check-square"
