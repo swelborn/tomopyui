@@ -27,6 +27,8 @@ def write_center(
     sinogram_order=False,
     filter_name="parzen",
 ):
+    if theta is None:
+        return None, cen_range
 
     tomo = dtype.as_float32(tomo)
     theta = dtype.as_float32(theta)

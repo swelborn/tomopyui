@@ -654,7 +654,8 @@ class BqImPlotter_Analysis(BqImPlotter):
 
     # Image plot
     def plot(self):
-        self.imagestack = copy.copy(self.plotter_parent.imagestack)
+        self.original_imagestack = copy.copy(self.plotter_parent.original_imagestack)
+        self.imagestack = self.original_imagestack
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.plotted_image.image = self.imagestack[0]
@@ -738,6 +739,11 @@ class BqImPlotter_Analysis(BqImPlotter):
             )
 
     def remove_data_outside(self, *args):
+        self.remove_high_indexes = self.original_imagestack > self.vmax
+        self.original_imagestack[self.remove_high_indexes] = 1e-9
+        self.remove_low_indexes = self.original_imagestack < self.vmin
+        self.original_imagestack[self.remove_low_indexes] = 1e-9
+        self.plotted_image.image = self.original_imagestack[0]
         self.remove_high_indexes = self.imagestack > self.vmax
         self.imagestack[self.remove_high_indexes] = 1e-9
         self.remove_low_indexes = self.imagestack < self.vmin
