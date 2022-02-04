@@ -463,21 +463,48 @@ class RawUploader_SSRL62(UploaderBase):
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
-        self.filedir = path
-        self.filechooser.reset(path=path)
-        textfiles = self.projections._file_finder(path, [".txt"])
-        if textfiles == []:
+        try:
+            self.filechooser.reset(path=path)
+        except Exception as e:
+            with self.metadata_table_output:
+                self.metadata_table_output.clear_output(wait=True)
+                print(f"{e}")
+            return
+        else:
+            self.filedir = path
+
+        try:
+            textfiles = self.projections._file_finder(path, [".txt"])
+            assert textfiles != []
+        except AssertionError:
+            with self.metadata_table_output:
+                self.metadata_table_output.clear_output(wait=True)
+                print("No .txt files found in this directory.")
+            return
+        else:
+            try:
+                scan_info_filepath = (
+                    path / [file for file in textfiles if "ScanInfo" in file][0]
+                )
+            except Exception:
+                with self.metadata_table_output:
+                    self.metadata_table_output.clear_output(wait=True)
+                    print(
+                        "This directory doesn't have a ScanInfo file, please try another one."
+                    )
+                return
+        try:
+            assert scan_info_filepath != []
+
+        except Exception:
             with self.metadata_table_output:
                 self.metadata_table_output.clear_output(wait=True)
                 print(
-                    "This filedir doesn't have any .txt files, please try another one."
+                    "This directory doesn't have a ScanInfo file, please try another one."
                 )
             return
 
-        scan_info_filepath = (
-            path / [file for file in textfiles if "ScanInfo" in file][0]
-        )
-        if scan_info_filepath != []:
+        else:
             self.projections.import_metadata(path)
             self.metadata_table = self.projections.metadata_to_DataFrame()
             with self.metadata_table_output:
@@ -485,12 +512,6 @@ class RawUploader_SSRL62(UploaderBase):
                 display(self.metadata_table)
             self.import_button.button_style = "info"
             self.import_button.disabled = False
-        else:
-            with self.metadata_table_output:
-                self.metadata_table_output.clear_output(wait=True)
-                print(
-                    "This filedir doesn't have a ScanInfo file, please try another one."
-                )
 
     def update_quicksearch_from_filechooser(self):
 
