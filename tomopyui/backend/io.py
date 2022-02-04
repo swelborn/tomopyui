@@ -102,7 +102,7 @@ class ProjectionsBase(IOBase, ABC):
         return object.__getattribute__(self, name)
 
     def save_normalized_as_npy(self):
-        np.save(self.filedir / "normalized_projections.npy", self.data)
+        np.save(os.path.join(self.filedir, "normalized_projections.npy"), self.data)
 
     @abstractmethod
     def import_metadata(self, filedir):
