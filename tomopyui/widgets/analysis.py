@@ -274,7 +274,7 @@ class AnalysisBase(ABC):
         self.partial = self.metadata["partial"]
 
     def _set_attributes_from_metadata_obj_specific(self):
-        self.upsample_factor = self.metadata["opts"]["upsample_factor"]
+        self.upsample_factor = self.metadata["opts"]["upsample_factor"] 
 
     # -- Radio to turn on tab ---------------------------------------------
     def activate_tab(self, *args):
@@ -313,7 +313,7 @@ class AnalysisBase(ABC):
         self.use_imported_button.description = "Creating analysis projections"
         self.use_imported_button.icon = "fas fa-cog fa-spin fa-lg"
         self.projections = copy.deepcopy(self.Import.projections)
-        self.projections._data = self.plotter.imagestack
+        self.projections._data = self.plotter.original_imagestack
         self.projections.data = self.projections._data
         self.pixel_range_x = self.projections.pixel_range_x
         self.pixel_range_y = self.projections.pixel_range_y
@@ -331,7 +331,7 @@ class AnalysisBase(ABC):
         self.use_altered_button.description = "Creating analysis projections"
         self.use_altered_button.icon = "fas fa-cog fa-spin fa-lg"
         self.projections = copy.deepcopy(self.Import.projections)
-        self.projections._data = self.altered_plotter.imagestack
+        self.projections._data = self.altered_plotter.original_imagestack
         self.projections.data = self.projections._data
         self.pixel_range_x = self.altered_plotter.pixel_range_x
         self.pixel_range_y = self.altered_plotter.pixel_range_y

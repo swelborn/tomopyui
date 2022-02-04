@@ -16,9 +16,21 @@ class ImportBase(ABC):
 
     def __init__(self):
 
-        # Init buttons to switch between prenormalized data/raw data
-        self.raw_button = Button()
-        self.prenorm_button = Button()
+        # Init raw/prenorm button swtiches
+        self.use_raw_button = Button(
+            description="Click to use raw/normalized data from the first tab.",
+            button_style="info",
+            layout=Layout(width="auto", height="auto", align_items="stretch"),
+            # style={"font_size": "18px"},
+        )
+        self.use_raw_button.on_click(self.enable_raw)
+        self.use_prenorm_button = Button(
+            description="Click to use prenormalized data from the second tab.",
+            button_style="info",
+            layout=Layout(width="auto", height="auto", align_items="stretch"),
+            # style={"font_size": "18px"},
+        )
+        self.use_prenorm_button.on_click(self.disable_raw)
 
         # Init textboxes
         self.angle_start = -90.0
@@ -40,6 +52,42 @@ class ImportBase(ABC):
         # Init metadata
         self.metadata = {}
         # self.set_metadata()
+
+    def disable_raw(self, *args):
+        self.use_prenorm_button.description = (
+            "Prenormalized data from second tab in use for alignment/reconstruction."
+        )
+        self.use_prenorm_button.icon = "fa-check-square"
+        self.use_prenorm_button.button_style = "success"
+        self.use_raw_button.description = (
+            "Click to use raw/normalized data from the first tab."
+        )
+        self.use_raw_button.icon = ""
+        self.use_raw_button.button_style = "info"
+        self.use_raw = False
+        self.use_prenorm = True
+        self.raw_accordion.selected_index = None
+        self.prenorm_accordion.selected_index = 0
+        self.projections = self.prenorm_projections
+        self.uploader = self.prenorm_uploader
+
+    def enable_raw(self, *args):
+        self.use_raw_button.description = (
+            "Raw/normalized data from first tab in use for alignment/reconstruction."
+        )
+        self.use_raw_button.icon = "fa-check-square"
+        self.use_raw_button.button_style = "success"
+        self.use_prenorm_button.description = (
+            "Click to use prenormalized data from the second tab."
+        )
+        self.use_prenorm_button.icon = ""
+        self.use_prenorm_button.button_style = "info"
+        self.use_raw = True
+        self.use_prenorm = False
+        self.raw_accordion.selected_index = 0
+        self.prenorm_accordion.selected_index = None
+        self.projections = self.raw_projections
+        self.uploader = self.raw_uploader
 
     def set_wd(self, wd):
         """
@@ -113,57 +161,7 @@ class Import_SSRL62(ImportBase):
         self.angles_from_filenames = True
         self.raw_projections = RawProjectionsXRM_SSRL62()
         self.raw_uploader = RawUploader_SSRL62(self)
-        self.use_raw_button = Button(
-            description="Click to use raw/normalized data from the first tab.",
-            button_style="info",
-            layout=Layout(width="auto", height="auto", align_items="stretch"),
-            # style={"font_size": "18px"},
-        )
-        self.use_raw_button.on_click(self.enable_raw)
-        self.use_prenorm_button = Button(
-            description="Click to use prenormalized data from the second tab.",
-            button_style="info",
-            layout=Layout(width="auto", height="auto", align_items="stretch"),
-            # style={"font_size": "18px"},
-        )
-        self.use_prenorm_button.on_click(self.disable_raw)
         self.make_tab()
-
-    def disable_raw(self, *args):
-        self.use_prenorm_button.description = (
-            "Prenormalized data from second tab in use for alignment/reconstruction."
-        )
-        self.use_prenorm_button.icon = "fa-check-square"
-        self.use_prenorm_button.button_style = "success"
-        self.use_raw_button.description = (
-            "Click to use raw/normalized data from the first tab."
-        )
-        self.use_raw_button.icon = ""
-        self.use_raw_button.button_style = "info"
-        self.use_raw = False
-        self.use_prenorm = True
-        self.raw_accordion.selected_index = None
-        self.prenorm_accordion.selected_index = 0
-        self.projections = self.prenorm_projections
-        self.uploader = self.prenorm_uploader
-
-    def enable_raw(self, *args):
-        self.use_raw_button.description = (
-            "Raw/normalized data from first tab in use for alignment/reconstruction."
-        )
-        self.use_raw_button.icon = "fa-check-square"
-        self.use_raw_button.button_style = "success"
-        self.use_prenorm_button.description = (
-            "Click to use prenormalized data from the second tab."
-        )
-        self.use_prenorm_button.icon = ""
-        self.use_prenorm_button.button_style = "info"
-        self.use_raw = True
-        self.use_prenorm = False
-        self.raw_accordion.selected_index = 0
-        self.prenorm_accordion.selected_index = None
-        self.projections = self.raw_projections
-        self.uploader = self.raw_uploader
 
     def make_tab(self):
 
@@ -280,6 +278,7 @@ class UploaderBase(ABC):
             button_style="",
             layout=Layout(width="75px", height="86px"),
             disabled=True,
+            tooltip="Load your data into memory",
         )
 
     @abstractmethod
@@ -374,6 +373,8 @@ class PrenormUploader(UploaderBase):
             self.import_button.disabled = False
 
     def import_data(self, change):
+        self.import_button.button_style = "info"
+        self.import_button.icon = "fas fa-cog fa-spin fa-lg"
         self.projections.set_options_from_frontend(self.Import, self)
         if self.filechooser.selected_filename == "":
             self.projections.import_filedir_projections(self.filedir)
@@ -381,6 +382,8 @@ class PrenormUploader(UploaderBase):
             self.projections.import_file_projections(self.filedir / self.filename)
         self.projections.save_normalized_as_npy()
         self.plotter.plot(self.projections.prj_imgs, self.filedir)
+        self.import_button.button_style = "success"
+        self.import_button.icon = "fa-check-square"
 
     def check_for_data(self):
         file_list = self.projections._file_finder(
@@ -409,7 +412,7 @@ class RawUploader_SSRL62(UploaderBase):
             self.update_filechooser_from_quicksearch, names="value"
         )
         self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
-        self.filechooser.title = "Import Raw XRM filedir"
+        self.filechooser.title = "Choose a Raw XRM File Directory"
 
     def _init_widgets(self):
         self.metadata_table_output = Output()

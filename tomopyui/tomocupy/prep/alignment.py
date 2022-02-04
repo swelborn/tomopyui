@@ -258,13 +258,12 @@ def align_joint(TomoAlign):
             shift_cpu,
             num_batches,
             upsample_factor,
-            subset_correlation=True,
+            subset_correlation=False,
             blur=True,
             pad=TomoAlign.pad_ds,
             progress=TomoAlign.Align.progress_phase_cross_corr,
         )
         TomoAlign.shift = np.concatenate(shift_cpu, axis=1)
-
         # Shifting.
         (
             TomoAlign.prjs,
