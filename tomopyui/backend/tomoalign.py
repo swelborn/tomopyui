@@ -49,6 +49,7 @@ class TomoAlign:
 
     def _set_attributes_from_frontend(self, Align):
         self.Align = Align
+        self.center = Align.center
         self.projections = Align.projections
         self.angles_rad = Align.projections.angles_rad
         self.wd_parent = Align.projections.filedir
@@ -62,8 +63,6 @@ class TomoAlign:
         else:
             self.downsample_factor = 1
         self.num_batches = Align.num_batches
-        self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
-        self.center = Align.center + self.pad_ds[0]
         self.num_iter = Align.num_iter
         self.upsample_factor = Align.upsample_factor
         self.plot_output1 = Align.plot_output1
@@ -109,8 +108,11 @@ class TomoAlign:
 
     def init_prj(self):
         self.prjs = deepcopy(self.projections.data)
+        self.prjs = self.prjs[:, self.pixel_range_y[0] : self.pixel_range_y[1], self.pixel_range_x[0] : self.pixel_range_x[1]]
         # center of rotation change to fit new range
         self.center = self.center - self.pixel_range_x[0]
+        self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
+        self.center = self.center + self.pad[0]
 
         # Downsample
         if self.downsample:
@@ -121,10 +123,8 @@ class TomoAlign:
             )
             # center of rotation change for downsampled data
             self.center = self.center * self.downsample_factor
-
         # Pad
         self.prjs, self.pad_ds = pad_projections(self.prjs, self.pad_ds)
-
     def align(self):
         """
         Aligns a TomoData object using options in GUI.
