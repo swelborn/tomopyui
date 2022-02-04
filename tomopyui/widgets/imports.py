@@ -278,6 +278,7 @@ class UploaderBase(ABC):
             button_style="",
             layout=Layout(width="75px", height="86px"),
             disabled=True,
+            tooltip="Load your data into memory",
         )
 
     @abstractmethod
@@ -372,6 +373,8 @@ class PrenormUploader(UploaderBase):
             self.import_button.disabled = False
 
     def import_data(self, change):
+        self.import_button.button_style = "info"
+        self.import_button.icon = "fas fa-cog fa-spin fa-lg"
         self.projections.set_options_from_frontend(self.Import, self)
         if self.filechooser.selected_filename == "":
             self.projections.import_filedir_projections(self.filedir)
@@ -379,6 +382,8 @@ class PrenormUploader(UploaderBase):
             self.projections.import_file_projections(self.filedir / self.filename)
         self.projections.save_normalized_as_npy()
         self.plotter.plot(self.projections.prj_imgs, self.filedir)
+        self.import_button.button_style = "success"
+        self.import_button.icon = "fa-check-square"
 
     def check_for_data(self):
         file_list = self.projections._file_finder(
