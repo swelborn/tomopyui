@@ -66,7 +66,7 @@ class IOBase:
         tf.imwrite(filedir / name, self.data)
 
     def _file_finder(self, filedir, filetypes: list):
-        files = [pathlib.PurePath(f) for f in os.scandir(filedir) if not f.is_dir()]
+        files = [pathlib.Path(f) for f in os.scandir(filedir) if not f.is_dir()]
         files_with_ext = [
             file.name for file in files if any(x in file.name for x in filetypes)
         ]
