@@ -30,57 +30,9 @@ class Import_ALS832(ImportBase):
         self.angles_from_filenames = True
         self.raw_projections = RawProjectionsHDF5_ALS832()
         self.raw_uploader = RawUploader_ALS832(self)
-        self.use_raw_button = Button(
-            description="Click to use raw/normalized data from the first tab.",
-            button_style="info",
-            layout=Layout(width="auto", height="auto", align_items="stretch"),
-            # style={"font_size": "18px"},
-        )
         self.use_raw_button.on_click(self.enable_raw)
-        self.use_prenorm_button = Button(
-            description="Click to use prenormalized data from the second tab.",
-            button_style="info",
-            layout=Layout(width="auto", height="auto", align_items="stretch"),
-            # style={"font_size": "18px"},
-        )
         self.use_prenorm_button.on_click(self.disable_raw)
         self.make_tab()
-
-    def disable_raw(self, *args):
-        self.use_prenorm_button.description = (
-            "Prenormalized data from second tab in use for alignment/reconstruction."
-        )
-        self.use_prenorm_button.icon = "fa-check-square"
-        self.use_prenorm_button.button_style = "success"
-        self.use_raw_button.description = (
-            "Click to use raw/normalized data from the first tab."
-        )
-        self.use_raw_button.icon = ""
-        self.use_raw_button.button_style = "info"
-        self.use_raw = False
-        self.use_prenorm = True
-        self.raw_accordion.selected_index = None
-        self.prenorm_accordion.selected_index = 0
-        self.projections = self.prenorm_projections
-        self.uploader = self.prenorm_uploader
-
-    def enable_raw(self, *args):
-        self.use_raw_button.description = (
-            "Raw/normalized data from first tab in use for alignment/reconstruction."
-        )
-        self.use_raw_button.icon = "fa-check-square"
-        self.use_raw_button.button_style = "success"
-        self.use_prenorm_button.description = (
-            "Click to use prenormalized data from the second tab."
-        )
-        self.use_prenorm_button.icon = ""
-        self.use_prenorm_button.button_style = "info"
-        self.use_raw = True
-        self.use_prenorm = False
-        self.raw_accordion.selected_index = 0
-        self.prenorm_accordion.selected_index = None
-        self.projections = self.raw_projections
-        self.uploader = self.raw_uploader
 
     def make_tab(self):
 
@@ -246,32 +198,15 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         # create headers and data for table
         top_headers = []
         middle_headers = []
-        middle_headers.append(["Energy", "Tomo", "Mosaic", "MultiExposure"])
-        middle_headers.append(
-            [
-                "Repeat Scan",
-                "Wait (s)",
-                "Num. Exposures",
-                "Images/Projection",
-            ]
-        )
-        middle_headers.append(
-            ["Num. Ref Exposures", "Ref/Num Exposures", "Order", "Ref Despeckle Avg"]
-        )
-        middle_headers.append(["Up", "Down", "Left", "Right"])
-        top_headers.append(["Layers"])
+        data = []
+        # Image information
         top_headers.append(["Image Information"])
-        top_headers.append(["Acquisition Information"])
-        top_headers.append(["Reference Information"])
-        top_headers.append(["Mosaic Information"])
-        # data = [
-        #     [m[key] for key in middle_headers[i]] for i in range(len(middle_headers))
-        # ]
-        data = [
-            ['null' for key in middle_headers[i]] for i in range(len(middle_headers))
-        ]
-        middle_headers.insert(1, ["X Pixels", "Y Pixels", "Num. θ"])
-        data.insert(1, [self.pxX, self.pxY, self.pxZ])
+        middle_headers.append(["X Pixels", "Y Pixels", "Num. θ"])
+        data.append([self.pxX, self.pxY, self.pxZ])
+
+        top_headers.append(["Experiment Settings"])
+        middle_headers.append(["Energy (keV)", "Propagation Distance (mm)", "Angular range (deg)"])
+        data.append([self.energy, self.metadata["propagation_dist"], self.metadata["angularrange"]])
 
         # create dataframe with the above settings
         df = pd.DataFrame(
