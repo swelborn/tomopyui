@@ -7,6 +7,8 @@ import copy
 from skimage.transform import rescale  # look for better option
 from tomopyui._sharedvars import *
 import pathlib
+from bqplot_image_gl.interacts import MouseInteraction, keyboard_events, mouse_events
+from bqplot import PanZoom
 
 # for movie saving
 import matplotlib.pyplot as plt
@@ -16,8 +18,10 @@ import matplotlib.animation as animation
 class ImPlotterBase(ABC):
     def __init__(self, imagestack=None, title=None):
         if imagestack is None:
-            self.imagestack = np.random.rand(100, 100, 100)
+            self.original_imagestack = np.random.rand(100, 100, 100)
+            self.imagestack = self.original_imagestack
         else:
+            self.original_imagestack = imagestack
             self.imagestack = imagestack
         self.current_image_ind = 0
         self.vmin = np.min(self.imagestack)
@@ -77,7 +81,6 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.dimensions = dimensions
         self.current_plot_axis = 0
         self.rectangle_selector_on = False
-        self.rectangle_selection = [[0, 1], [0, 1]]
         self.current_interval = 300
         # self.
         self._init_fig()
@@ -114,6 +117,15 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.fig.layout.height = self.dimensions[1]
         if self.title is not None:
             self.fig.title = f"{self.title}"
+        self.panzoom = PanZoom(scales={"x": [self.scale_x], "y": [self.scale_y]})
+        self.msg_interaction = MouseInteraction(
+            x_scale=self.scale_x,
+            y_scale=self.scale_y,
+            move_throttle=70,
+            next=self.panzoom,
+            events=keyboard_events + mouse_events,
+        )
+        self.fig.interaction = self.msg_interaction
 
     def _init_widgets(self):
 
@@ -128,6 +140,7 @@ class BqImPlotter(ImPlotterBase, ABC):
             max=self.imagestack.shape[0] - 1,
             step=1,
         )
+
         # Image index play button
         self.play = Play(
             value=0,
@@ -137,6 +150,7 @@ class BqImPlotter(ImPlotterBase, ABC):
             interval=self.current_interval,
             disabled=False,
         )
+
         # Go faster on play button
         self.plus_button = Button(
             icon="plus",
@@ -144,6 +158,7 @@ class BqImPlotter(ImPlotterBase, ABC):
             style=self.button_font,
             tooltip="Speed up play slider.",
         )
+
         # Go slower on play button
         self.minus_button = Button(
             icon="minus",
@@ -151,10 +166,12 @@ class BqImPlotter(ImPlotterBase, ABC):
             style=self.button_font,
             tooltip="Slow down play slider slider.",
         )
+
         # Color scheme dropdown menu
         self.scheme_dropdown = Dropdown(
             description="Scheme:", options=self.lin_schemes, value="viridis"
         )
+
         # Swap axes button
         self.swap_axes_button = Button(
             icon="random",
@@ -162,24 +179,13 @@ class BqImPlotter(ImPlotterBase, ABC):
             style=self.button_font,
             tooltip="Swap axes",
         )
+
         # Remove high/low intensities button
         self.rm_high_low_int_button = Button(
             icon="adjust",
             layout=self.button_layout,
             style=self.button_font,
             tooltip="Remove high and low intensities from view.",
-        )
-        # Rectangle selector button
-        self.rectangle_selector_button = Button(
-            icon="far square",
-            layout=self.button_layout,
-            style=self.button_font,
-            tooltip="Turn on the rectangular region selector.",
-        )
-        # Rectangle selector
-        self.rectangle_selector = bq.interacts.BrushSelector(
-            x_scale=self.scale_x,
-            y_scale=self.scale_y,
         )
 
         # Save movie button
@@ -219,6 +225,9 @@ class BqImPlotter(ImPlotterBase, ABC):
             tooltip="Reset to original view.",
         )
 
+        # Intensity status bar
+        self.status_bar_intensity = Label()
+
     def _init_observes(self):
 
         # Image index slider
@@ -232,12 +241,6 @@ class BqImPlotter(ImPlotterBase, ABC):
 
         # Removing high/low intensities button
         self.rm_high_low_int_button.on_click(self.rm_high_low_int)
-
-        # Rectangle selector
-        self.rectangle_selector.observe(self.rectangle_to_pixel_range, "selected")
-
-        # Rectangle selector button
-        self.rectangle_selector_button.on_click(self.rectangle_select)
 
         # Faster play interval
         self.plus_button.on_click(self.speed_up)
@@ -256,6 +259,9 @@ class BqImPlotter(ImPlotterBase, ABC):
 
         # Reset button
         self.reset_button.on_click(self.reset)
+
+        # Zoom/intensity
+        self.msg_interaction.on_msg(self.on_mouse_msg_intensity)
 
     def _init_links(self):
 
@@ -330,27 +336,6 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.plotted_image.image = self.imagestack[0]
         self.change_downsample_button()
 
-    # Rectangle selector button
-    def rectangle_select(self, change):
-        if self.rectangle_selector_on is False:
-            self.fig.interaction = self.rectangle_selector
-            self.fig.interaction.color = "red"
-            self.rectangle_selector_on = True
-            self.rectangle_selector_button.button_style = "success"
-        else:
-            self.rectangle_selector_button.button_style = ""
-            self.rectangle_selector_on = False
-            self.fig.interaction = None
-
-    # Rectangle selector to update projection range
-    def rectangle_to_pixel_range(self, *args):
-        self.pixel_range = self.rectangle_selector.selected
-        self.pixel_range_x = [
-            int(x) for x in np.around(self.pixel_range[:, 0] * (self.pxX - 1))
-        ]
-        self.pixel_range_y = np.around(self.pixel_range[:, 1] * (self.pxY - 1))
-        self.pixel_range_y = [int(x) for x in self.pixel_range_y]
-
     # Reset
     def reset(self, *args):
         if self.current_plot_axis == 1:
@@ -402,6 +387,7 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.pxY = imagestack.shape[1]
         self.original_imagestack = imagestack
         self.downsample_imagestack(imagestack)
+        self.change_downsample_button()
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.plotted_image.image = self.imagestack[0]
@@ -411,6 +397,40 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.image_index_slider.value = 0
         self.hist.preflatten_imagestack(self.imagestack)
         self.rm_high_low_int(None)
+
+    # Intensity message
+    def on_mouse_msg_intensity(self, interaction, data, buffers):
+        # it might be a good idea to throttle on the Python side as well, for instance when many computations
+        # happen, we can effectively ignore the queue of messages
+        if data["event"] == "mousemove":
+            domain_x = data["domain"]["x"]
+            domain_y = data["domain"]["y"]
+            normalized_x = (domain_x - self.plotted_image.x[0]) / (
+                self.plotted_image.x[1] - self.plotted_image.x[0]
+            )
+            normalized_y = (domain_y - self.plotted_image.y[0]) / (
+                self.plotted_image.y[1] - self.plotted_image.y[0]
+            )
+            # TODO: think about +/-1 and pixel edges
+            pixel_x = int(np.floor(normalized_x * self.plotted_image.image.shape[1]))
+            pixel_y = int(np.floor(normalized_y * self.plotted_image.image.shape[0]))
+            if (
+                pixel_x >= 0
+                and pixel_x < self.plotted_image.image.shape[1]
+                and pixel_y >= 0
+                and pixel_y < self.plotted_image.image.shape[0]
+            ):
+                value = str(round(self.plotted_image.image[pixel_y, pixel_x], 5))
+            else:
+                value = "Out of range"
+            msg = f"Intensity={value}"
+            self.status_bar_intensity.value = msg
+        elif data["event"] == "mouseleave":
+            self.status_bar_intensity.value = ""
+        elif data["event"] == "mouseenter":
+            self.status_bar_intensity.value = "Almost there..."  # this is is not visible because mousemove overwrites the msg
+        else:
+            self.status_bar_intensity.value = f"click {data}"
 
     # -- Other methods -----------------------------------------------------------------
     def change_aspect_ratio(self):
@@ -425,7 +445,6 @@ class BqImPlotter(ImPlotterBase, ABC):
                 self.fig.min_aspect_ratio = self.aspect_ratio
                 self.fig.max_aspect_ratio = self.aspect_ratio
             # This is set to default dimensions of 550, not great:
-
             self.fig.layout.height = str(int(550 / self.aspect_ratio)) + "px"
 
     @abstractmethod
@@ -436,6 +455,85 @@ class BqImPlotter(ImPlotterBase, ABC):
 class BqImPlotter_Import(BqImPlotter):
     def __init__(self, dimensions=("550px", "550px")):
         super().__init__(dimensions=dimensions)
+
+    def create_app(self):
+        left_sidebar_layout = Layout(
+            justify_content="space-around", align_items="center"
+        )
+        right_sidebar_layout = Layout(
+            justify_content="space-around", align_items="center"
+        )
+        header_layout = Layout(justify_content="center", align_items="center")
+        footer_layout = Layout(justify_content="center", align_items="center")
+        center_layout = Layout(justify_content="center", align_content="center")
+        header = HBox(
+            [
+                self.downsample_viewer_button,
+                self.downsample_viewer_textbox,
+                self.scheme_dropdown,
+            ],
+            layout=header_layout,
+        )
+        left_sidebar = None
+        right_sidebar = None
+        center = HBox([self.fig, self.hist.fig], layout=center_layout)
+        self.button_box = HBox(
+            [
+                self.plus_button,
+                self.minus_button,
+                self.reset_button,
+                self.rm_high_low_int_button,
+                self.swap_axes_button,
+                self.save_movie_button,
+            ],
+            layout=footer_layout,
+        )
+        footer1 = HBox([self.play, self.image_index_slider], layout=footer_layout)
+        footer2 = VBox(
+            [self.button_box, self.status_bar_intensity],
+            layout=footer_layout,
+        )
+
+        footer = VBox([footer1, footer2])
+
+        self.app = VBox([header, center, footer])
+
+
+class BqImPlotter_Center(BqImPlotter_Import):
+    def __init__(self):
+        super().__init__()
+
+
+class BqImPlotter_Import_Analysis(BqImPlotter):
+    def __init__(self, Analysis, dimensions=("550px", "550px")):
+        self.Analysis = Analysis
+        super().__init__(dimensions=dimensions)
+        # Rectangle selector button
+        self.rectangle_selector_button = Button(
+            icon="far square",
+            layout=self.button_layout,
+            style=self.button_font,
+            tooltip=(
+                "Turn on the rectangular region selector. Select a region "
+                "and copy it over to  Altered Projections."
+            ),
+        )
+        # Rectangle selector
+        self.rectangle_selector = bq.interacts.BrushSelector(
+            x_scale=self.scale_x,
+            y_scale=self.scale_y,
+        )
+        # Rectangle selector
+        self.rectangle_selector.observe(self.rectangle_to_pixel_range, "selected")
+
+        # Rectangle selector button
+        self.rectangle_selector_button.on_click(self.rectangle_select)
+
+        # Status bar updates
+        self.status_bar_xrange = Label()
+        self.status_bar_yrange = Label()
+        self.status_bar_xrange.value = ""
+        self.status_bar_yrange.value = ""
 
     def create_app(self):
         left_sidebar_layout = Layout(
@@ -474,6 +572,14 @@ class BqImPlotter_Import(BqImPlotter):
         footer2 = VBox(
             [
                 self.button_box,
+                HBox(
+                    [
+                        self.status_bar_xrange,
+                        self.status_bar_yrange,
+                        self.status_bar_intensity,
+                    ],
+                    layout=footer_layout,
+                ),
             ],
             layout=footer_layout,
         )
@@ -482,91 +588,65 @@ class BqImPlotter_Import(BqImPlotter):
 
         self.app = VBox([header, center, footer])
 
+    def plot(self):
+        self.original_imagestack = self.Analysis.Import.projections.data
+        self.pxX = self.original_imagestack.shape[2]
+        self.pxY = self.original_imagestack.shape[1]
+        self.pxZ = self.original_imagestack.shape[0]
+        self.downsample_imagestack(self.original_imagestack)
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = self.imagestack[0]
+        self.vmin = np.min(self.imagestack)
+        self.vmax = np.max(self.imagestack)
+        self.image_scale["image"].min = float(self.vmin)
+        self.image_scale["image"].max = float(self.vmax)
+        self.pixel_range_x = [0, self.pxX - 1]
+        self.pixel_range_y = [0, self.pxY - 1]
+        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
+        # self.update_pixel_range_status_bar()
+        self.hist.selector.selected = None
+        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.value = 0
+        self.hist.preflatten_imagestack(self.imagestack)
+        self.rm_high_low_int(None)
+        self.change_downsample_button()
 
-class BqImPlotter_Center(BqImPlotter_Import):
-    def __init__(self):
-        super().__init__()
+    # Rectangle selector button
+    def rectangle_select(self, change):
+        if self.rectangle_selector_on is False:
+            self.fig.interaction = self.rectangle_selector
+            self.fig.interaction.color = "red"
+            self.rectangle_selector_on = True
+            self.rectangle_selector_button.button_style = "success"
+        else:
+            self.rectangle_selector_button.button_style = ""
+            self.rectangle_selector_on = False
+            self.status_bar_xrange.value = ""
+            self.status_bar_yrange.value = ""
+            self.fig.interaction = self.msg_interaction
 
-
-class BqImHist:
-    def __init__(self, implotter: BqImPlotter):
-        self.implotter = implotter
-        self.fig = bq.Figure(
-            padding=0,
-            fig_margin=dict(top=0, bottom=0, left=0, right=0),
-        )
-        self.preflatten_imagestack(self.implotter.imagestack)
-        self.fig.layout.width = "100px"
-        self.fig.layout.height = implotter.fig.layout.height
-
-    def preflatten_imagestack(self, imagestack):
-        self.x_sc = bq.LinearScale(
-            min=float(self.implotter.vmin), max=float(self.implotter.vmax)
-        )
-        self.y_sc = bq.LinearScale()
-        self.fig.scale_x = self.x_sc
-        self.fig.scale_y = bq.LinearScale()
-        self.hists = [
-            bq.Bins(
-                sample=self.implotter.imagestack.ravel(),
-                scales={
-                    "x": self.x_sc,
-                    "y": self.y_sc,
-                },
-                colors=["dodgerblue"],
-                opacities=[0.75],
-                orientation="horizontal",
-                bins="sqrt",
-                density=True,
-            )
-            # for image in self.implotter.imagestack
+    # Rectangle selector to update projection range
+    def rectangle_to_pixel_range(self, *args):
+        self.pixel_range = self.rectangle_selector.selected
+        self.pixel_range = np.where(self.pixel_range < 0, 0, self.pixel_range)
+        self.pixel_range = np.where(self.pixel_range > 1, 1, self.pixel_range)
+        self.pixel_range_x = [
+            int(x) for x in np.around(self.pixel_range[:, 0] * (self.pxX - 1))
         ]
-        self.xvals = [x.x for x in self.hists]
-        self.yvals = [x.y for x in self.hists]
-        for i in range(len(self.hists)):
-            ind = self.xvals[i] < self.implotter.vmin
-            self.yvals[i][ind] = 0
-            self.hists[i].scales["y"].max = np.max(self.yvals[i])
-        # self.hists_swapaxes = [
-        #     bq.Bins(
-        #         sample=image.ravel(),
-        #         scales={
-        #             "x": self.x_sc,
-        #             "y": self.y_sc,
-        #         },
-        #         colors=["dodgerblue"],
-        #         opacities=[0.75],
-        #         orientation="horizontal",
-        #         bins="sqrt",
-        #     )
-        #     for image in np.swapaxes(self.implotter.imagestack, 0, 1)
-        # ]
-        self.selector = bq.interacts.BrushIntervalSelector(
-            orientation="vertical", scale=self.x_sc
-        )
-        self.selector.observe(self.update_crange_selector, "selected")
-        self.fig.marks = [self.hists[0]]
-        self.fig.interaction = self.selector
+        self.pixel_range_y = np.around(self.pixel_range[:, 1] * (self.pxY - 1))
+        self.pixel_range_y = [int(x) for x in self.pixel_range_y]
+        self.update_pixel_range_status_bar()
 
-    def update_crange_selector(self, *args):
-        if self.selector.selected is not None:
-            self.implotter.image_scale["image"].min = self.selector.selected[0]
-            self.implotter.image_scale["image"].max = self.selector.selected[1]
-            self.implotter.vmin = np.min(self.selector.selected[0])
-            self.implotter.vmax = np.max(self.selector.selected[1])
-
-    # def update(self):
-    #     if self.implotter.current_plot_axis == 0:
-    #         self.hist = self.hists
-    #     else:
-    #         self.hist = self.hists
-    # self.fig.marks = [self.hist]
+    def update_pixel_range_status_bar(self):
+        self.status_bar_xrange.value = f"X Pixel Range: {self.pixel_range_x}"
+        self.status_bar_yrange.value = f"Y Pixel Range: {self.pixel_range_y}"
 
 
-class BqImPlotter_Analysis(BqImPlotter):
-    def __init__(self, plotter_parent, align_parent, dimensions=("550px", "550px")):
-        super().__init__(dimensions=dimensions)
-        self.align_parent = align_parent
+class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
+    def __init__(self, plotter_parent, Analysis, dimensions=("550px", "550px")):
+        self.Analysis = Analysis
+        super().__init__(Analysis, dimensions=dimensions)
         self.plotter_parent = plotter_parent
 
         # Copy from plotter
@@ -603,6 +683,9 @@ class BqImPlotter_Analysis(BqImPlotter):
         )
         self.remove_data_outside_button.on_click(self.remove_data_outside)
 
+        # Rectangle selector
+        self.rectangle_selector.observe(self.rectangle_to_pixel_range, "selected")
+
     def create_app(self):
 
         left_sidebar_layout = Layout(
@@ -635,6 +718,7 @@ class BqImPlotter_Analysis(BqImPlotter):
                 self.copy_button,
                 self.link_plotted_projections_button,
                 self.range_from_parent_button,
+                self.rectangle_selector_button,
                 self.save_movie_button,
             ],
             layout=footer_layout,
@@ -643,6 +727,14 @@ class BqImPlotter_Analysis(BqImPlotter):
         footer2 = VBox(
             [
                 self.button_box,
+                HBox(
+                    [
+                        self.status_bar_xrange,
+                        self.status_bar_yrange,
+                        self.status_bar_intensity,
+                    ],
+                    layout=Layout(justify_content="center"),
+                ),
                 HBox(
                     [self.remove_data_outside_button],
                     layout=Layout(justify_content="center"),
@@ -657,7 +749,15 @@ class BqImPlotter_Analysis(BqImPlotter):
     # Image plot
     def plot(self):
         self.original_imagestack = copy.copy(self.plotter_parent.original_imagestack)
-        self.imagestack = self.original_imagestack
+        self.pxX = self.original_imagestack.shape[2]
+        self.pxY = self.original_imagestack.shape[1]
+        self.pxZ = self.original_imagestack.shape[0]
+        self.pixel_range_x = [0, self.pxX - 1]
+        self.pixel_range_y = [0, self.pxY - 1]
+        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
+        self.subset_pixel_range_x = self.pixel_range_x
+        self.subset_pixel_range_y = self.pixel_range_y
+        self.downsample_imagestack(self.original_imagestack)
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.plotted_image.image = self.imagestack[0]
@@ -671,8 +771,6 @@ class BqImPlotter_Analysis(BqImPlotter):
 
     def copy_parent_projections(self, *args):
         self.plot()
-        self.pxX = self.imagestack.shape[2]
-        self.pxY = self.imagestack.shape[1]
         self.hist.hists = copy.copy(self.plotter_parent.hist.hists)
         # self.hist.hists_swapaxes = copy.copy(self.plotter_parent.hist.hists_swapaxes)
         self.hist.selector = bq.interacts.BrushIntervalSelector(
@@ -740,6 +838,49 @@ class BqImPlotter_Analysis(BqImPlotter):
                 self.plotter_parent.pixel_range_y[0],
                 self.plotter_parent.pixel_range_y[1],
             )
+
+    # Rectangle selector to update projection range
+    def rectangle_to_pixel_range(self, *args):
+        self.pixel_range = self.rectangle_selector.selected
+        x_len = self.pixel_range_x[1] - self.pixel_range_x[0]
+        y_len = self.pixel_range_y[1] - self.pixel_range_y[0]
+        lowerX = int(self.pixel_range[0, 0] * x_len + self.pixel_range_x[0])
+        upperX = int(self.pixel_range[1, 0] * x_len + self.pixel_range_x[0])
+        lowerY = int(self.pixel_range[0, 1] * y_len + self.pixel_range_y[0])
+        upperY = int(self.pixel_range[1, 1] * y_len + self.pixel_range_y[0])
+        self.printed_range_x = [lowerX, upperX]
+        self.printed_range_y = [lowerY, upperY]
+        self.Analysis.subset_range_x = [
+            x - self.pixel_range_x[0] for x in self.printed_range_x
+        ]
+        self.Analysis.subset_range_y = [
+            y - self.pixel_range_y[0] for y in self.printed_range_y
+        ]
+        self.update_pixel_range_status_bar()
+
+    # Rectangle selector button
+    def rectangle_select(self, change):
+        if self.rectangle_selector_on is False:
+            self.fig.interaction = self.rectangle_selector
+            self.fig.interaction.color = "red"
+            self.rectangle_selector_on = True
+            self.rectangle_selector_button.button_style = "success"
+            self.Analysis.use_subset_correlation_checkbox.value = True
+        else:
+            self.rectangle_selector_button.button_style = ""
+            self.rectangle_selector_on = False
+            self.status_bar_xrange.value = ""
+            self.status_bar_yrange.value = ""
+            self.fig.interaction = self.msg_interaction
+            self.Analysis.use_subset_correlation_checkbox.value = False
+
+    def update_pixel_range_status_bar(self):
+        self.status_bar_xrange.value = (
+            f"Corr. subset X Pixel Range: {self.printed_range_x}"
+        )
+        self.status_bar_yrange.value = (
+            f"Corr. subset Y Pixel Range: {self.printed_range_y}"
+        )
 
     def remove_data_outside(self, *args):
         self.remove_high_indexes = self.original_imagestack > self.vmax
@@ -855,3 +996,63 @@ class BqImPlotter_DataExplorer(BqImPlotter):
             fps=20, codec=None, bitrate=1000, extra_args=None, metadata=None
         )
         _ = ani.save(str(pathlib.Path(self.filedir / "movie.mp4")), writer=writer)
+
+
+class BqImHist:
+    def __init__(self, implotter: BqImPlotter):
+        self.implotter = implotter
+        self.fig = bq.Figure(
+            padding=0,
+            fig_margin=dict(top=0, bottom=0, left=0, right=0),
+        )
+        self.preflatten_imagestack(self.implotter.imagestack)
+        self.fig.layout.width = "100px"
+        self.fig.layout.height = implotter.fig.layout.height
+
+    def preflatten_imagestack(self, imagestack):
+        self.x_sc = bq.LinearScale(
+            min=float(self.implotter.vmin), max=float(self.implotter.vmax)
+        )
+        self.y_sc = bq.LinearScale()
+        self.fig.scale_x = self.x_sc
+        self.fig.scale_y = bq.LinearScale()
+        self.hists = [
+            bq.Bins(
+                sample=self.implotter.imagestack.ravel(),
+                scales={
+                    "x": self.x_sc,
+                    "y": self.y_sc,
+                },
+                colors=["dodgerblue"],
+                opacities=[0.75],
+                orientation="horizontal",
+                bins="sqrt",
+                density=True,
+            )
+        ]
+        self.xvals = [x.x for x in self.hists]
+        self.yvals = [x.y for x in self.hists]
+        for i in range(len(self.hists)):
+            ind = self.xvals[i] < self.implotter.vmin
+            self.yvals[i][ind] = 0
+            self.hists[i].scales["y"].max = np.max(self.yvals[i])
+        self.selector = bq.interacts.BrushIntervalSelector(
+            orientation="vertical", scale=self.x_sc
+        )
+        self.selector.observe(self.update_crange_selector, "selected")
+        self.fig.marks = [self.hists[0]]
+        self.fig.interaction = self.selector
+
+    def update_crange_selector(self, *args):
+        if self.selector.selected is not None:
+            self.implotter.image_scale["image"].min = self.selector.selected[0]
+            self.implotter.image_scale["image"].max = self.selector.selected[1]
+            self.implotter.vmin = self.selector.selected[0]
+            self.implotter.vmax = self.selector.selected[1]
+
+    # def update(self):
+    #     if self.implotter.current_plot_axis == 0:
+    #         self.hist = self.hists
+    #     else:
+    #         self.hist = self.hists
+    # self.fig.marks = [self.hist]

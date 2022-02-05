@@ -3,7 +3,10 @@ from ipywidgets import *
 from tomopyui._sharedvars import *
 import copy
 from abc import ABC, abstractmethod
-from tomopyui.widgets.plot import BqImPlotter_Analysis
+from tomopyui.widgets.plot import (
+    BqImPlotter_Import_Analysis,
+    BqImPlotter_Altered_Analysis,
+)
 from tomopyui.backend.tomoalign import TomoAlign
 from tomopyui.backend.tomorecon import TomoRecon
 from tomopyui.backend.io import save_metadata, load_metadata
@@ -16,7 +19,10 @@ class AnalysisBase(ABC):
         self.Import = Import
         self.Center = Center
         self.projections = copy.deepcopy(Import.projections)
-        self.plotter = Import.uploader.plotter
+        self.imported_plotter = BqImPlotter_Import_Analysis(self)
+        self.imported_plotter.create_app()
+        self.altered_plotter = BqImPlotter_Altered_Analysis(self.imported_plotter, self)
+        self.altered_plotter.create_app()
         self.wd = None
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
@@ -31,6 +37,7 @@ class AnalysisBase(ABC):
         self.paddingX = 10
         self.paddingY = 10
         self.partial = False
+        self.use_subset_correlation = False
         self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
         self.tomopy_methods_list.remove("gridrec")
         self.tomopy_methods_list.remove("fbp")
@@ -100,14 +107,12 @@ class AnalysisBase(ABC):
             layout=Layout(width="auto"),
         )
 
-        self.altered_plotter = BqImPlotter_Analysis(self.plotter, self)
-        self.altered_plotter.create_app()
         self.plotter_hbox = HBox(
             [
                 VBox(
                     [
                         self.import_plot_header,
-                        self.plotter.app,
+                        self.imported_plotter.app,
                         self.use_imported_button,
                     ],
                     layout=Layout(align_items="center"),
@@ -178,6 +183,11 @@ class AnalysisBase(ABC):
             style=extend_description_style,
         )
 
+        # Phase cross correlation subset (from altered projections)
+        self.use_subset_correlation_checkbox = Checkbox(
+            description="Phase Corr. Subset?", value=False
+        )
+
         # Batch size
         self.num_batches_textbox = IntText(
             description="Number of batches (for GPU): ",
@@ -205,6 +215,9 @@ class AnalysisBase(ABC):
             style=extend_description_style,
         )
 
+    def refresh_plots(self):
+        self.imported_plotter.plot()
+
     def set_metadata(self):
         self.metadata["opts"]["downsample"] = self.downsample
         self.metadata["opts"]["downsample_factor"] = self.downsample_factor
@@ -221,6 +234,7 @@ class AnalysisBase(ABC):
         self.metadata["pixel_range_x"] = self.pixel_range_x
         self.metadata["pixel_range_y"] = self.pixel_range_y
         self.metadata["partial"] = self.partial
+        self.metadata["correlation_subset"] = self.use_subset_correlation
 
     def set_observes(self):
 
@@ -246,6 +260,9 @@ class AnalysisBase(ABC):
         self.downsample_factor_textbox.observe(
             self.update_downsample_factor_dict, names="value"
         )
+
+        # Phase cross correlation subset (from altered projections)
+        self.use_subset_correlation_checkbox.observe(self._use_subset_correlation)
 
         # X Padding
         self.paddingX_textbox.observe(self.update_x_padding, names="value")
@@ -274,7 +291,7 @@ class AnalysisBase(ABC):
         self.partial = self.metadata["partial"]
 
     def _set_attributes_from_metadata_obj_specific(self):
-        self.upsample_factor = self.metadata["opts"]["upsample_factor"] 
+        self.upsample_factor = self.metadata["opts"]["upsample_factor"]
 
     # -- Radio to turn on tab ---------------------------------------------
     def activate_tab(self, *args):
@@ -313,8 +330,6 @@ class AnalysisBase(ABC):
         self.use_imported_button.description = "Creating analysis projections"
         self.use_imported_button.icon = "fas fa-cog fa-spin fa-lg"
         self.projections = copy.deepcopy(self.Import.projections)
-        self.projections._data = self.plotter.original_imagestack
-        self.projections.data = self.projections._data
         self.pixel_range_x = self.projections.pixel_range_x
         self.pixel_range_y = self.projections.pixel_range_y
         self.use_imported_button.button_style = "success"
@@ -401,6 +416,11 @@ class AnalysisBase(ABC):
             self.downsample_factor_textbox.value = 1
             self.downsample_factor_textbox.disabled = True
             self.set_metadata()
+
+    # Phase cross correlation subset (from altered projections)
+    def _use_subset_correlation(self, change):
+        self.use_subset_correlation = change.new
+        self.set_metadata()
 
     def update_downsample_factor_dict(self, change):
         self.downsample_factor = change.new
@@ -529,6 +549,7 @@ class Align(AnalysisBase):
     def __init__(self, Import, Center):
         super().init_attributes(Import, Center)
         self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", "npy"]
+        self.Import.Align = self
         self.init_widgets()
         self.set_metadata()
         self.set_observes()
@@ -653,9 +674,7 @@ class Align(AnalysisBase):
         # -- Box organization -------------------------------------------------
 
         top_of_box_hb = HBox(
-            [
-                self.open_accordions_button,
-            ],
+            [self.open_accordions_button, self.Import.switch_data_buttons],
             layout=Layout(
                 width="auto",
                 justify_content="flex-start",
@@ -678,10 +697,9 @@ class Align(AnalysisBase):
                         self.downsample_checkbox,
                         self.downsample_factor_textbox,
                         self.extra_options_textbox,
+                        self.use_subset_correlation_checkbox,
                     ],
-                    layout=Layout(
-                        flex_flow="row wrap", justify_content="space-between"
-                    ),
+                    layout=Layout(flex_flow="row wrap", justify_content="flex-start"),
                 ),
             ],
             selected_index=None,
@@ -720,6 +738,7 @@ class Recon(AnalysisBase):
     def __init__(self, Import, Center):
         super().init_attributes(Import, Center)
         self.save_opts_list = ["tomo_before", "recon", "tiff", "npy"]
+        self.Import.Recon = self
         self.init_widgets()
         self.set_metadata()
         self.set_observes()
@@ -814,9 +833,7 @@ class Recon(AnalysisBase):
         # -- Box organization -------------------------------------------------
 
         top_of_box_hb = HBox(
-            [
-                self.open_accordions_button,
-            ],
+            [self.open_accordions_button, self.Import.switch_data_buttons],
             layout=Layout(
                 width="auto",
                 justify_content="flex-start",

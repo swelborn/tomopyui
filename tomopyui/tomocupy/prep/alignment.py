@@ -254,11 +254,13 @@ def align_joint(TomoAlign):
         shift_cpu = []
         batch_cross_correlation(
             TomoAlign.prjs,
-            sim,        
+            sim,
             shift_cpu,
             num_batches,
             upsample_factor,
-            subset_correlation=False,
+            subset_correlation=TomoAlign.use_subset_correlation,
+            subset_x=TomoAlign.subset_x,
+            subset_y=TomoAlign.subset_y,
             blur=True,
             pad=TomoAlign.pad_ds,
             progress=TomoAlign.Align.progress_phase_cross_corr,
@@ -348,6 +350,8 @@ def batch_cross_correlation(
     rin=0.5,
     rout=0.8,
     subset_correlation=False,
+    subset_x=None,
+    subset_y=None,
     mask_sim=True,
     pad=(0, 0),
     progress=None,
@@ -368,15 +372,11 @@ def batch_cross_correlation(
         # simulated projections have data outside of the mask.
         if subset_correlation:
             _prj_gpu = cp.array(
-                _prj[batch][
-                    :, 2 * pad[1] : -2 * pad[1] : 1, 2 * pad[0] : -2 * pad[0] : 1
-                ],
+                _prj[batch][:, subset_y[0] : subset_y[1], subset_x[0] : subset_x[1]],
                 dtype=cp.float32,
             )
             _sim_gpu = cp.array(
-                _sim[batch][
-                    :, 2 * pad[1] : -2 * pad[1] : 1, 2 * pad[0] : -2 * pad[0] : 1
-                ],
+                _sim[batch][:, subset_y[0] : subset_y[1], subset_x[0] : subset_x[1]],
                 dtype=cp.float32,
             )
         else:

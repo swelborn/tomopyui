@@ -54,40 +54,55 @@ class ImportBase(ABC):
         # self.set_metadata()
 
     def disable_raw(self, *args):
-        self.use_prenorm_button.description = (
-            "Prenormalized data from second tab in use for alignment/reconstruction."
-        )
-        self.use_prenorm_button.icon = "fa-check-square"
-        self.use_prenorm_button.button_style = "success"
+
         self.use_raw_button.description = (
-            "Click to use raw/normalized data from the first tab."
+            "Click to use raw/normalized data from Import tab."
         )
         self.use_raw_button.icon = ""
         self.use_raw_button.button_style = "info"
         self.use_raw = False
         self.use_prenorm = True
-        self.raw_accordion.selected_index = None
-        self.prenorm_accordion.selected_index = 0
+        # self.raw_accordion.selected_index = None
+        # self.prenorm_accordion.selected_index = 0
         self.projections = self.prenorm_projections
         self.uploader = self.prenorm_uploader
+        self.Recon.projections = self.projections
+        self.Align.projections = self.projections
+        self.use_prenorm_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.use_prenorm_button.button_style = "info"
+        self.use_prenorm_button.description = "Updating plots."
+        self.Recon.refresh_plots()
+        self.Align.refresh_plots()
+        self.use_prenorm_button.icon = "fa-check-square"
+        self.use_prenorm_button.button_style = "success"
+        self.use_prenorm_button.description = (
+            "Prenormalized data from Import tab in use for alignment/reconstruction."
+        )
 
     def enable_raw(self, *args):
-        self.use_raw_button.description = (
-            "Raw/normalized data from first tab in use for alignment/reconstruction."
-        )
-        self.use_raw_button.icon = "fa-check-square"
-        self.use_raw_button.button_style = "success"
         self.use_prenorm_button.description = (
-            "Click to use prenormalized data from the second tab."
+            "Click to use prenormalized data from Import tab."
         )
         self.use_prenorm_button.icon = ""
         self.use_prenorm_button.button_style = "info"
         self.use_raw = True
         self.use_prenorm = False
-        self.raw_accordion.selected_index = 0
-        self.prenorm_accordion.selected_index = None
+        # self.raw_accordion.selected_index = 0
+        # self.prenorm_accordion.selected_index = None
         self.projections = self.raw_projections
         self.uploader = self.raw_uploader
+        self.Recon.projections = self.projections
+        self.Align.projections = self.projections
+        self.use_raw_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.use_raw_button.button_style = "info"
+        self.use_raw_button.description = "Updating plots."
+        self.Recon.refresh_plots()
+        self.Align.refresh_plots()
+        self.use_raw_button.icon = "fa-check-square"
+        self.use_raw_button.button_style = "success"
+        self.use_raw_button.description = (
+            "Raw/normalized data from Import tab in use for alignment/reconstruction."
+        )
 
     def set_wd(self, wd):
         """
@@ -96,25 +111,6 @@ class ImportBase(ABC):
         """
         self.wd = wd
         os.chdir(wd)
-
-    # def set_metadata(self):
-    #     """
-    #     Sets relevant metadata for `Import`
-    #     """
-    #     self.metadata = {
-    #         "filedir": self.filedir,
-    #         "filename": self.filename,
-    #         "angle_start": self.angle_start,
-    #         "angle_end": self.angle_end,
-    #         "num_theta": self.num_theta,
-    #         "pixel_range_x": self.pixel_range_x,
-    #         "pixel_range_y": self.pixel_range_y,
-    #     }
-
-    #     self.set_metadata()
-    #     self.get_prj_shape()
-    #     self.set_prj_ranges()
-    #     self.set_metadata()
 
     def create_angles_textboxes(self):
         """
@@ -170,7 +166,7 @@ class Import_SSRL62(ImportBase):
             layout=Layout(justify_content="center"),
         )
 
-        raw_import = HBox(
+        self.raw_import = HBox(
             [
                 VBox(
                     [
@@ -202,14 +198,14 @@ class Import_SSRL62(ImportBase):
                             [self.raw_uploader.progress_output],
                             layout=Layout(justify_content="center"),
                         ),
-                        raw_import,
+                        self.raw_import,
                     ]
                 ),
             ],
             selected_index=None,
             titles=("Import and Normalize Raw Data",),
         )
-        norm_import = HBox(
+        self.norm_import = HBox(
             [
                 VBox(
                     [
@@ -230,7 +226,7 @@ class Import_SSRL62(ImportBase):
         )
 
         self.prenorm_accordion = Accordion(
-            children=[norm_import],
+            children=[self.norm_import],
             selected_index=None,
             titles=("Import Prenormalized Data",),
         )
@@ -250,7 +246,7 @@ class Import_SSRL62(ImportBase):
         )
         self.tab = VBox(
             [
-                self.switch_data_buttons,
+                # self.switch_data_buttons,
                 self.raw_accordion,
                 self.prenorm_accordion,
                 self.meta_accordion,
