@@ -56,6 +56,8 @@ class TomoAlign:
         self.metadata = Align.metadata.copy()
         self.pixel_range_x = Align.pixel_range_x
         self.pixel_range_y = Align.pixel_range_y
+        self.subset_x = Align.subset_range_x
+        self.subset_y = Align.subset_range_y
         self.pad = (Align.paddingX, Align.paddingY)
         self.downsample = Align.downsample
         if self.downsample:
@@ -65,6 +67,7 @@ class TomoAlign:
         self.num_batches = Align.num_batches
         self.num_iter = Align.num_iter
         self.upsample_factor = Align.upsample_factor
+        self.use_subset_correlation = Align.use_subset_correlation
         self.plot_output1 = Align.plot_output1
         self.plot_output2 = Align.plot_output2
 
@@ -108,7 +111,11 @@ class TomoAlign:
 
     def init_prj(self):
         self.prjs = deepcopy(self.projections.data)
-        self.prjs = self.prjs[:, self.pixel_range_y[0] : self.pixel_range_y[1], self.pixel_range_x[0] : self.pixel_range_x[1]]
+        self.prjs = self.prjs[
+            :,
+            self.pixel_range_y[0] : self.pixel_range_y[1],
+            self.pixel_range_x[0] : self.pixel_range_x[1],
+        ]
         # center of rotation change to fit new range
         self.center = self.center - self.pixel_range_x[0]
         self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
@@ -123,8 +130,11 @@ class TomoAlign:
             )
             # center of rotation change for downsampled data
             self.center = self.center * self.downsample_factor
+            self.subset_x = [x * self.downsample_factor for x in self.subset_x]
+            self.subset_y = [y * self.downsample_factor for y in self.subset_y]
         # Pad
         self.prjs, self.pad_ds = pad_projections(self.prjs, self.pad_ds)
+
     def align(self):
         """
         Aligns a TomoData object using options in GUI.
