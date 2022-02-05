@@ -66,7 +66,7 @@ class IOBase:
         tf.imwrite(filedir / name, self.data)
 
     def _file_finder(self, filedir, filetypes: list):
-        files = [pathlib.Path(f) for f in os.scandir(filedir) if not f.is_dir()]
+        files = [pathlib.PurePath(f) for f in os.scandir(filedir) if not f.is_dir()]
         files_with_ext = [
             file.name for file in files if any(x in file.name for x in filetypes)
         ]
@@ -102,7 +102,7 @@ class ProjectionsBase(IOBase, ABC):
         return object.__getattribute__(self, name)
 
     def save_normalized_as_npy(self):
-        np.save(os.path.join(self.filedir, "normalized_projections.npy"), self.data)
+        np.save(self.filedir / "normalized_projections.npy", self.data)
 
     @abstractmethod
     def import_metadata(self, filedir):
