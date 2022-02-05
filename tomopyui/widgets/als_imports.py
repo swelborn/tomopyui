@@ -128,6 +128,7 @@ class Import_ALS832(ImportBase):
             ]
         )
 
+
 class RawProjectionsHDF5_ALS832(RawProjectionsBase):
     def __init__(self):
         super().__init__()
@@ -136,13 +137,37 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
 
     def import_metadata(self, filename):
 
-        self.metadata["numslices"] = int(dxchange.read_hdf5(filename, "/measurement/instrument/detector/dimension_y")[0])
-        self.metadata["numrays"] = int(dxchange.read_hdf5(filename, "/measurement/instrument/detector/dimension_x")[0])
-        self.metadata["pxsize"] = dxchange.read_hdf5(filename, "/measurement/instrument/detector/pixel_size")[0] / 10.0  # /10 to convert units from mm to cm
-        self.metadata["num_angles"] = int(dxchange.read_hdf5(filename, "/process/acquisition/rotation/num_angles")[0])
-        self.metadata["propagation_dist"] = dxchange.read_hdf5(filename, "/measurement/instrument/camera_motor_stack/setup/camera_distance")[1]
-        self.metadata["kev"] = dxchange.read_hdf5(filename, "/measurement/instrument/monochromator/energy")[0] / 1000
-        self.metadata["angularrange"] = dxchange.read_hdf5(filename, "/process/acquisition/rotation/range")[0]
+        self.metadata["numslices"] = int(
+            dxchange.read_hdf5(
+                filename, "/measurement/instrument/detector/dimension_y"
+            )[0]
+        )
+        self.metadata["numrays"] = int(
+            dxchange.read_hdf5(
+                filename, "/measurement/instrument/detector/dimension_x"
+            )[0]
+        )
+        self.metadata["pxsize"] = (
+            dxchange.read_hdf5(filename, "/measurement/instrument/detector/pixel_size")[
+                0
+            ]
+            / 10.0
+        )  # /10 to convert units from mm to cm
+        self.metadata["num_angles"] = int(
+            dxchange.read_hdf5(filename, "/process/acquisition/rotation/num_angles")[0]
+        )
+        self.metadata["propagation_dist"] = dxchange.read_hdf5(
+            filename, "/measurement/instrument/camera_motor_stack/setup/camera_distance"
+        )[1]
+        self.metadata["kev"] = (
+            dxchange.read_hdf5(
+                filename, "/measurement/instrument/monochromator/energy"
+            )[0]
+            / 1000
+        )
+        self.metadata["angularrange"] = dxchange.read_hdf5(
+            filename, "/process/acquisition/rotation/range"
+        )[0]
 
         self.pxZ = self.metadata["num_angles"]
         self.pxY = self.metadata["numslices"]
@@ -164,27 +189,31 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
     def import_file_all(self, fullpath):
         self.import_metadata(fullpath)
 
-        self._data, self.flats, self.darks, self.angles_rad = \
-            dxchange.exchange.read_aps_tomoscan_hdf5(fullpath)
+        (
+            self._data,
+            self.flats,
+            self.darks,
+            self.angles_rad,
+        ) = dxchange.exchange.read_aps_tomoscan_hdf5(fullpath)
 
         self.data = self._data
-        self.angles_deg = (180/np.pi)*self.angles_rad
+        self.angles_deg = (180 / np.pi) * self.angles_rad
         self.imported = True
 
     def import_file_projections(self, fullpath):
-        tomo_grp = '/'.join([exchange_base, 'data'])
+        tomo_grp = "/".join([exchange_base, "data"])
         tomo = dxreader.read_hdf5(fname, tomo_grp, slc=(proj, sino), dtype=dtype)
 
     def import_file_flats(self, fullpath):
-        flat_grp = '/'.join([exchange_base, 'data_white'])
+        flat_grp = "/".join([exchange_base, "data_white"])
         flat = dxreader.read_hdf5(fname, flat_grp, slc=(None, sino), dtype=dtype)
 
     def import_file_darks(self, fullpath):
-        dark_grp = '/'.join([exchange_base, 'data_dark'])
+        dark_grp = "/".join([exchange_base, "data_dark"])
         dark = dxreader.read_hdf5(fname, dark_grp, slc=(None, sino), dtype=dtype)
 
     def import_file_angles(self, fullpath):
-        theta_grp = '/'.join([exchange_base, 'theta'])
+        theta_grp = "/".join([exchange_base, "theta"])
         theta = dxreader.read_hdf5(fname, theta_grp, slc=None)
 
     def set_options_from_frontend(self, Import, Uploader):
@@ -205,8 +234,16 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         data.append([self.pxX, self.pxY, self.pxZ])
 
         top_headers.append(["Experiment Settings"])
-        middle_headers.append(["Energy (keV)", "Propagation Distance (mm)", "Angular range (deg)"])
-        data.append([self.energy, self.metadata["propagation_dist"], self.metadata["angularrange"]])
+        middle_headers.append(
+            ["Energy (keV)", "Propagation Distance (mm)", "Angular range (deg)"]
+        )
+        data.append(
+            [
+                self.energy,
+                self.metadata["propagation_dist"],
+                self.metadata["angularrange"],
+            ]
+        )
 
         # create dataframe with the above settings
         df = pd.DataFrame(
@@ -294,9 +331,6 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         )
 
 
-
-
-
 class RawUploader_ALS832(UploaderBase):
     """"""
 
@@ -340,7 +374,7 @@ class RawUploader_ALS832(UploaderBase):
         with self.progress_output:
             display(self.upload_progress)
 
-        self.projections.import_file_all(os.path.join(self.filedir,self.filename))
+        self.projections.import_file_all(os.path.join(self.filedir, self.filename))
         with self.progress_output:
             display(Label("Normalizing", layout=Layout(justify_content="center")))
         self.projections.normalize()
@@ -362,7 +396,7 @@ class RawUploader_ALS832(UploaderBase):
                     layout=Layout(justify_content="center"),
                 )
             )
-        self.plotter.plot(self.projections.prj_imgs,self.filedir)
+        self.plotter.plot(self.projections.prj_imgs, self.filedir)
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
@@ -377,7 +411,7 @@ class RawUploader_ALS832(UploaderBase):
         # import). this can be changed later.
 
         try:
-            self.projections.import_metadata(os.path.join(self.filedir,self.filename))
+            self.projections.import_metadata(os.path.join(self.filedir, self.filename))
             self.metadata_table = self.projections.metadata_to_DataFrame()
 
             with self.metadata_table_output:
