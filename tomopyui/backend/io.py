@@ -149,6 +149,7 @@ class Projections_Prenormalized(ProjectionsBase):
             self._data = np.array(
                 dxchange.reader.read_tiff(fullpath).astype(np.float32)
             )
+            self._data = np.where(np.isfinite(self._data), self._data, 0)
             self._fullpath = fullpath
             self.fullpath = self._fullpath
             self.data = self._data
@@ -157,6 +158,7 @@ class Projections_Prenormalized(ProjectionsBase):
 
         elif ".npy" in str(fullpath):
             self._data = np.load(fullpath).astype(np.float32)
+            self._data = np.where(np.isfinite(self._data), self._data, 0)
             self._fullpath = fullpath
             self.fullpath = self._fullpath
             self.data = self._data
