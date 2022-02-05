@@ -417,14 +417,16 @@ class BqImPlotter(ImPlotterBase, ABC):
         pxX = self.imagestack.shape[2]
         pxY = self.imagestack.shape[1]
         self.aspect_ratio = pxX / pxY
-        if self.aspect_ratio > self.fig.max_aspect_ratio:
-            self.fig.max_aspect_ratio = self.aspect_ratio
-            self.fig.min_aspect_ratio = self.aspect_ratio
-        else:
-            self.fig.min_aspect_ratio = self.aspect_ratio
-            self.fig.max_aspect_ratio = self.aspect_ratio
-        # This is set to default dimensions of 550, not great:
-        self.fig.layout.height = str(int(550 / self.aspect_ratio)) + "px"
+        if self.aspect_ratio >= 1:
+            if self.aspect_ratio > self.fig.max_aspect_ratio:
+                self.fig.max_aspect_ratio = self.aspect_ratio
+                self.fig.min_aspect_ratio = self.aspect_ratio
+            else:
+                self.fig.min_aspect_ratio = self.aspect_ratio
+                self.fig.max_aspect_ratio = self.aspect_ratio
+            # This is set to default dimensions of 550, not great:
+
+            self.fig.layout.height = str(int(550 / self.aspect_ratio)) + "px"
 
     @abstractmethod
     def create_app(self):
@@ -661,7 +663,8 @@ class BqImPlotter_Analysis(BqImPlotter):
         self.plotted_image.image = self.imagestack[0]
         self.vmin = self.plotter_parent.vmin
         self.vmax = self.plotter_parent.vmax
-        self.update_color_range([self.vmin, self.vmax])
+        self.image_scale["image"].min = self.vmin
+        self.image_scale["image"].max = self.vmax
         self.hist.selector.selected = None
         self.image_index_slider.max = self.imagestack.shape[0] - 1
         self.image_index_slider.value = 0
