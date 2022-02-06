@@ -60,6 +60,7 @@ class TomoAlign:
         self.subset_y = Align.subset_range_y
         self.pad = (Align.paddingX, Align.paddingY)
         self.downsample = Align.downsample
+        self.pre_alignment_iters = Align.pre_alignment_iters
         if self.downsample:
             self.downsample_factor = Align.downsample_factor
         else:
