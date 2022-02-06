@@ -260,8 +260,8 @@ class UploaderBase(ABC):
     """"""
 
     def __init__(self):
-        self.filedir = None
-        self.filename = None
+        self.filedir = pathlib.Path()
+        self.filename = pathlib.Path()
         self.nm_per_px = None
         self.filechooser = FileChooser()
         self.quick_path_search = Textarea(
@@ -359,6 +359,7 @@ class PrenormUploader(UploaderBase):
         if not self._tmp_disable_reset:
             path = pathlib.Path(change.new)
             if path.is_dir():
+                print("hello")
                 self.filedir = path
                 self.filechooser.reset(path=self.filedir)
             elif any(x in file.name for x in self.projections.allowed_extensions):
