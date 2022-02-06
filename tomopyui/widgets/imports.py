@@ -18,14 +18,14 @@ class ImportBase(ABC):
 
         # Init raw/prenorm button swtiches
         self.use_raw_button = Button(
-            description="Click to use raw/normalized data from the first tab.",
+            description="Click to use raw/normalized data from the Import tab.",
             button_style="info",
             layout=Layout(width="auto", height="auto", align_items="stretch"),
             # style={"font_size": "18px"},
         )
         self.use_raw_button.on_click(self.enable_raw)
         self.use_prenorm_button = Button(
-            description="Click to use prenormalized data from the second tab.",
+            description="Click to use prenormalized data from the Import tab.",
             button_style="info",
             layout=Layout(width="auto", height="auto", align_items="stretch"),
             # style={"font_size": "18px"},
@@ -178,6 +178,7 @@ class Import_SSRL62(ImportBase):
                             ]
                         ),
                         self.raw_uploader.filechooser,
+                        self.raw_uploader.nm_per_px_textbox,
                     ],
                 ),
                 self.raw_uploader.plotter.app,
@@ -218,6 +219,7 @@ class Import_SSRL62(ImportBase):
                         ),
                         self.prenorm_uploader.filechooser,
                         HBox(self.angles_textboxes),
+                        self.prenorm_uploader.nm_per_px_textbox,
                     ],
                 ),
                 self.prenorm_uploader.plotter.app,
@@ -260,6 +262,7 @@ class UploaderBase(ABC):
     def __init__(self):
         self.filedir = None
         self.filename = None
+        self.nm_per_px = None
         self.filechooser = FileChooser()
         self.quick_path_search = Textarea(
             placeholder=r"Z:\swelborn",
@@ -276,6 +279,14 @@ class UploaderBase(ABC):
             disabled=True,
             tooltip="Load your data into memory",
         )
+        self.nm_per_px_textbox = FloatText(
+            description="nm/px (for binning 1):",
+            style=extend_description_style,
+        )
+        self.nm_per_px_textbox.observe(self.update_nm_per_px, "value")
+
+    def update_nm_per_px(self, *args):
+        self.nm_per_px = self.nm_per_px_textbox.value
 
     @abstractmethod
     def update_filechooser_from_quicksearch(self, change):
@@ -377,9 +388,20 @@ class PrenormUploader(UploaderBase):
         else:
             self.projections.import_file_projections(self.filedir / self.filename)
         self.projections.save_normalized_as_npy()
+        self.projections.nm_per_px = self.nm_per_px_textbox.value
         self.plotter.plot(self.projections.prj_imgs, self.filedir)
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
+        self.Import.use_raw_button.icon = ""
+        self.Import.use_raw_button.button_style = "info"
+        self.Import.use_raw_button.description = (
+            "Click to use raw/normalized data from the Import tab."
+        )
+        self.Import.use_prenorm_button.icon = ""
+        self.Import.use_prenorm_button.button_style = "info"
+        self.Import.use_prenorm_button.description = (
+            "Click to use prenormalized data from the Import tab."
+        )
 
     def check_for_data(self):
         file_list = self.projections._file_finder(
@@ -445,6 +467,7 @@ class RawUploader_SSRL62(UploaderBase):
                 )
             )
         self.projections.save_normalized_as_npy()
+        self.projections.nm_per_px = self.nm_per_px_textbox.value
         toc = time.perf_counter()
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
