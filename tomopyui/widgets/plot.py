@@ -330,7 +330,7 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.imagestack = rescale(
             self.imagestack,
             (1, self.downsample_factor, self.downsample_factor),
-            anti_aliasing=True,
+            anti_aliasing=False,
         )
         self.image_index_slider.value = 0
         self.plotted_image.image = self.imagestack[0]
