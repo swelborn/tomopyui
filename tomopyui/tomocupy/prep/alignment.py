@@ -31,6 +31,7 @@ def align_joint(TomoAlign):
     num_iter = TomoAlign.num_iter
     downsample = TomoAlign.downsample
     pad = TomoAlign.pad
+    pad_ds = TomoAlign.pad_ds
     method_str = list(TomoAlign.metadata["methods"].keys())[0]
     if method_str == "MLEM_CUDA":
         method_str = "EM_CUDA"
@@ -52,7 +53,10 @@ def align_joint(TomoAlign):
     TomoAlign.sx = np.zeros((tomo_shape[0]))
     TomoAlign.sy = np.zeros((tomo_shape[0]))
     TomoAlign.conv = np.zeros((num_iter))
-
+    subset_x = TomoAlign.subset_x
+    subset_y = TomoAlign.subset_y
+    subset_x = [x + pad_ds[0] for x in subset_x]
+    subset_y = [y + pad_ds[1] for y in subset_y]
     # Initialize projection images plot
     scale_x = bq.LinearScale(min=0, max=1)
     scale_y = bq.LinearScale(min=1, max=0)
@@ -259,8 +263,8 @@ def align_joint(TomoAlign):
             num_batches,
             upsample_factor,
             subset_correlation=TomoAlign.use_subset_correlation,
-            subset_x=TomoAlign.subset_x,
-            subset_y=TomoAlign.subset_y,
+            subset_x=subset_x,
+            subset_y=subset_y,
             blur=True,
             pad=TomoAlign.pad_ds,
             progress=TomoAlign.Align.progress_phase_cross_corr,
