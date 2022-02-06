@@ -38,6 +38,7 @@ class AnalysisBase(ABC):
         self.paddingY = 10
         self.partial = False
         self.use_subset_correlation = False
+        self.pre_alignment_iters = 1
         self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
         self.tomopy_methods_list.remove("gridrec")
         self.tomopy_methods_list.remove("fbp")
@@ -208,6 +209,14 @@ class AnalysisBase(ABC):
             style=extend_description_style,
             value=self.paddingY,
         )
+
+        # Pre-alignment iterations
+        self.pre_alignment_iters_textbox = IntText(
+            description="Pre-alignment iterations: ",
+            style=extend_description_style,
+            value=self.pre_alignment_iters,
+        )
+
         # Extra options
         self.extra_options_textbox = Text(
             description="Extra options: ",
@@ -269,6 +278,9 @@ class AnalysisBase(ABC):
 
         # Y Padding
         self.paddingY_textbox.observe(self.update_y_padding, names="value")
+
+        # Pre-alignment iterations
+        self.pre_alignment_iters_textbox.observe(self.update_pre_alignment_iters, names="value")
 
         # Extra options
         self.extra_options_textbox.observe(self.update_extra_options, names="value")
@@ -443,6 +455,10 @@ class AnalysisBase(ABC):
     def update_y_padding(self, change):
         self.paddingY = change.new
         self.set_metadata()
+
+    # Pre-alignment iterations
+    def update_pre_alignment_iters(self, *args):
+        self.pre_alignment_iters = self.pre_alignment_iters_textbox.value
 
     # Extra options
     def update_extra_options(self, change):
@@ -698,6 +714,7 @@ class Align(AnalysisBase):
                         self.downsample_factor_textbox,
                         self.extra_options_textbox,
                         self.use_subset_correlation_checkbox,
+                        self.pre_alignment_iters_textbox,
                     ],
                     layout=Layout(flex_flow="row wrap", justify_content="flex-start"),
                 ),

@@ -38,6 +38,7 @@ def align_joint(TomoAlign):
     upsample_factor = TomoAlign.upsample_factor
     num_batches = TomoAlign.num_batches
     center = TomoAlign.center
+    pre_alignment_iters = TomoAlign.pre_alignment_iters
     projection_num = 50  # default to 50 now, TODO: can make an option
 
     # Needs scaling for skimage float operations
@@ -55,8 +56,9 @@ def align_joint(TomoAlign):
     TomoAlign.conv = np.zeros((num_iter))
     subset_x = TomoAlign.subset_x
     subset_y = TomoAlign.subset_y
-    subset_x = [x + pad_ds[0] for x in subset_x]
-    subset_y = [y + pad_ds[1] for y in subset_y]
+    subset_x = [int(x) + pad_ds[0] for x in subset_x]
+    subset_y = [int(y) + pad_ds[1] for y in subset_y]
+    print(subset_x, subset_y)
     # Initialize projection images plot
     scale_x = bq.LinearScale(min=0, max=1)
     scale_y = bq.LinearScale(min=1, max=0)
@@ -171,6 +173,10 @@ def align_joint(TomoAlign):
 
     # Start alignment
     for n in range(num_iter):
+        if n == 0:
+            recon_iterations = pre_alignment_iters
+        else:
+            recon_iterations = 1
 
         # for progress bars
         TomoAlign.Align.progress_shifting.value = 0
@@ -182,7 +188,7 @@ def align_joint(TomoAlign):
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_plugin(
                 TomoAlign.prjs,
                 TomoAlign.angles_rad,
-                num_iter=1,
+                num_iter=recon_iterations,
                 rec=_rec,
                 center=center,
             )
@@ -190,7 +196,7 @@ def align_joint(TomoAlign):
             TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
                 TomoAlign.prjs,
                 TomoAlign.angles_rad,
-                num_iter=1,
+                num_iter=recon_iterations,
                 rec=_rec,
                 center=center,
             )
@@ -198,7 +204,7 @@ def align_joint(TomoAlign):
             TomoAlign.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
                 TomoAlign.prjs,
                 TomoAlign.angles_rad,
-                num_iter=1,
+                num_iter=recon_iterations,
                 rec=_rec,
                 center=center,
             )
@@ -208,7 +214,7 @@ def align_joint(TomoAlign):
             options = {
                 "proj_type": "cuda",
                 "method": method_str,
-                "num_iter": 1,
+                "num_iter": recon_iterations,
                 "extra_options": {"MinConstraint": 0},
             }
             kwargs["options"] = options
