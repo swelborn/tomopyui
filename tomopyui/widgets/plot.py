@@ -350,6 +350,7 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.hist.selector.selected = None
         self.image_index_slider.max = self.imagestack.shape[0] - 1
         self.image_index_slider.value = 0
+        self.rm_high_low_int(None)
 
     # Speed up playback of play button
     def speed_up(self, *args):
@@ -381,8 +382,9 @@ class BqImPlotter(ImPlotterBase, ABC):
         _ = ani.save(str(pathlib.Path(self.filedir / "movie.mp4")), writer=writer)
 
     # Image plot
-    def plot(self, imagestack, filedir):
+    def plot(self, imagestack, filedir, nm_per_px=None):
         self.filedir = filedir
+        self.nm_per_px = nm_per_px
         self.pxX = imagestack.shape[2]
         self.pxY = imagestack.shape[1]
         self.original_imagestack = imagestack
@@ -534,6 +536,10 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
         self.status_bar_yrange = Label()
         self.status_bar_xrange.value = ""
         self.status_bar_yrange.value = ""
+        self.status_bar_xdistance = Label()
+        self.status_bar_ydistance = Label()
+        self.status_bar_xdistance.value = ""
+        self.status_bar_ydistance.value = ""
 
     def create_app(self):
         left_sidebar_layout = Layout(
@@ -580,6 +586,13 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
                     ],
                     layout=footer_layout,
                 ),
+                HBox(
+                    [
+                        self.status_bar_xdistance,
+                        self.status_bar_ydistance,
+                    ],
+                    layout=footer_layout,
+                ),
             ],
             layout=footer_layout,
         )
@@ -590,6 +603,7 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
 
     def plot(self):
         self.original_imagestack = self.Analysis.Import.projections.data
+        self.nm_per_px = self.Analysis.Import.projections.nm_per_px
         self.pxX = self.original_imagestack.shape[2]
         self.pxY = self.original_imagestack.shape[1]
         self.pxZ = self.original_imagestack.shape[0]
@@ -624,6 +638,8 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
             self.rectangle_selector_on = False
             self.status_bar_xrange.value = ""
             self.status_bar_yrange.value = ""
+            self.status_bar_xdistance.value = ""
+            self.status_bar_ydistance.value = ""
             self.fig.interaction = self.msg_interaction
 
     # Rectangle selector to update projection range
@@ -636,11 +652,28 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
         ]
         self.pixel_range_y = np.around(self.pixel_range[:, 1] * (self.pxY - 1))
         self.pixel_range_y = [int(x) for x in self.pixel_range_y]
+        if self.nm_per_px is not None:
+            self.nm_x = int(
+                (self.pixel_range_x[1] - self.pixel_range_x[0]) * self.nm_per_px
+            )
+            self.nm_y = int(
+                (self.pixel_range_y[1] - self.pixel_range_y[0]) * self.nm_per_px
+            )
+            self.micron_x = round(self.nm_x / 1000, 2)
+            self.micron_y = round(self.nm_y / 1000, 2)
         self.update_pixel_range_status_bar()
 
     def update_pixel_range_status_bar(self):
-        self.status_bar_xrange.value = f"X Pixel Range: {self.pixel_range_x}"
+        self.status_bar_xrange.value = f"X Pixel Range: {self.pixel_range_x} | "
         self.status_bar_yrange.value = f"Y Pixel Range: {self.pixel_range_y}"
+        if self.nm_x < 1000:
+            self.status_bar_xdistance.value = f"X Distance (nm): {self.nm_x} | "
+        else:
+            self.status_bar_xdistance.value = f"X Distance (μm): {self.micron_x} | "
+        if self.nm_y < 1000:
+            self.status_bar_ydistance.value = f"Y Distance (nm): {self.nm_y}"
+        else:
+            self.status_bar_ydistance.value = f"Y Distance (μm): {self.micron_y}"
 
 
 class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
@@ -876,10 +909,10 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
 
     def update_pixel_range_status_bar(self):
         self.status_bar_xrange.value = (
-            f"Corr. subset X Pixel Range: {self.printed_range_x}"
+            f"Phase Correlation X Pixel Range: {self.printed_range_x} | "
         )
         self.status_bar_yrange.value = (
-            f"Corr. subset Y Pixel Range: {self.printed_range_y}"
+            f"Phase Correlation Y Pixel Range: {self.printed_range_y}"
         )
 
     def remove_data_outside(self, *args):
@@ -1056,3 +1089,64 @@ class BqImHist:
     #     else:
     #         self.hist = self.hists
     # self.fig.marks = [self.hist]
+
+
+class ScaleBar:
+    def __init__(self):
+        pass
+
+        # attempt to make scale bar. try again later 02/05/2022
+        # import bqplot as bq
+
+        # sc_x = LinearScale(min=0, max=1)
+        # sc_y = LinearScale(min=1, max=0)
+
+        # pxX = 1024
+        # nm_per_px = 30
+        # px_per_micron = 1000 / nm_per_px
+        # px_per_micron_half = px_per_micron / 2
+        # x_px_center = 0.85 * pxX
+        # num_microns = 5
+        # x_coord_1 = x_px_center - px_per_micron_half * num_microns
+        # x_coord_2 = x_px_center + px_per_micron_half * num_microns
+
+        # x_line_px = np.array(
+        #     [x_coord_1, x_coord_2, x_coord_2, x_coord_1], dtype=np.float32
+        # )
+        # x_line_px_scaled = x_line_px / pxX
+        # x_line = [[0.65, 0.7, 0.7, 0.65]]
+        # y_line = np.array([0.85, 0.85, 0.9, 0.9])
+
+        # patch = Lines(
+        #     x=x_line_px_scaled,
+        #     y=y_line,
+        #     fill_colors=["white"],
+        #     fill="inside",
+        #     stroke_width=0,
+        #     close_path=True,
+        #     scales={"x": sc_x, "y": sc_y},
+        # )
+
+        # label_text = [f"{num_microns} μm"]
+        # label_pos_x = (x_line_px_scaled[0] + x_line_px_scaled[1]) / 2 - 0.08
+        # label_pos_y = y_line[0] - 0.07
+        # test_label = bq.Label(
+        #     x=[label_pos_x],
+        #     y=[label_pos_y],
+        #     scales={"x": sc_x, "y": sc_y},
+        #     text=label_text,
+        #     default_size=30,
+        #     font_weight="bolder",
+        #     colors="white",
+        #     update_on_move=True,
+        # )
+
+        # dimensions = ("550px", "550px")
+
+        # fig = Figure(
+        #     marks=[altered_plotter.plotted_image, patch, test_label],
+        #     animation_duration=1000,
+        # )
+        # fig.layout.height = dimensions[1]
+        # fig.layout.width = dimensions[0]
+        # fig
