@@ -389,8 +389,14 @@ class PrenormUploader(UploaderBase):
         else:
             self.projections.import_file_projections(self.filedir / self.filename)
         self.projections.save_normalized_as_npy()
+        self.projections._check_downsampled_data()
         self.projections.nm_per_px = self.nm_per_px_textbox.value
-        self.plotter.plot(self.projections.prj_imgs, self.filedir)
+        self.plotter.plot(
+            self.projections.prj_imgs,
+            self.projections.filedir,
+            io=self.projections,
+            precomputed_hists=self.projections.hists,
+        )
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
         self.Import.use_raw_button.icon = ""
@@ -468,6 +474,7 @@ class RawUploader_SSRL62(UploaderBase):
                 )
             )
         self.projections.save_normalized_as_npy()
+        self.projections._check_downsampled_data()
         self.projections.nm_per_px = self.nm_per_px_textbox.value
         toc = time.perf_counter()
         self.import_button.button_style = "success"
@@ -479,7 +486,12 @@ class RawUploader_SSRL62(UploaderBase):
                     layout=Layout(justify_content="center"),
                 )
             )
-        self.plotter.plot(self.projections.prj_imgs)
+        self.plotter.plot(
+            self.projections.prj_imgs,
+            self.projections.filedir,
+            io=self.projections,
+            precomputed_hists=self.projections.hists,
+        )
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)

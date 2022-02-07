@@ -10,6 +10,9 @@ import re
 from tomopy.sim.project import angles as angle_maker
 import olefile
 import pandas as pd
+from skimage.transform import rescale
+import pathlib
+from joblib import Parallel, delayed
 
 
 class IOBase:
@@ -61,6 +64,57 @@ class IOBase:
 
     def _write_data_npy(self, filedir: pathlib.Path, name: str):
         np.save(filedir / name, self.data)
+
+    def _check_downsampled_data(self):
+        try:
+            self.filedir_ds = pathlib.Path(self.filedir / "downsampled").mkdir(
+                parents=True
+            )
+            print(self.filedir_ds)
+            self.filedir_ds = pathlib.Path(self.filedir / "downsampled")
+            print(self.filedir_ds)
+        except FileExistsError:
+            self.filedir_ds = pathlib.Path(self.filedir / "downsampled")
+            try:
+                self._load_ds_and_hists()
+            except Exception:
+                self._write_downsampled_data()
+        else:
+            self._write_downsampled_data()
+
+    def _write_downsampled_data(self):
+        ds_vals = [(1, 0.1, 0.1), (1, 0.25, 0.25), (1, 0.5, 0.5), (1, 0.75, 0.75)]
+        ds_vals_strs = [str(x[2]).replace(".", "p") for x in ds_vals]
+        ds_data = Parallel(n_jobs=4)(delayed(rescale)(self.data, x) for x in ds_vals)
+        ds_data.append(self.data)
+        hists = Parallel(n_jobs=5)(delayed(np.histogram)(x, bins=100) for x in ds_data)
+        hist_intensities = [hist[0] for hist in hists]
+        bin_edges = [hist[1] for hist in hists]
+        xvals = [[(b[i] + b[i + 1]) / 2 for i in range(len(b) - 1)] for b in bin_edges]
+        for data, string in zip(ds_data, ds_vals_strs):
+            np.save(self.filedir_ds / str("ds" + string), data)
+        for hist_int, string, bin_edge, bin_center in zip(
+            hist_intensities, ds_vals_strs, bin_edges, xvals
+        ):
+            np.savez(
+                self.filedir_ds / str("ds" + string + "hist"),
+                frequency=hist_int,
+                edges=bin_edge,
+                bin_centers=bin_center,
+            )
+        self._load_ds_and_hists()
+
+    def _load_ds_and_hists(self):
+        ds_vals = [(1, 0.1, 0.1), (1, 0.25, 0.25), (1, 0.5, 0.5), (1, 0.75, 0.75)]
+        ds_vals_strs = [str(x[2]).replace(".", "p") for x in ds_vals]
+        self.hists = [
+            np.load(self.filedir_ds / str("ds" + string + "hist.npz"))
+            for string in ds_vals_strs
+        ]
+        self.data_ds = [
+            np.load(self.filedir_ds / str("ds" + string + ".npy"), mmap_mode="r")
+            for string in ds_vals_strs
+        ]
 
     def _write_data_tiff(self, filedir: pathlib.Path, name: str):
         tf.imwrite(filedir / name, self.data)
