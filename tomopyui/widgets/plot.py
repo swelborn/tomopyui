@@ -32,6 +32,7 @@ class ImPlotterBase(ABC):
         self.aspect_ratio = self.pxX / self.pxY
         self.fig = None
         self.downsample_factor = 0.2
+        self.precomputed_hists = None
 
     @abstractmethod
     def _init_fig(self):
@@ -324,6 +325,7 @@ class BqImPlotter(ImPlotterBase, ABC):
     def downsample_viewer(self, *args):
         self.downsample_factor = self.downsample_viewer_textbox.value
         self.downsample_imagestack(self.original_imagestack)
+        self.change_downsample_button()
 
     def downsample_imagestack(self, imagestack):
         self.imagestack = copy.deepcopy(imagestack)
@@ -334,7 +336,6 @@ class BqImPlotter(ImPlotterBase, ABC):
         )
         self.image_index_slider.value = 0
         self.plotted_image.image = self.imagestack[0]
-        self.change_downsample_button()
 
     # Reset
     def reset(self, *args):
@@ -364,6 +365,8 @@ class BqImPlotter(ImPlotterBase, ABC):
 
     # Save movie
     def save_movie(self, *args):
+        self.save_movie_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.save_movie_button.button_style = "info"
         fig, ax = plt.subplots(figsize=(10, 5))
         _ = ax.set_axis_off()
         _ = fig.patch.set_facecolor("black")
@@ -380,15 +383,25 @@ class BqImPlotter(ImPlotterBase, ABC):
             fps=20, codec=None, bitrate=1000, extra_args=None, metadata=None
         )
         _ = ani.save(str(pathlib.Path(self.filedir / "movie.mp4")), writer=writer)
+        self.save_movie_button.icon = "file-video"
+        self.save_movie_button.button_style = "success"
 
     # Image plot
-    def plot(self, imagestack, filedir, nm_per_px=None):
+    def plot(
+        self, imagestack, filedir, io=None, precomputed_hists=None, nm_per_px=None
+    ):
+        self.precomputed_hists = precomputed_hists
+        self.io = io
         self.filedir = filedir
         self.nm_per_px = nm_per_px
         self.pxX = imagestack.shape[2]
         self.pxY = imagestack.shape[1]
         self.original_imagestack = imagestack
-        self.downsample_imagestack(imagestack)
+        if self.io is not None:
+            self.imagestack = np.array(self.io.data_ds[2])
+            self.downsample_factor = 0.5
+        else:
+            self.downsample_imagestack(imagestack)
         self.change_downsample_button()
         self.current_image_ind = 0
         self.change_aspect_ratio()
@@ -603,11 +616,13 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
 
     def plot(self):
         self.original_imagestack = self.Analysis.Import.projections.data
-        self.nm_per_px = self.Analysis.Import.projections.nm_per_px
         self.pxX = self.original_imagestack.shape[2]
         self.pxY = self.original_imagestack.shape[1]
         self.pxZ = self.original_imagestack.shape[0]
-        self.downsample_imagestack(self.original_imagestack)
+        self.imagestack = np.array(self.Analysis.Import.projections.data_ds[1])
+        self.nm_per_px = self.Analysis.Import.projections.nm_per_px
+        self.precomputed_hists = self.Analysis.Import.projections.hists
+        # self.downsample_imagestack(self.original_imagestack)
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.plotted_image.image = self.imagestack[0]
@@ -785,12 +800,12 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
         self.pxX = self.original_imagestack.shape[2]
         self.pxY = self.original_imagestack.shape[1]
         self.pxZ = self.original_imagestack.shape[0]
+        self.imagestack = copy.copy(self.plotter_parent.imagestack)
         self.pixel_range_x = [0, self.pxX - 1]
         self.pixel_range_y = [0, self.pxY - 1]
         self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
         self.subset_pixel_range_x = self.pixel_range_x
         self.subset_pixel_range_y = self.pixel_range_y
-        self.downsample_imagestack(self.original_imagestack)
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.plotted_image.image = self.imagestack[0]
@@ -798,7 +813,6 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
         self.vmax = self.plotter_parent.vmax
         self.image_scale["image"].min = self.vmin
         self.image_scale["image"].max = self.vmax
-        self.hist.selector.selected = None
         self.image_index_slider.max = self.imagestack.shape[0] - 1
         self.image_index_slider.value = 0
 
@@ -808,7 +822,7 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
         # self.hist.hists_swapaxes = copy.copy(self.plotter_parent.hist.hists_swapaxes)
         self.hist.selector = bq.interacts.BrushIntervalSelector(
             orientation="vertical",
-            scale=bq.LinearScale(min=float(self.vmin), max=float(self.vmax)),
+            scale=self.plotter_parent.hist.x_sc,
         )
         self.hist.selector.observe(self.hist.update_crange_selector, "selected")
         self.hist.fig.interaction = self.hist.selector
@@ -1002,6 +1016,8 @@ class BqImPlotter_DataExplorer(BqImPlotter):
 
     # Save movie that will compare before/after
     def save_movie(self, *args):
+        self.save_movie_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.save_movie_button.button_style = "info"
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
         _ = ax1.set_axis_off()
         _ = ax2.set_axis_off()
@@ -1029,6 +1045,8 @@ class BqImPlotter_DataExplorer(BqImPlotter):
             fps=20, codec=None, bitrate=1000, extra_args=None, metadata=None
         )
         _ = ani.save(str(pathlib.Path(self.filedir / "movie.mp4")), writer=writer)
+        self.save_movie_button.icon = "file-video"
+        self.save_movie_button.button_style = "success"
 
 
 class BqImHist:
@@ -1038,6 +1056,7 @@ class BqImHist:
             padding=0,
             fig_margin=dict(top=0, bottom=0, left=0, right=0),
         )
+
         self.preflatten_imagestack(self.implotter.imagestack)
         self.fig.layout.width = "100px"
         self.fig.layout.height = implotter.fig.layout.height
@@ -1049,26 +1068,47 @@ class BqImHist:
         self.y_sc = bq.LinearScale()
         self.fig.scale_x = self.x_sc
         self.fig.scale_y = bq.LinearScale()
-        self.hists = [
-            bq.Bins(
-                sample=self.implotter.imagestack.ravel(),
-                scales={
-                    "x": self.x_sc,
-                    "y": self.y_sc,
-                },
-                colors=["dodgerblue"],
-                opacities=[0.75],
-                orientation="horizontal",
-                bins="sqrt",
-                density=True,
-            )
-        ]
-        self.xvals = [x.x for x in self.hists]
-        self.yvals = [x.y for x in self.hists]
-        for i in range(len(self.hists)):
-            ind = self.xvals[i] < self.implotter.vmin
-            self.yvals[i][ind] = 0
-            self.hists[i].scales["y"].max = np.max(self.yvals[i])
+
+        if self.implotter.precomputed_hists is not None:
+            self.bin_centers = self.implotter.precomputed_hists[3]["bin_centers"]
+            self.frequency = self.implotter.precomputed_hists[3]["frequency"]
+            self.hists = [
+                bq.Bars(
+                    x=self.bin_centers,
+                    y=self.frequency,
+                    scales={
+                        "x": self.x_sc,
+                        "y": self.y_sc,
+                    },
+                    colors=["dodgerblue"],
+                    opacities=[0.75],
+                    orientation="horizontal",
+                )
+            ]
+            ind = self.bin_centers < self.implotter.vmin
+            self.frequency[ind] = 0
+            self.hists[0].scales["y"].max = float(np.max(self.frequency))
+        else:
+            self.hists = [
+                bq.Bins(
+                    sample=self.implotter.imagestack.ravel(),
+                    scales={
+                        "x": self.x_sc,
+                        "y": self.y_sc,
+                    },
+                    colors=["dodgerblue"],
+                    opacities=[0.75],
+                    orientation="horizontal",
+                    bins=100,
+                    density=True,
+                )
+            ]
+            self.bin_centers = [x.x for x in self.hists]
+            self.frequency = [x.y for x in self.hists]
+            for i in range(len(self.hists)):
+                ind = self.bin_centers[i] < self.implotter.vmin
+                self.frequency[i][ind] = 0
+                self.hists[i].scales["y"].max = np.max(self.frequency[i])
         self.selector = bq.interacts.BrushIntervalSelector(
             orientation="vertical", scale=self.x_sc
         )

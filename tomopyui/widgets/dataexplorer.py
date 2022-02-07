@@ -2,6 +2,7 @@
 from ipywidgets import *
 from abc import ABC, abstractmethod
 from tomopyui.widgets.plot import BqImPlotter_Import, BqImPlotter_DataExplorer
+from tomopyui.backend.io import Projections_Prenormalized
 from tomopyui.backend.io import load_metadata, metadata_to_DataFrame
 from tomopyui.widgets.analysis import Align, Recon
 from ipyfilechooser import FileChooser
@@ -52,6 +53,8 @@ class DataExplorerBase(ABC):
         self.plotter_initial.create_app()
         self.plotter_analyzed = BqImPlotter_DataExplorer(self.plotter_initial)
         self.plotter_analyzed.create_app()
+        self.projections = Projections_Prenormalized()
+        self.analyzed_projections = Projections_Prenormalized()
 
     @abstractmethod
     def create_app(self):
@@ -67,9 +70,16 @@ class AnalysisExplorer(DataExplorerBase):
 
     def load_data_from_filebrowser(self, change):
         metadata = {}
+        self.projections.filedir = self.filebrowser.root_filedir
+        self.projections.data = np.load(
+            self.projections.filedir / "normalized_projections.npy"
+        )
+        self.projections._check_downsampled_data()
         self.plotter_initial.plot(
-            np.load(self.filebrowser.root_filedir / "normalized_projections.npy"),
-            self.filebrowser.root_filedir,
+            self.projections.prj_imgs,
+            self.projections.filedir,
+            io=self.projections,
+            precomputed_hists=self.projections.hists,
         )
         self.plotter_analyzed.plot(
             np.load(self.filebrowser.selected_data_fullpath),
