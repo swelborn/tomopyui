@@ -58,7 +58,6 @@ def align_joint(TomoAlign):
     subset_y = TomoAlign.subset_y
     subset_x = [int(x) + pad_ds[0] for x in subset_x]
     subset_y = [int(y) + pad_ds[1] for y in subset_y]
-    print(subset_x, subset_y)
     # Initialize projection images plot
     scale_x = bq.LinearScale(min=0, max=1)
     scale_y = bq.LinearScale(min=1, max=0)

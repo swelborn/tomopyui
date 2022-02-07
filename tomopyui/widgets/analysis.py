@@ -341,7 +341,9 @@ class AnalysisBase(ABC):
         self.use_imported_button.button_style = "info"
         self.use_imported_button.description = "Creating analysis projections"
         self.use_imported_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections = copy.deepcopy(self.Import.projections)
+        self.projections.data = copy.deepcopy(self.Import.projections.data)
+        self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
+        self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
         self.pixel_range_x = self.projections.pixel_range_x
         self.pixel_range_y = self.projections.pixel_range_y
         self.use_imported_button.button_style = "success"
@@ -357,9 +359,10 @@ class AnalysisBase(ABC):
         self.use_altered_button.button_style = "info"
         self.use_altered_button.description = "Creating analysis projections"
         self.use_altered_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections = copy.deepcopy(self.Import.projections)
-        self.projections._data = self.altered_plotter.original_imagestack
+        self.projections._data = copy.deepcopy(self.Import.projections.data)
         self.projections.data = self.projections._data
+        self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
+        self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
         self.pixel_range_x = self.altered_plotter.pixel_range_x
         self.pixel_range_y = self.altered_plotter.pixel_range_y
         self.use_altered_button.button_style = "success"

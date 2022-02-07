@@ -398,8 +398,9 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.pxY = imagestack.shape[1]
         self.original_imagestack = imagestack
         if self.io is not None:
-            self.imagestack = np.array(self.io.data_ds[2])
-            self.downsample_factor = 0.5
+            self.imagestack = np.array(self.io.data_ds[1])
+            self.downsample_factor = 0.25
+            self.downsample_viewer_textbox.value = self.downsample_factor
         else:
             self.downsample_imagestack(imagestack)
         self.change_downsample_button()
@@ -620,6 +621,8 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
         self.pxY = self.original_imagestack.shape[1]
         self.pxZ = self.original_imagestack.shape[0]
         self.imagestack = np.array(self.Analysis.Import.projections.data_ds[1])
+        self.downsample_factor = 0.25
+        self.downsample_viewer_textbox.value = self.downsample_factor
         self.nm_per_px = self.Analysis.Import.projections.nm_per_px
         self.precomputed_hists = self.Analysis.Import.projections.hists
         # self.downsample_imagestack(self.original_imagestack)

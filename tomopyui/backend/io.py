@@ -70,9 +70,7 @@ class IOBase:
             self.filedir_ds = pathlib.Path(self.filedir / "downsampled").mkdir(
                 parents=True
             )
-            print(self.filedir_ds)
             self.filedir_ds = pathlib.Path(self.filedir / "downsampled")
-            print(self.filedir_ds)
         except FileExistsError:
             self.filedir_ds = pathlib.Path(self.filedir / "downsampled")
             try:

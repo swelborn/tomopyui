@@ -186,10 +186,10 @@ class TomoAlign:
         save_metadata("metadata.json", self.metadata)
         if self.metadata["save_opts"]["tomo_after"]:
             if self.metadata["save_opts"]["npy"]:
-                np.save("projections_after_alignment", self.projections_aligned.data)
+                np.save("projections_after_alignment", self.projections_aligned)
             if self.metadata["save_opts"]["tiff"]:
                 tf.imwrite(
-                    "projections_after_alignment.tif", self.projections_aligned.data
+                    "projections_after_alignment.tif", self.projections_aligned
                 )
 
             # defaults to at least saving tiff if none are checked
@@ -198,7 +198,7 @@ class TomoAlign:
                 and not self.metadata["save_opts"]["npy"]
             ):
                 tf.imwrite(
-                    "projections_after_alignment.tif", self.projections_aligned.data
+                    "projections_after_alignment.tif", self.projections_aligned
                 )
         if self.metadata["save_opts"]["recon"] and self.current_align_is_cuda:
             if self.metadata["save_opts"]["npy"]:
@@ -230,9 +230,7 @@ class TomoAlign:
         else:
             # TODO: make shift projections without cupy
             pass
-        new_prj_imgs = trim_padding(new_prj_imgs)
-        self.projections_aligned = deepcopy(self.projections)
-        self.projections_aligned.data = new_prj_imgs
+        self.projections_aligned = trim_padding(new_prj_imgs)
 
     def run(self):
         """
