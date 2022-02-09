@@ -179,6 +179,7 @@ class Import_SSRL62(ImportBase):
                         ),
                         self.raw_uploader.filechooser,
                         self.raw_uploader.nm_per_px_textbox,
+                        self.raw_uploader.energy_select_multiple,
                     ],
                 ),
                 self.raw_uploader.plotter.app,
@@ -426,6 +427,12 @@ class RawUploader_SSRL62(UploaderBase):
     def __init__(self, Import):
         super().__init__()
         self._init_widgets()
+        self.energy_select_multiple = SelectMultiple(
+            options=["7700.00", "7800.00", "7900.00"],
+            rows=3,
+            description="Energies (eV): ",
+            disabled=True,
+        )
         self.projections = Import.raw_projections
         self.Import = Import
         self.import_button.on_click(self.import_data)
@@ -461,7 +468,7 @@ class RawUploader_SSRL62(UploaderBase):
         with self.progress_output:
             display(self.upload_progress)
 
-        self.projections.import_filedir_all(self.filedir)
+        self.projections.import_filedir_all(self.filedir, self)
         with self.progress_output:
             display(Label("Normalizing", layout=Layout(justify_content="center")))
         self.projections.normalize_nf()
@@ -526,7 +533,6 @@ class RawUploader_SSRL62(UploaderBase):
                 return
         try:
             assert scan_info_filepath != []
-
         except Exception:
             with self.metadata_table_output:
                 self.metadata_table_output.clear_output(wait=True)
@@ -536,7 +542,7 @@ class RawUploader_SSRL62(UploaderBase):
             return
 
         else:
-            self.projections.import_metadata(path)
+            self.projections.import_metadata(path, self)
             self.metadata_table = self.projections.metadata_to_DataFrame()
             with self.metadata_table_output:
                 self.metadata_table_output.clear_output(wait=True)
@@ -551,7 +557,7 @@ class RawUploader_SSRL62(UploaderBase):
         self.quick_path_search.value = str(self.filedir)
         # metadata must be set here in case tomodata is created (for filedir
         # import). this can be changed later.
-        self.projections.import_metadata(self.filedir)
+        self.projections.import_metadata(self.filedir, self)
         self.metadata_table = self.projections.metadata_to_DataFrame()
 
         with self.metadata_table_output:
