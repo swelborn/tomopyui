@@ -345,16 +345,26 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.allowed_extensions = self.allowed_extensions + [".xrm"]
         self.angles_from_filenames = True
 
-    def import_metadata(self, filedir):
+    def import_metadata(self, filedir, Import):
         filetypes = [".txt"]
         textfiles = self._file_finder(filedir, filetypes)
-        scan_info_filedir = (
-            filedir / [file for file in textfiles if "ScanInfo" in file][0]
-        )
-        run_script_filedir = (
-            filedir / [file for file in textfiles if "ScanInfo" not in file][0]
-        )
-        self.parse_scan_info(scan_info_filedir)
+        self.scan_info_path = [
+            filedir / file for file in textfiles if "ScanInfo" in file
+        ][0]
+        self.parse_scan_info()
+        self.determine_scan_type()
+        self.run_script_path = [
+            filedir / file for file in textfiles if "ScanInfo" not in file
+        ]
+        if len(self.run_script_path) == 1:
+            self.run_script_path = self.run_script_path[0]
+        elif len(self.run_script_path) > 1:
+            for file in self.run_script_path:
+                with open(file, "r") as f:
+                    line = f.readline()
+                    if line.startswith(";;"):
+                        self.run_script_path = file
+        self.get_and_set_energies(Import)
         (
             self.flats_filenames,
             self.flats_ind,
@@ -366,26 +376,20 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
             self.get_angles_from_filenames()
         else:
             self.get_angles_from_metadata()
-        self.pxZ = len(self.data_filenames)
+        self.pxZ = len(self.angles_rad)
         self.pxY = self.metadata["PROJECTIONS"][0]["image_height"]
         self.pxX = self.metadata["PROJECTIONS"][0]["image_width"]
         self.filedir = filedir
 
-    def import_filedir_all(self, filedir):
-        filetypes = [".txt"]
-        textfiles = self._file_finder(self.filedir, filetypes)
-        scan_info_filedir = (
-            filedir / [file for file in textfiles if "ScanInfo" in file][0]
-        )
-        run_script_filedir = (
-            filedir / [file for file in textfiles if "ScanInfo" not in file][0]
-        )
-        self.parse_scan_info(scan_info_filedir)
-        (
-            self.flats_filenames,
-            self.flats_ind,
-            self.data_filenames,
-        ) = self.separate_flats_projs()
+    def import_filedir_all(self, filedir, Import):
+        self.selected_energies = Import.energy_select_multiple.value
+        if len(self.selected_energies) == 0:
+            self.selected_energies = (Import.energy_select_multiple.options[0],)
+            Import.energy_select_multiple.value = (
+                Import.energy_select_multiple.options[0],
+            )
+        if self.scan_type == "TOMO":
+            pass
         self.flats, self.metadata["FLATS"] = self.load_xrms(self.flats_filenames)
         self._data, self.metadata["PROJECTIONS"] = self.load_xrms(self.data_filenames)
         self.data = self._data
@@ -398,32 +402,12 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.imported = True
 
     def import_filedir_projections(self, filedir):
-        filetypes = [".txt"]
-        textfiles = self._file_finder(filedir, filetypes)
-        scan_info_filedir = (
-            filedir / [file for file in textfiles if "ScanInfo" in file][0]
-        )
-        run_script_filedir = (
-            filedir / [file for file in textfiles if "ScanInfo" not in file][0]
-        )
-        self.parse_scan_info(scan_info_filedir)
-        _, _, self.data_filenames = self.separate_flats_projs()
         self._data, self.metadata["PROJECTIONS"] = self.load_xrms(self.data_filenames)
         self.data = self._data
         self.filedir = filedir
         self.imported = True
 
     def import_filedir_flats(self, filedir):
-        filetypes = [".txt"]
-        textfiles = self._file_finder(filedir, filetypes)
-        scan_info_filedir = (
-            filedir / [file for file in textfiles if "ScanInfo" in file][0]
-        )
-        run_script_filedir = (
-            filedir / [file for file in textfiles if "ScanInfo" not in file][0]
-        )
-        self.parse_scan_info(scan_info_filedir)
-        self.flats_filenames, self.flats_ind, _ = self.separate_flats_projs()
         self.flats, self.metadata["FLATS"] = self.load_xrms(self.flats_filenames)
         self.filedir = filedir
 
@@ -448,10 +432,10 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.angles_from_filenames = Import.angles_from_filenames
         self.upload_progress = Uploader.upload_progress
 
-    def parse_scan_info(self, scan_info):
+    def parse_scan_info(self):
         data_file_list = []
         self.metadata = []
-        with open(scan_info, "r") as f:
+        with open(self.scan_info_path, "r") as f:
             filecond = True
             for line in f.readlines():
                 if "FILES" not in line and filecond:
@@ -459,7 +443,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                     filecond = True
                 else:
                     filecond = False
-                    _ = scan_info.parent / line.strip()
+                    _ = self.scan_info_path.parent / line.strip()
                     data_file_list.append(_)
         metadata_tp = map(self.string_num_totuple, self.metadata)
         self.metadata = {scanvar[0]: scanvar[1] for scanvar in metadata_tp}
@@ -467,11 +451,37 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.metadata = {key: int(self.metadata[key]) for key in self.metadata}
         self.metadata["FILES"] = data_file_list[1:]
 
-    # def parse_run_script(self, txt_file):
-    #     energies = [[]]
-    #     flats = [[]]
-    #     collects = [[]]
-    #     with open(txt_file, "r") as f:
+    def determine_scan_type(self):
+        self.scan_order = [
+            (k, self.metadata[k])
+            for k in ("TOMO", "ENERGY", "MOSAIC", "MULTIEXPOSURE")
+            if self.metadata[k] != 0
+        ]
+        self.scan_order = sorted(self.scan_order, key=lambda x: x[1])
+        self.scan_type = [string for string, val in self.scan_order]
+        self.scan_type = "_".join(self.scan_type)
+
+    def get_and_set_energies(self, Import):
+        energies = []
+        with open(self.run_script_path, "r") as f:
+            for line in f.readlines():
+                if line.startswith("sete "):
+                    energies.append(float(line[5:]))
+        self.energies_list = sorted(list(set(energies)))
+        self.energies_list = [f"{energy:.2f}" for energy in self.energies_list]
+        Import.energy_select_multiple.options = self.energies_list
+        Import.energy_select_multiple.value = [self.energies_list[0]]
+        if len(self.energies_list) > 10:
+            Import.energy_select_multiple.rows = 10
+        else:
+            Import.energy_select_multiple.rows = len(self.energies_list)
+        if len(self.energies_list) == 1:
+            Import.energy_select_multiple.disabled = True
+        else:
+            Import.energy_select_multiple.disabled = False
+
+    # def import_from_metadata(self):
+    #     for file in self.metadata["FILES"]:
     #         for line in f.readlines():
     #             if line.startswith("sete "):
     #                 energies.append(float(line[5:]))
@@ -480,9 +490,12 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
     #             elif line.startswith("collect "):
     #                 filename = line[8:].strip()
     #                 if "ref_" in filename:
-    #                     flats[-1].append(Path(txt_file).parent / filename)
+    #                     flats[-1].append(self.run_script_path.parent / filename)
     #                 else:
-    #                     collects[-1].append(Path(txt_file).parent / filename)
+    #                     collects[-1].append(self.run_script_path.parent / filename)
+    #     energies.pop(0)
+    #     flats.pop(0)
+    #     collects.pop(0)
     #     return energies, flats, collects
 
     def separate_flats_projs(self):
@@ -502,7 +515,6 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         ref_ind_positions = [i for i, val in enumerate(ref_ind) if val][
             :: self.metadata["REFNEXPOSURES"]
         ]
-        num_ref_groups = len(ref_ind_positions)
         ref_ind = [
             j for j in ref_ind_positions for i in range(self.metadata["REFNEXPOSURES"])
         ]
@@ -514,12 +526,27 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
             reg_exp.findall, [str(file) for file in self.data_filenames]
         )
         self.angles_deg = [float(angle[0][1:]) for angle in self.angles_deg]
+        seen = set()
+        result = []
+        for item in self.angles_deg:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+        self.angles_deg = result
         self.angles_rad = [x * np.pi / 180 for x in self.angles_deg]
+        self.pxZ = len(self.angles_rad)
 
     def get_angles_from_metadata(self):
         self.angles_rad = [
             filemetadata["thetas"][0] for filemetadata in self.metadata["PROJECTIONS"]
         ]
+        seen = set()
+        result = []
+        for item in self.angles_rad:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+        self.angles_rad = result
         self.angles_deg = [x * 180 / np.pi for x in self.angles_rad]
 
     # Not using this, takes a long time to load metadata in
@@ -556,6 +583,84 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         data_stack = np.flip(data_stack, axis=1)
         return data_stack, metadatas
 
+    def import_from_run_script(self):
+        all_collections = [[]]
+        energies = [[]]
+        with open(self.run_script_path, "r") as f:
+            for line in f.readlines():
+                if line.startswith("sete "):
+                    energies.append(f"{float(line[5:]):.2f}")
+                    all_collections.append([])
+                elif line.startswith("collect "):
+                    filename = line[8:].strip()
+                    all_collections[-1].append(self.run_script_path.parent / filename)
+        all_collections.pop(0)
+        energies.pop(0)
+        self.selected_energies = ("7700.00",)
+        for energy, collect in zip(energies, all_collections):
+            if energy not in self.selected_energies:
+                continue
+            else:
+                # getting all flats/projections
+                ref_ind = [True if "ref_" in file.name else False for file in collect]
+                proj_ind = [
+                    True if "ref_" not in file.name else False for file in collect
+                ]
+                # intitializing switch statements
+                files_grouped = [[]]
+                file_type = [[]]
+                i = 0
+                adding_refs = True
+                adding_projs = False
+                for num, collection in enumerate(collect):
+                    if ref_ind[num] and adding_refs:
+                        files_grouped[-1].append(collection)
+                        file_type[-1].append("reference")
+                    elif proj_ind[num] and ref_ind[num - 1]:
+                        adding_refs = False
+                        adding_projs = True
+                        i = 0
+                        files_grouped.append([])
+                        files_grouped[-1].append(collection)
+                        file_type.append([])
+                        file_type[-1].append("projection")
+                    elif proj_ind[num - 1] and ref_ind[num]:
+                        adding_refs = True
+                        adding_projs = False
+                        i = 0
+                        files_grouped.append([])
+                        files_grouped[-1].append(collection)
+                        file_type.append([])
+                        file_type[-1].append("reference")
+                    elif adding_projs and i < self.metadata["NEXPOSURES"] - 1:
+                        i += 1
+                        files_grouped[-1].append(collection)
+                    else:
+                        i = 0
+                        files_grouped.append([])
+                        file_type.append([])
+                        file_type[-1].append("projection")
+
+                data_list = []
+                data_type = []
+                for file_type_, group in zip(file_type, files_grouped):
+                    data, metadata = self.load_xrms(group)
+                    data = np.mean(data, axis=0)
+                    data_list.append(data)
+                    data_type.append(file_type_)
+
+            # files_grouped.pop(0)
+
+        return data_type, data_list
+        # flats = [
+        #     file.parent / file.name for file in collect if "ref_" in file.name
+        # ]
+        # projs = [
+        #     file.parent / file.name
+        #     for file in collect
+        #     if "ref_" not in file.name
+        # ]
+
     def metadata_to_DataFrame(self):
 
         # change metadata keys to be better looking
@@ -589,7 +694,6 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
             m["Order"] = "ABBA"
 
         # create headers and data for table
-        top_headers = []
         middle_headers = []
         middle_headers.append(["Energy", "Tomo", "Mosaic", "MultiExposure"])
         middle_headers.append(
@@ -604,6 +708,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
             ["Num. Ref Exposures", "Ref/Num Exposures", "Order", "Ref Despeckle Avg"]
         )
         middle_headers.append(["Up", "Down", "Left", "Right"])
+        top_headers = []
         top_headers.append(["Layers"])
         top_headers.append(["Image Information"])
         top_headers.append(["Acquisition Information"])
@@ -613,7 +718,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
             [m[key] for key in middle_headers[i]] for i in range(len(middle_headers))
         ]
         middle_headers.insert(1, ["X Pixels", "Y Pixels", "Num. θ"])
-        data.insert(1, [self.pxX, self.pxY, self.pxZ])
+        data.insert(1, [self.pxX, self.pxY, len(self.angles_rad)])
 
         # create dataframe with the above settings
         df = pd.DataFrame(

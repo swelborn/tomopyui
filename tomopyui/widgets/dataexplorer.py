@@ -69,6 +69,8 @@ class AnalysisExplorer(DataExplorerBase):
         self.filebrowser.load_data_button.on_click(self.load_data_from_filebrowser)
 
     def load_data_from_filebrowser(self, change):
+        self.filebrowser.load_data_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.filebrowser.load_data_button.button_style = "info"
         metadata = {}
         self.projections.filedir = self.filebrowser.root_filedir
         self.projections.data = np.load(
@@ -85,6 +87,8 @@ class AnalysisExplorer(DataExplorerBase):
             np.load(self.filebrowser.selected_data_fullpath),
             self.filebrowser.selected_data_fullpath.parent,
         )
+        self.filebrowser.load_data_button.icon = "fa-check-square"
+        self.filebrowser.load_data_button.button_style = "success"
 
     def create_app(self):
         plots = HBox(
