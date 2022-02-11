@@ -10,6 +10,7 @@ dependencies:
   - python=3.9
   - matplotlib
   - ffmpeg
+  - dask
   - git
   - pip
   - tomopy
