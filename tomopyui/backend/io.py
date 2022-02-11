@@ -13,6 +13,12 @@ import pandas as pd
 from skimage.transform import rescale
 import pathlib
 from joblib import Parallel, delayed
+from ipywidgets import *
+import tempfile
+import dask.array as da
+import dask
+import os
+import shutil
 
 
 class IOBase:
@@ -65,14 +71,18 @@ class IOBase:
     def _write_data_npy(self, filedir: pathlib.Path, name: str):
         np.save(filedir / name, self.data)
 
-    def _check_downsampled_data(self):
+    def _check_downsampled_data(self, energy=None):
+        if energy is not None:
+            filedir = self.energy_filepath
+        else:
+            filedir = self.filedir
         try:
-            self.filedir_ds = pathlib.Path(self.filedir / "downsampled").mkdir(
+            self.filedir_ds = pathlib.Path(filedir / "downsampled").mkdir(
                 parents=True
             )
-            self.filedir_ds = pathlib.Path(self.filedir / "downsampled")
+            self.filedir_ds = pathlib.Path(filedir / "downsampled")
         except FileExistsError:
-            self.filedir_ds = pathlib.Path(self.filedir / "downsampled")
+            self.filedir_ds = pathlib.Path(filedir / "downsampled")
             try:
                 self._load_ds_and_hists()
             except Exception:
@@ -153,8 +163,11 @@ class ProjectionsBase(IOBase, ABC):
         name = self.aliases.get(name, name)
         return object.__getattribute__(self, name)
 
-    def save_normalized_as_npy(self):
-        np.save(self.filedir / "normalized_projections.npy", self.data)
+    def save_normalized_as_npy(self, energy=None):
+        if energy is not None:
+            np.save(self.filedir / str("normalized_projections" + energy), self.data)
+        else:
+            np.save(self.filedir / str("normalized_projections.npy"), self.data)
 
     @abstractmethod
     def import_metadata(self, filedir):
@@ -209,12 +222,16 @@ class Projections_Prenormalized(ProjectionsBase):
             self.imported = True
 
         elif ".npy" in str(fullpath):
+            pattern = "\d\d\d\d.\d\d"
+            if match := re.search(pattern, str(fullpath.name), re.IGNORECASE):
+                self.energy = match.group(0)
             self._data = np.load(fullpath).astype(np.float32)
             self._data = np.where(np.isfinite(self._data), self._data, 0)
             self._fullpath = fullpath
             self.fullpath = self._fullpath
             self.data = self._data
             self.make_angles()
+            self._check_downsampled_data(self.energy)
             self.imported = True
 
     def set_options_from_frontend(self, Import, Uploader):
@@ -345,7 +362,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.allowed_extensions = self.allowed_extensions + [".xrm"]
         self.angles_from_filenames = True
 
-    def import_metadata(self, filedir, Import):
+    def import_metadata(self, filedir, Uploader):
         filetypes = [".txt"]
         textfiles = self._file_finder(filedir, filetypes)
         self.scan_info_path = [
@@ -364,12 +381,11 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                     line = f.readline()
                     if line.startswith(";;"):
                         self.run_script_path = file
-        self.get_and_set_energies(Import)
+        self.get_and_set_energies(Uploader)
         (
             self.flats_filenames,
-            self.flats_ind,
             self.data_filenames,
-        ) = self.separate_flats_projs()
+        ) = self.get_all_data_filenames()
         # assume that the first projection is the same as the rest for metadata
         self.metadata["PROJECTIONS"] = self.read_xrms_metadata([self.data_filenames[0]])
         if self.angles_from_filenames:
@@ -381,24 +397,15 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.pxX = self.metadata["PROJECTIONS"][0]["image_width"]
         self.filedir = filedir
 
-    def import_filedir_all(self, filedir, Import):
-        self.selected_energies = Import.energy_select_multiple.value
-        if len(self.selected_energies) == 0:
-            self.selected_energies = (Import.energy_select_multiple.options[0],)
-            Import.energy_select_multiple.value = (
-                Import.energy_select_multiple.options[0],
-            )
-        if self.scan_type == "TOMO":
-            pass
-        self.flats, self.metadata["FLATS"] = self.load_xrms(self.flats_filenames)
-        self._data, self.metadata["PROJECTIONS"] = self.load_xrms(self.data_filenames)
-        self.data = self._data
-        self.darks = np.zeros_like(self.flats)
-        if self.angles_from_filenames:
-            self.get_angles_from_filenames()
-        else:
-            self.get_angles_from_metadata()
+    def import_filedir_all(self, filedir, Uploader):
         self.filedir = filedir
+        self.selected_energies = Uploader.energy_select_multiple.value
+        if len(self.selected_energies) == 0:
+            self.selected_energies = (Uploader.energy_select_multiple.options[0],)
+            Uploader.energy_select_multiple.value = (
+                Uploader.energy_select_multiple.options[0],
+            )
+        self.import_from_run_script(Uploader)
         self.imported = True
 
     def import_filedir_projections(self, filedir):
@@ -430,7 +437,6 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.filedir = Uploader.filedir
         self.filename = Uploader.filename
         self.angles_from_filenames = Import.angles_from_filenames
-        self.upload_progress = Uploader.upload_progress
 
     def parse_scan_info(self):
         data_file_list = []
@@ -461,24 +467,24 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.scan_type = [string for string, val in self.scan_order]
         self.scan_type = "_".join(self.scan_type)
 
-    def get_and_set_energies(self, Import):
+    def get_and_set_energies(self, Uploader):
         energies = []
         with open(self.run_script_path, "r") as f:
             for line in f.readlines():
                 if line.startswith("sete "):
                     energies.append(float(line[5:]))
         self.energies_list = sorted(list(set(energies)))
-        self.energies_list = [f"{energy:.2f}" for energy in self.energies_list]
-        Import.energy_select_multiple.options = self.energies_list
-        Import.energy_select_multiple.value = [self.energies_list[0]]
+        self.energies_list = [f"{energy:08.2f}" for energy in self.energies_list]
+        Uploader.energy_select_multiple.options = self.energies_list
+        Uploader.energy_select_multiple.value = [self.energies_list[0]]
         if len(self.energies_list) > 10:
-            Import.energy_select_multiple.rows = 10
+            Uploader.energy_select_multiple.rows = 10
         else:
-            Import.energy_select_multiple.rows = len(self.energies_list)
+            Uploader.energy_select_multiple.rows = len(self.energies_list)
         if len(self.energies_list) == 1:
-            Import.energy_select_multiple.disabled = True
+            Uploader.energy_select_multiple.disabled = True
         else:
-            Import.energy_select_multiple.disabled = False
+            Uploader.energy_select_multiple.disabled = False
 
     # def import_from_metadata(self):
     #     for file in self.metadata["FILES"]:
@@ -498,7 +504,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
     #     collects.pop(0)
     #     return energies, flats, collects
 
-    def separate_flats_projs(self):
+    def get_all_data_filenames(self):
         flats = [
             file.parent / file.name
             for file in self.metadata["FILES"]
@@ -509,16 +515,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
             for file in self.metadata["FILES"]
             if "ref_" not in file.name
         ]
-        ref_ind = [
-            True if "ref_" in file.name else False for file in self.metadata["FILES"]
-        ]
-        ref_ind_positions = [i for i, val in enumerate(ref_ind) if val][
-            :: self.metadata["REFNEXPOSURES"]
-        ]
-        ref_ind = [
-            j for j in ref_ind_positions for i in range(self.metadata["REFNEXPOSURES"])
-        ]
-        return flats, ref_ind, projs
+        return flats, projs
 
     def get_angles_from_filenames(self):
         reg_exp = re.compile("_[+-]\d\d\d.\d\d")
@@ -564,7 +561,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
             metadatas.append(metadata)
         return metadatas
 
-    def load_xrms(self, xrm_list):
+    def load_xrms(self, xrm_list, Uploader):
         data_stack = None
         metadatas = []
         for i, filename in enumerate(xrm_list):
@@ -579,11 +576,165 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                 data_stack = np.zeros((len(xrm_list),) + data.shape, data.dtype)
             data_stack[i] = data
             metadatas.append(metadata)
-            self.upload_progress.value += 1
+            Uploader.upload_progress.value += 1
         data_stack = np.flip(data_stack, axis=1)
         return data_stack, metadatas
 
-    def import_from_run_script(self):
+    def import_from_run_script(self, Uploader):
+        all_collections = [[]]
+        energies = [[]]
+        with open(self.run_script_path, "r") as f:
+            for line in f.readlines():
+                if line.startswith("sete "):
+                    energies.append(f"{float(line[5:]):08.2f}")
+                    all_collections.append([])
+                elif line.startswith("collect "):
+                    filename = line[8:].strip()
+                    all_collections[-1].append(self.run_script_path.parent / filename)
+        all_collections.pop(0)
+        energies.pop(0)
+        for energy, collect in zip(energies, all_collections):
+            if energy not in self.selected_energies:
+                continue
+            else:
+                Uploader.progress_output.clear_output()
+                with Uploader.progress_output:
+                    display(Uploader.upload_progress)
+                    display(Label(f"{energy} eV", layout=Layout(justify_content="center")))
+                # Getting filename from specific energy
+                self.flats_filenames = [
+                    file.parent / file.name
+                    for file in collect
+                    if "ref_" in file.name
+                ]
+                self.data_filenames = [
+                    file.parent / file.name
+                    for file in collect
+                    if "ref_" not in file.name
+                ]
+                self.proj_ind = [
+                    True if "ref_" not in file.name else False for file in collect
+                ]
+                with Uploader.progress_output:
+                    display(Label(f"Uploading .xrms.", layout=Layout(justify_content="center")))
+                # Uploading Data
+                Uploader.upload_progress.max = len(self.flats_filenames) + len(self.data_filenames)
+                self.flats, self.metadata["FLATS"] = self.load_xrms(self.flats_filenames, Uploader)
+                self._data, self.metadata["PROJECTIONS"] = self.load_xrms(self.data_filenames, Uploader)
+                self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
+                with Uploader.progress_output:
+                    display(Label("Saving temporary files.", layout=Layout(justify_content="center")))
+                
+                self.energy_filepath = self.filedir / str(energy + "eV")
+                if os.path.exists(self.energy_filepath):
+                    shutil.rmtree(self.energy_filepath)
+                os.makedirs(self.energy_filepath)
+                np.save(self.energy_filepath / "flats", self.flats)
+                np.save(self.energy_filepath / "projections", self._data)
+                self.flats = None
+                self._data = None
+                self.flats = np.load(self.energy_filepath / "flats.npy", mmap_mode="r")
+                self._data = np.load(self.energy_filepath / "projections.npy", mmap_mode="r")
+                self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
+                # Collecting information on where references are in the data stack
+                copy_collect = collect.copy()
+                i = 0
+                for pos, file in enumerate(copy_collect):
+                    if "ref_" in file.name:
+                        if i == 0:
+                            i = 1
+                        elif i == 1:
+                            copy_collect[pos] = 1
+                    elif "ref_" not in file.name:
+                        i = 0
+                copy_collect = [value for value in copy_collect if value != 1]
+                ref_ind = [
+                            True if "ref_" in file.name else False for file in copy_collect
+                        ]
+                ref_ind = [i for i in range(len(ref_ind)) if ref_ind[i]]
+                ref_ind = sorted(list(set(ref_ind)))
+                ref_ind = [ind  - i for i, ind in enumerate(ref_ind)]
+                # These indexes are at the position of self.data_filenames that 
+                # STARTS the next round after the references are taken
+                self.flats_ind = ref_ind
+                projs = da.from_array(self._data, chunks=(self.metadata["NEXPOSURES"], -1, -1)).astype(np.float32)
+                flats = da.from_array(self.flats, chunks=(self.metadata["REFNEXPOSURES"], -1, -1)).astype(np.float32)
+                darks = da.from_array(self.darks, chunks=(-1, -1, -1)).astype(np.float32)
+                with Uploader.progress_output:
+                    display(Label("Normalizing", layout=Layout(justify_content="center")))
+                norm_avg_mlog = RawProjectionsXRM_SSRL62.normalize_and_average(projs, flats, darks, ref_ind, uploader=Uploader)
+                self._data = norm_avg_mlog
+                self.data = self._data
+                # temp_dir.cleanup()
+                
+                with Uploader.progress_output:
+                    display(
+                        Label(
+                            "Saving projections as npy for faster IO",
+                            layout=Layout(justify_content="center"),
+                        )
+                    )
+                self.save_normalized_as_npy(energy)
+                with Uploader.progress_output:
+                    display(
+                        Label(
+                            "Downsampling data to various percentages.",
+                            layout=Layout(justify_content="center"),
+                        )
+                    )
+                self._check_downsampled_data(energy)
+
+    def average_chunks(chunked_da):
+        @dask.delayed
+        def mean_on_chunks(a):
+            return np.mean(a,axis=0)[np.newaxis, ...]
+        blocks = chunked_da.to_delayed().ravel()
+        results = [da.from_delayed(mean_on_chunks(b), shape=(1,chunked_da.shape[1],chunked_da.shape[2]), dtype=np.float32) for b in blocks]
+        # arr not computed yet
+        arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
+        return arr
+
+    def normalize_and_average(projs, flats, dark, flat_loc, uploader=None):
+        if uploader is not None:
+            with uploader.progress_output:
+                display(Label(f"Averaging flatfields.", layout=Layout(justify_content="center")))
+        # Averaging flats
+        flats_reduced = RawProjectionsXRM_SSRL62.average_chunks(flats)
+        dark = np.median(dark, axis=0)
+        denominator = flats_reduced - dark
+        denominator = denominator.compute()
+        # Projection locations defined as the centerpoint between two reference collections
+        # Chunk the projections such that they will be divided by the nearest flat
+        # The first chunk of data will be divided by the first flat.
+        # The first chunk of data is likely smaller than the others.
+        proj_locations = [int(np.ceil((flat_loc[i] + flat_loc[i+1])/2)) for i in range(len(flat_loc)-1)]
+        chunk_setup = [int(np.ceil(proj_locations[0]))]
+        for i in range(len(proj_locations)-1):
+            chunk_setup.append(proj_locations[i+1]-proj_locations[i])
+        chunk_setup.append(projs.shape[0] - sum(chunk_setup))
+        chunk_setup = tuple(chunk_setup)
+        projs_rechunked = projs.rechunk({0: chunk_setup, 1: -1, 2: -1}) # chunk data
+        projs_rechunked = projs_rechunked - dark
+        if uploader is not None:
+            with uploader.progress_output:
+                display(Label(f"Dividing by flatfields and taking -log.", layout=Layout(justify_content="center")))
+        # Don't know if putting @classmethod above a decorator will mess it up, so this fct is inside
+        @dask.delayed
+        def divide_arrays(x, ind):
+            y = denominator[ind]
+            return np.true_divide(x, y)
+        blocks = projs_rechunked.to_delayed().ravel()
+        results = [da.from_delayed(divide_arrays(b, i), shape=(chunksize, projs_rechunked.shape[1],projs_rechunked.shape[2]), dtype=np.float32) for i, (b, chunksize) in enumerate(zip(blocks, chunk_setup))]
+        arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
+        arr = arr.rechunk((15,-1,-1))
+        arr = RawProjectionsXRM_SSRL62.average_chunks(arr).astype(np.float32)
+        arr = -da.log(arr)
+        arr = arr.compute()
+        return arr
+    
+
+    # Groups each set of references and each set of projections together
+    def group_from_run_script(self):
         all_collections = [[]]
         energies = [[]]
         with open(self.run_script_path, "r") as f:
@@ -596,62 +747,74 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                     all_collections[-1].append(self.run_script_path.parent / filename)
         all_collections.pop(0)
         energies.pop(0)
-        self.selected_energies = ("7700.00",)
         for energy, collect in zip(energies, all_collections):
             if energy not in self.selected_energies:
                 continue
             else:
                 # getting all flats/projections
                 ref_ind = [True if "ref_" in file.name else False for file in collect]
+                i = 0
+                copy_collect = collect.copy()
+                for pos, file in enumerate(copy_collect):
+                    if "ref_" in file.name:
+                        if i == 0:
+                            i = 1
+                        elif i == 1:
+                            copy_collect[pos] = 1
+                    elif "ref_" not in file.name:
+                        i = 0
+                copy_collect = [value for value in copy_collect if value != 1]
+                ref_ind = [
+                            True if "ref_" in file.name else False for file in copy_collect
+                        ]
+                ref_ind = [i for i in range(len(ref_ind)) if ref_ind[i]]
+                self.ref_ind = ref_ind
+
                 proj_ind = [
                     True if "ref_" not in file.name else False for file in collect
                 ]
-                # intitializing switch statements
+                self.flats_filenames = [
+                    file.parent / file.name
+                    for file in collect
+                    if "ref_" in file.name
+                ]
+                self.data_filenames = [
+                    file.parent / file.name
+                    for file in collect
+                    if "ref_" not in file.name
+                ]
+                # # intitializing switch statements
                 files_grouped = [[]]
-                file_type = [[]]
+                file_type = ["reference"]
                 i = 0
                 adding_refs = True
                 adding_projs = False
                 for num, collection in enumerate(collect):
                     if ref_ind[num] and adding_refs:
                         files_grouped[-1].append(collection)
-                        file_type[-1].append("reference")
                     elif proj_ind[num] and ref_ind[num - 1]:
                         adding_refs = False
                         adding_projs = True
                         i = 0
                         files_grouped.append([])
                         files_grouped[-1].append(collection)
-                        file_type.append([])
-                        file_type[-1].append("projection")
+                        file_type.append("projection")
                     elif proj_ind[num - 1] and ref_ind[num]:
                         adding_refs = True
                         adding_projs = False
                         i = 0
                         files_grouped.append([])
                         files_grouped[-1].append(collection)
-                        file_type.append([])
-                        file_type[-1].append("reference")
+                        file_type.append("reference")
                     elif adding_projs and i < self.metadata["NEXPOSURES"] - 1:
                         i += 1
                         files_grouped[-1].append(collection)
                     else:
                         i = 0
                         files_grouped.append([])
-                        file_type.append([])
-                        file_type[-1].append("projection")
+                        file_type.append("projection")
 
-                data_list = []
-                data_type = []
-                for file_type_, group in zip(file_type, files_grouped):
-                    data, metadata = self.load_xrms(group)
-                    data = np.mean(data, axis=0)
-                    data_list.append(data)
-                    data_type.append(file_type_)
-
-            # files_grouped.pop(0)
-
-        return data_type, data_list
+        return files_grouped, file_type
         # flats = [
         #     file.parent / file.name for file in collect if "ref_" in file.name
         # ]
@@ -881,3 +1044,16 @@ def parse_printed_time(timedict):
 
     time = f"{time:.1f}"
     return time, title
+
+
+# ARCHIVE OF CODE:
+                
+                # proj_ind = [
+                #     True if "ref_" not in file.name else False for file in collect
+                # ]
+                # flats_ind_positions = [i for i, val in enumerate(self.flats_ind) if val][
+                #     :: self.metadata["REFNEXPOSURES"]
+                # ]
+                # self.flats_ind = [
+                #     j for j in flats_ind_positions for i in range(self.metadata["REFNEXPOSURES"])
+                # ]

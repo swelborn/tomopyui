@@ -460,27 +460,7 @@ class RawUploader_SSRL62(UploaderBase):
         tic = time.perf_counter()
         self.import_button.button_style = "info"
         self.import_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.progress_output.clear_output()
-        self.upload_progress.value = 0
-        self.upload_progress.max = self.projections.pxZ + len(
-            self.projections.flats_ind
-        )
-        with self.progress_output:
-            display(self.upload_progress)
-
         self.projections.import_filedir_all(self.filedir, self)
-        with self.progress_output:
-            display(Label("Normalizing", layout=Layout(justify_content="center")))
-        self.projections.normalize_nf()
-        with self.progress_output:
-            display(
-                Label(
-                    "Saving projections as npy for faster IO",
-                    layout=Layout(justify_content="center"),
-                )
-            )
-        self.projections.save_normalized_as_npy()
-        self.projections._check_downsampled_data()
         self.projections.nm_per_px = self.nm_per_px_textbox.value
         toc = time.perf_counter()
         self.import_button.button_style = "success"

@@ -221,7 +221,6 @@ class Filebrowser:
         self.selected_data_filename = None
         self.selected_data_ftype = None
         self.selected_analysis_type = None
-
         self.options_metadata_table_output = Output()
 
         # load data button
