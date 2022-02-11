@@ -7,8 +7,8 @@ from tomopyui.widgets.plot import (
     BqImPlotter_Import_Analysis,
     BqImPlotter_Altered_Analysis,
 )
-from tomopyui.backend.tomoalign import TomoAlign
-from tomopyui.backend.tomorecon import TomoRecon
+from tomopyui.backend.align import TomoAlign
+from tomopyui.backend.recon import TomoRecon
 from tomopyui.backend.io import save_metadata, load_metadata
 from tomopyui.widgets import helpers
 
@@ -280,7 +280,9 @@ class AnalysisBase(ABC):
         self.paddingY_textbox.observe(self.update_y_padding, names="value")
 
         # Pre-alignment iterations
-        self.pre_alignment_iters_textbox.observe(self.update_pre_alignment_iters, names="value")
+        self.pre_alignment_iters_textbox.observe(
+            self.update_pre_alignment_iters, names="value"
+        )
 
         # Extra options
         self.extra_options_textbox.observe(self.update_extra_options, names="value")

@@ -7,7 +7,7 @@ from tomopy.recon import algorithm
 from tomopy.misc.corr import circ_mask
 from tomopyui.backend.io import save_metadata, load_metadata
 from tomopy.recon import algorithm as tomopy_algorithm
-from tomopyui.backend.tomoalign import TomoAlign
+from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.util.padding import *
 from tomopyui._sharedvars import *
 
