@@ -48,7 +48,7 @@ def write_center(
             stack[m] = tomo[ind]
         else:
             stack[m] = tomo[:, ind, :]
-
+    os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
     # Reconstruct the same slice with a range of centers.
     if algorithm == "gridrec" or algorithm == "fbp":
         rec = recon(

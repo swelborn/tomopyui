@@ -52,6 +52,7 @@ class TomoRecon(TomoAlign):
         # TODO: Not good to pass the whole object in. This is only passed in here for
         # updating progress bars. Probably can pass references.
         self.Recon = Recon
+        self.center = Recon.center
         self.projections = Recon.projections
         self.angles_rad = Recon.projections.angles_rad
         self.wd_parent = Recon.projections.filedir
@@ -64,10 +65,7 @@ class TomoRecon(TomoAlign):
             self.downsample_factor = Recon.downsample_factor
         else:
             self.downsample_factor = 1
-        self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
-        self.center = Recon.center + self.pad_ds[0]
         self.num_iter = Recon.num_iter
-        self.upsample_factor = Recon.upsample_factor
 
     def make_wd(self):
         now = datetime.datetime.now()
@@ -97,14 +95,14 @@ class TomoRecon(TomoAlign):
 
         if self.metadata["save_opts"]["tomo_before"]:
             if self.metadata["save_opts"]["npy"]:
-                np.save("tomo", self.projections.data)
+                np.save("tomo", self.prjs)
             if self.metadata["save_opts"]["tiff"]:
-                tf.imwrite("tomo.tif", self.projections.data)
+                tf.imwrite("tomo.tif", self.prjs)
             if (
                 not self.metadata["save_opts"]["tiff"]
                 and not self.metadata["save_opts"]["npy"]
             ):
-                tf.imwrite("tomo.tif", self.projections.data)
+                tf.imwrite("tomo.tif", self.prjs)
         if self.metadata["save_opts"]["recon"]:
             if self.metadata["save_opts"]["npy"]:
                 np.save("recon", self.recon)
