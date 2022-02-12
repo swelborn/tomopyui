@@ -912,7 +912,7 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
     def rectangle_select(self, change):
         if self.rectangle_selector_on is False:
             self.fig.interaction = self.rectangle_selector
-            self.fig.interaction.color = "red"
+            self.fig.interaction.color = "magenta"
             self.rectangle_selector_on = True
             self.rectangle_selector_button.button_style = "success"
             self.Analysis.use_subset_correlation_checkbox.value = True
