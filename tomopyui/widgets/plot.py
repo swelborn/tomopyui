@@ -515,11 +515,6 @@ class BqImPlotter_Import(BqImPlotter):
         self.app = VBox([header, center, footer])
 
 
-class BqImPlotter_Center(BqImPlotter_Import):
-    def __init__(self):
-        super().__init__()
-
-
 class BqImPlotter_Import_Analysis(BqImPlotter):
     def __init__(self, Analysis, dimensions=("550px", "550px")):
         self.Analysis = Analysis
@@ -692,6 +687,138 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
             self.status_bar_ydistance.value = f"Y Distance (nm): {self.nm_y}"
         else:
             self.status_bar_ydistance.value = f"Y Distance (μm): {self.micron_y}"
+
+
+class BqImPlotter_Center(BqImPlotter_Import_Analysis):
+    def __init__(self, Center):
+        super().__init__(None)
+        self.Center = Center
+        self.center_line_on = False
+        self.center_line = bq.Lines(
+            x=[0.5, 0.5],
+            y=[0, 1],
+            colors="red",
+            stroke_width=3,
+            scales={"x": self.scale_x, "y": self.scale_y},
+        )
+        self.center_line_button = Button(
+            icon="align-center",
+            layout=self.button_layout,
+            style=self.button_font,
+            tooltip=("Turn on center of rotation line"),
+        )
+        self.center_line_button.on_click(self.center_line_on_update)
+
+    def create_app(self):
+        left_sidebar_layout = Layout(
+            justify_content="space-around", align_items="center"
+        )
+        right_sidebar_layout = Layout(
+            justify_content="space-around", align_items="center"
+        )
+        header_layout = Layout(justify_content="center", align_items="center")
+        footer_layout = Layout(justify_content="center")
+        center_layout = Layout(justify_content="center", align_content="center")
+        header = HBox(
+            [
+                self.downsample_viewer_button,
+                self.downsample_viewer_textbox,
+                self.scheme_dropdown,
+            ],
+            layout=header_layout,
+        )
+        left_sidebar = None
+        right_sidebar = None
+        center = HBox([self.fig, self.hist.fig], layout=center_layout)
+        self.button_box = HBox(
+            [
+                self.plus_button,
+                self.minus_button,
+                self.reset_button,
+                self.rm_high_low_int_button,
+                self.swap_axes_button,
+                self.rectangle_selector_button,
+                self.center_line_button,
+                self.save_movie_button,
+            ],
+            layout=footer_layout,
+        )
+        footer1 = HBox([self.play, self.image_index_slider], layout=footer_layout)
+        footer2 = VBox(
+            [
+                self.button_box,
+                HBox(
+                    [
+                        self.status_bar_xrange,
+                        self.status_bar_yrange,
+                        self.status_bar_intensity,
+                    ],
+                    layout=footer_layout,
+                ),
+                HBox(
+                    [
+                        self.status_bar_xdistance,
+                        self.status_bar_ydistance,
+                    ],
+                    layout=footer_layout,
+                ),
+            ],
+            layout=footer_layout,
+        )
+
+        footer = VBox([footer1, footer2])
+
+        self.app = VBox([header, center, footer])
+
+    # Rectangle selector button
+    def center_line_on_update(self, *args):
+        if self.center_line_on is False:
+            self.center_line_on = True
+            self.center_line_button.button_style = "success"
+            self.fig.marks = (
+                self.plotted_image,
+                self.center_line,
+            )
+        else:
+            self.center_line_on = False
+            self.center_line_button.button_style = ""
+            self.fig.marks = (self.plotted_image,)
+
+    def plot(self):
+        self.original_imagestack = self.Center.Import.projections.data
+        self.pxX = self.original_imagestack.shape[2]
+        self.pxY = self.original_imagestack.shape[1]
+        self.pxZ = self.original_imagestack.shape[0]
+        self.imagestack = np.array(self.Center.Import.projections.data_ds[1])
+        self.downsample_factor = 0.25
+        self.downsample_viewer_textbox.value = self.downsample_factor
+        self.nm_per_px = self.Center.Import.projections.nm_per_px
+        self.precomputed_hists = self.Center.Import.projections.hists
+        # self.downsample_imagestack(self.original_imagestack)
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = self.imagestack[0]
+        self.vmin = np.min(self.imagestack)
+        self.vmax = np.max(self.imagestack)
+        self.image_scale["image"].min = float(self.vmin)
+        self.image_scale["image"].max = float(self.vmax)
+        self.pixel_range_x = [0, self.pxX - 1]
+        self.pixel_range_y = [0, self.pxY - 1]
+        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
+        # self.update_pixel_range_status_bar()
+        self.hist.selector.selected = None
+        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.value = 0
+        self.hist.preflatten_imagestack(self.imagestack)
+        self.rm_high_low_int(None)
+        self.change_downsample_button()
+        self.center_line_on = False
+        self.center_line_on_update()
+
+
+class BqImPlotter_Center_Recon(BqImPlotter_Import):
+    def __init__(self):
+        super().__init__()
 
 
 class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):

@@ -73,6 +73,7 @@ class ImportBase(ABC):
         self.use_prenorm_button.description = "Updating plots."
         self.Recon.refresh_plots()
         self.Align.refresh_plots()
+        self.Center.refresh_plots()
         self.use_prenorm_button.icon = "fa-check-square"
         self.use_prenorm_button.button_style = "success"
         self.use_prenorm_button.description = (
@@ -98,6 +99,7 @@ class ImportBase(ABC):
         self.use_raw_button.description = "Updating plots."
         self.Recon.refresh_plots()
         self.Align.refresh_plots()
+        self.Center.refresh_plots()
         self.use_raw_button.icon = "fa-check-square"
         self.use_raw_button.button_style = "success"
         self.use_raw_button.description = (
