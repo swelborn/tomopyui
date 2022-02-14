@@ -5,7 +5,7 @@ from ipywidgets import *
 from tomopyui._sharedvars import *
 import numpy as np
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
-from tomopyui.widgets.plot import BqImPlotter_Center
+from tomopyui.widgets.plot import BqImPlotter_Center, BqImPlotter_Center_Recon
 from tomopyui.backend.util.center import write_center
 
 
@@ -46,6 +46,7 @@ class Center:
     def __init__(self, Import):
 
         self.Import = Import
+        self.Import.Center = self
         self.current_center = self.Import.prenorm_projections.pxX / 2
         self.center_guess = None
         self.index_to_try = None
@@ -56,8 +57,11 @@ class Center:
         self.algorithm = "gridrec"
         self.filter = "parzen"
         self.metadata = {}
-        self.plotter = BqImPlotter_Center()
-        self.plotter.create_app()
+        self.projection_plotter = BqImPlotter_Center(self)
+        self.projection_plotter.create_app()
+        self.rec_plotter = BqImPlotter_Center_Recon()
+        self.rec_plotter.create_app()
+
         self._init_widgets()
         self._set_observes()
         self.make_tab()
@@ -158,10 +162,19 @@ class Center:
 
     def _center_update(self, change):
         self.current_center = change.new
+        self.center_guess = change.new
+        self.projection_plotter.center_line.x = [
+            change.new / self.projection_plotter.pxX,
+            change.new / self.projection_plotter.pxX,
+        ]
         self.set_metadata()
 
     def _center_guess_update(self, change):
         self.center_guess = change.new
+        self.projection_plotter.center_line.x = [
+            change.new / self.projection_plotter.pxX,
+            change.new / self.projection_plotter.pxX,
+        ]
         self.set_metadata()
 
     def _load_rough_center_onclick(self, change):
@@ -201,7 +214,13 @@ class Center:
 
     def _center_textbox_slider_update(self, change):
         self.center_textbox.value = self.cen_range[change.new]
+        self.center_guess_textbox.value = self.cen_range[change.new]
+        self.projection_plotter.center_line.x = [
+            self.cen_range[change.new] / self.projection_plotter.pxX,
+            self.cen_range[change.new] / self.projection_plotter.pxX,
+        ]
         self.current_center = self.center_textbox.value
+
         self.set_metadata()
 
     def find_center_on_click(self, change):
@@ -280,7 +299,6 @@ class Center:
         self.find_center_manual_button.icon = "fas fa-cog fa-spin fa-lg"
         self.find_center_manual_button.description = "Starting reconstruction."
 
-        # TODO: for memory, add only desired slice
         prj_imgs = self.Import.projections.prj_imgs
         angles_rad = self.Import.projections.angles_rad
         cen_range = [
@@ -308,7 +326,7 @@ class Center:
                 "Your projections do not have associated theta values."
             )
 
-        self.plotter.plot(self.rec, self.Import.projections.filedir)
+        self.rec_plotter.plot(self.rec, self.Import.projections.filedir)
         self.find_center_manual_button.button_style = "success"
         self.find_center_manual_button.icon = "fa-check-square"
         self.find_center_manual_button.description = "Finished reconstruction."
@@ -327,9 +345,12 @@ class Center:
         self.find_center_vo_button.on_click(self.find_center_vo_on_click)
         self.find_center_manual_button.on_click(self.find_center_manual_on_click)
         # Callback for index going to center
-        self.plotter.image_index_slider.observe(
+        self.rec_plotter.image_index_slider.observe(
             self._center_textbox_slider_update, names="value"
         )
+
+    def refresh_plots(self):
+        self.projection_plotter.plot()
 
     def make_tab(self):
         """
@@ -362,48 +383,59 @@ class Center:
         self.manual_center_vbox = VBox(
             [
                 HBox(
+                    [self.projection_plotter.app, self.rec_plotter.app],
+                    layout=Layout(justify_content="center"),
+                ),
+                HBox(
                     [self.find_center_manual_button],
                     layout=Layout(justify_content="center"),
                 ),
                 HBox(
                     [
-                        VBox(
-                            [
-                                self.center_guess_textbox,
-                                self.index_to_try_textbox,
-                                self.num_iter_textbox,
-                                self.search_range_textbox,
-                                self.search_step_textbox,
-                                self.algorithms_dropdown,
-                                self.filters_dropdown,
-                            ],
-                            layout=Layout(
-                                # display="flex",
-                                # flex_flow="row wrap",
-                                align_content="center",
-                                justify_content="flex-start",
-                            ),
-                        ),
-                        self.plotter.app,
+                        self.center_guess_textbox,
+                        self.index_to_try_textbox,
+                        self.num_iter_textbox,
+                        self.search_range_textbox,
+                        self.search_step_textbox,
+                        self.algorithms_dropdown,
+                        self.filters_dropdown,
                     ],
-                    layout=Layout(justify_content="center"),
+                    layout=Layout(
+                        display="flex",
+                        flex_flow="row wrap",
+                        # align_content="center",
+                        justify_content="space-between",
+                    ),
                 ),
             ],
+            layout=Layout(justify_content="center"),
         )
 
         self.manual_center_accordion = Accordion(
             children=[self.manual_center_vbox],
-            selected_index=None,
+            selected_index=0,
             titles=("Find center through plotting",),
         )
 
         self.tab = VBox(
             [
-                HBox(
-                    [self.center_textbox, self.load_rough_center],
-                    layout=Layout(justify_content="center"),
+                VBox(
+                    [
+                        HBox(
+                            [
+                                self.Import.switch_data_buttons,
+                                self.load_rough_center,
+                            ]
+                        ),
+                        HBox(
+                            [
+                                self.center_textbox,
+                            ],
+                            layout=Layout(justify_content="center"),
+                        ),
+                    ],
                 ),
-                self.automatic_center_accordion,
                 self.manual_center_accordion,
+                self.automatic_center_accordion,
             ]
         )

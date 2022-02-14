@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from tomopyui.widgets.plot import (
     BqImPlotter_Import_Analysis,
     BqImPlotter_Altered_Analysis,
+    BqImPlotter_DataExplorer,
 )
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
@@ -23,6 +24,7 @@ class AnalysisBase(ABC):
         self.imported_plotter.create_app()
         self.altered_plotter = BqImPlotter_Altered_Analysis(self.imported_plotter, self)
         self.altered_plotter.create_app()
+        self.result_before_plotter = self.altered_plotter
         self.wd = None
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
@@ -78,6 +80,16 @@ class AnalysisBase(ABC):
         self.altered_plot_header = "Altered Projections"
         self.altered_plot_header = Label(
             self.altered_plot_header, style=self.header_font_style
+        )
+
+        # -- Headers for results -------------------------------------
+        self.before_analysis_plot_header = "Analysis Projections"
+        self.before_analysis_plot_header = Label(
+            self.before_analysis_plot_header, style=self.header_font_style
+        )
+        self.after_analysis_plot_header = "Result"
+        self.after_analysis_plot_header = Label(
+            self.after_analysis_plot_header, style=self.header_font_style
         )
 
         # -- Button for using imported dataset  ---------------------------------
@@ -348,6 +360,8 @@ class AnalysisBase(ABC):
         self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
         self.pixel_range_x = self.projections.pixel_range_x
         self.pixel_range_y = self.projections.pixel_range_y
+        self.result_before_plotter = self.imported_plotter
+        self.result_after_plotter = BqImPlotter_DataExplorer(self.result_before_plotter)
         self.use_imported_button.button_style = "success"
         self.use_imported_button.description = (
             "You can now align/reconstruct your data."
@@ -367,6 +381,8 @@ class AnalysisBase(ABC):
         self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
         self.pixel_range_x = self.altered_plotter.pixel_range_x
         self.pixel_range_y = self.altered_plotter.pixel_range_y
+        self.result_before_plotter = self.altered_plotter
+        self.result_after_plotter = BqImPlotter_DataExplorer(self.result_before_plotter)
         self.use_altered_button.button_style = "success"
         self.use_altered_button.description = "You can now align/reconstruct your data."
         self.use_altered_button.icon = "fa-check-square"
@@ -547,6 +563,30 @@ class AnalysisBase(ABC):
         checkboxes = [MetaCheckbox(opt, dictionary, self) for opt in opt_list]
         return [a.checkbox for a in checkboxes]  # return list of checkboxes
 
+    def plot_result(self):
+        with self.plot_output1:
+            self.plot_output1.clear_output(wait=True)
+            self.output_hbox = HBox(
+                [
+                    VBox(
+                        [
+                            self.before_analysis_plot_header,
+                            self.result_before_plotter.app,
+                        ],
+                        layout=Layout(align_items="center"),
+                    ),
+                    VBox(
+                        [
+                            self.after_analysis_plot_header,
+                            self.result_after_plotter.app,
+                        ],
+                        layout=Layout(align_items="center"),
+                    ),
+                ],
+                layout=Layout(justify_content="center"),
+            )
+            display(self.output_hbox)
+
     @abstractmethod
     def update_num_batches(self, *args):
         ...
@@ -648,7 +688,13 @@ class Align(AnalysisBase):
         self.set_metadata()
 
     def run(self):
-        TomoAlign(self)
+        self.analysis = TomoAlign(self)
+        self.result_after_plotter.create_app()
+        self.result_after_plotter.plot(
+            self.analysis.projections_aligned,
+            self.analysis.wd,
+        )
+        self.plot_result()
 
     def make_tab(self):
 
@@ -674,6 +720,7 @@ class Align(AnalysisBase):
                 ),
             ]
         )
+
         astra_methods_hbox = HBox(
             [
                 Label("Astra:", layout=Layout(width="100px", align_content="center")),
@@ -808,7 +855,13 @@ class Recon(AnalysisBase):
         self.set_metadata()
 
     def run(self):
-        TomoRecon(self)
+        self.analysis = TomoRecon(self)
+        self.result_after_plotter.create_app()
+        self.result_after_plotter.plot(
+            self.analysis.recon,
+            self.analysis.wd,
+        )
+        self.plot_result()
 
     def make_tab(self):
 
@@ -897,9 +950,6 @@ class Recon(AnalysisBase):
                 self.save_options_accordion,
                 self.options_accordion,
                 start_button_hb,
-                VBox(
-                    [self.plot_output1, self.plot_output2],
-                ),
             ]
         )
 
