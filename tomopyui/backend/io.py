@@ -77,9 +77,7 @@ class IOBase:
         else:
             filedir = self.filedir
         try:
-            self.filedir_ds = pathlib.Path(filedir / "downsampled").mkdir(
-                parents=True
-            )
+            self.filedir_ds = pathlib.Path(filedir / "downsampled").mkdir(parents=True)
             self.filedir_ds = pathlib.Path(filedir / "downsampled")
         except FileExistsError:
             self.filedir_ds = pathlib.Path(filedir / "downsampled")
@@ -93,10 +91,19 @@ class IOBase:
     def _write_downsampled_data(self):
         ds_vals = [(1, 0.1, 0.1), (1, 0.25, 0.25), (1, 0.5, 0.5), (1, 0.75, 0.75)]
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in ds_vals]
-        ds_data = Parallel(n_jobs=4)(delayed(rescale)(self.data, x) for x in ds_vals)
+        ds_data = Parallel(n_jobs=int(os.environ["num_cpu_cores"]))(
+            delayed(rescale)(self.data, x) for x in ds_vals
+        )
         ds_data.append(self.data)
-        hists = Parallel(n_jobs=5)(delayed(np.histogram)(x, bins=100) for x in ds_data)
+        ds_data_da = [da.from_array(x) for x in ds_data]
+        ranges = [[np.min(x), np.max(x)] for x in ds_data]
+        hists = [
+            da.histogram(x, range=[y[0], y[1]], bins=200)
+            for x, y in zip(ds_data_da, ranges)
+        ]
+        # hists = Parallel(n_jobs=os.environ["num_cpu_cores"])(delayed(np.histogram)(x, bins=100) for x in ds_data)
         hist_intensities = [hist[0] for hist in hists]
+        hist_intensities = [hist.compute() for hist in hist_intensities]
         bin_edges = [hist[1] for hist in hists]
         xvals = [[(b[i] + b[i + 1]) / 2 for i in range(len(b) - 1)] for b in bin_edges]
         for data, string in zip(ds_data, ds_vals_strs):
@@ -600,12 +607,12 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                 Uploader.progress_output.clear_output()
                 with Uploader.progress_output:
                     display(Uploader.upload_progress)
-                    display(Label(f"{energy} eV", layout=Layout(justify_content="center")))
+                    display(
+                        Label(f"{energy} eV", layout=Layout(justify_content="center"))
+                    )
                 # Getting filename from specific energy
                 self.flats_filenames = [
-                    file.parent / file.name
-                    for file in collect
-                    if "ref_" in file.name
+                    file.parent / file.name for file in collect if "ref_" in file.name
                 ]
                 self.data_filenames = [
                     file.parent / file.name
@@ -616,15 +623,30 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                     True if "ref_" not in file.name else False for file in collect
                 ]
                 with Uploader.progress_output:
-                    display(Label(f"Uploading .xrms.", layout=Layout(justify_content="center")))
+                    display(
+                        Label(
+                            f"Uploading .xrms.", layout=Layout(justify_content="center")
+                        )
+                    )
                 # Uploading Data
-                Uploader.upload_progress.max = len(self.flats_filenames) + len(self.data_filenames)
-                self.flats, self.metadata["FLATS"] = self.load_xrms(self.flats_filenames, Uploader)
-                self._data, self.metadata["PROJECTIONS"] = self.load_xrms(self.data_filenames, Uploader)
+                Uploader.upload_progress.max = len(self.flats_filenames) + len(
+                    self.data_filenames
+                )
+                self.flats, self.metadata["FLATS"] = self.load_xrms(
+                    self.flats_filenames, Uploader
+                )
+                self._data, self.metadata["PROJECTIONS"] = self.load_xrms(
+                    self.data_filenames, Uploader
+                )
                 self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
                 with Uploader.progress_output:
-                    display(Label("Saving temporary files.", layout=Layout(justify_content="center")))
-                
+                    display(
+                        Label(
+                            "Saving temporary files.",
+                            layout=Layout(justify_content="center"),
+                        )
+                    )
+
                 self.energy_filepath = self.filedir / str(energy + "eV")
                 if os.path.exists(self.energy_filepath):
                     shutil.rmtree(self.energy_filepath)
@@ -634,7 +656,9 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                 self.flats = None
                 self._data = None
                 self.flats = np.load(self.energy_filepath / "flats.npy", mmap_mode="r")
-                self._data = np.load(self.energy_filepath / "projections.npy", mmap_mode="r")
+                self._data = np.load(
+                    self.energy_filepath / "projections.npy", mmap_mode="r"
+                )
                 self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
                 # Collecting information on where references are in the data stack
                 copy_collect = collect.copy()
@@ -649,24 +673,34 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                         i = 0
                 copy_collect = [value for value in copy_collect if value != 1]
                 ref_ind = [
-                            True if "ref_" in file.name else False for file in copy_collect
-                        ]
+                    True if "ref_" in file.name else False for file in copy_collect
+                ]
                 ref_ind = [i for i in range(len(ref_ind)) if ref_ind[i]]
                 ref_ind = sorted(list(set(ref_ind)))
-                ref_ind = [ind  - i for i, ind in enumerate(ref_ind)]
-                # These indexes are at the position of self.data_filenames that 
+                ref_ind = [ind - i for i, ind in enumerate(ref_ind)]
+                # These indexes are at the position of self.data_filenames that
                 # STARTS the next round after the references are taken
                 self.flats_ind = ref_ind
-                projs = da.from_array(self._data, chunks=(self.metadata["NEXPOSURES"], -1, -1)).astype(np.float32)
-                flats = da.from_array(self.flats, chunks=(self.metadata["REFNEXPOSURES"], -1, -1)).astype(np.float32)
-                darks = da.from_array(self.darks, chunks=(-1, -1, -1)).astype(np.float32)
+                projs = da.from_array(
+                    self._data, chunks=(self.metadata["NEXPOSURES"], -1, -1)
+                ).astype(np.float32)
+                flats = da.from_array(
+                    self.flats, chunks=(self.metadata["REFNEXPOSURES"], -1, -1)
+                ).astype(np.float32)
+                darks = da.from_array(self.darks, chunks=(-1, -1, -1)).astype(
+                    np.float32
+                )
                 with Uploader.progress_output:
-                    display(Label("Normalizing", layout=Layout(justify_content="center")))
-                norm_avg_mlog = RawProjectionsXRM_SSRL62.normalize_and_average(projs, flats, darks, ref_ind, uploader=Uploader)
+                    display(
+                        Label("Normalizing", layout=Layout(justify_content="center"))
+                    )
+                norm_avg_mlog = RawProjectionsXRM_SSRL62.normalize_and_average(
+                    projs, flats, darks, ref_ind, uploader=Uploader
+                )
                 self._data = norm_avg_mlog
                 self.data = self._data
                 # temp_dir.cleanup()
-                
+
                 with Uploader.progress_output:
                     display(
                         Label(
@@ -687,9 +721,17 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
     def average_chunks(chunked_da):
         @dask.delayed
         def mean_on_chunks(a):
-            return np.mean(a,axis=0)[np.newaxis, ...]
+            return np.mean(a, axis=0)[np.newaxis, ...]
+
         blocks = chunked_da.to_delayed().ravel()
-        results = [da.from_delayed(mean_on_chunks(b), shape=(1,chunked_da.shape[1],chunked_da.shape[2]), dtype=np.float32) for b in blocks]
+        results = [
+            da.from_delayed(
+                mean_on_chunks(b),
+                shape=(1, chunked_da.shape[1], chunked_da.shape[2]),
+                dtype=np.float32,
+            )
+            for b in blocks
+        ]
         # arr not computed yet
         arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
         return arr
@@ -697,7 +739,12 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
     def normalize_and_average(projs, flats, dark, flat_loc, uploader=None):
         if uploader is not None:
             with uploader.progress_output:
-                display(Label(f"Averaging flatfields.", layout=Layout(justify_content="center")))
+                display(
+                    Label(
+                        f"Averaging flatfields.",
+                        layout=Layout(justify_content="center"),
+                    )
+                )
         # Averaging flats
         flats_reduced = RawProjectionsXRM_SSRL62.average_chunks(flats)
         dark = np.median(dark, axis=0)
@@ -707,31 +754,46 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         # Chunk the projections such that they will be divided by the nearest flat
         # The first chunk of data will be divided by the first flat.
         # The first chunk of data is likely smaller than the others.
-        proj_locations = [int(np.ceil((flat_loc[i] + flat_loc[i+1])/2)) for i in range(len(flat_loc)-1)]
+        proj_locations = [
+            int(np.ceil((flat_loc[i] + flat_loc[i + 1]) / 2))
+            for i in range(len(flat_loc) - 1)
+        ]
         chunk_setup = [int(np.ceil(proj_locations[0]))]
-        for i in range(len(proj_locations)-1):
-            chunk_setup.append(proj_locations[i+1]-proj_locations[i])
+        for i in range(len(proj_locations) - 1):
+            chunk_setup.append(proj_locations[i + 1] - proj_locations[i])
         chunk_setup.append(projs.shape[0] - sum(chunk_setup))
         chunk_setup = tuple(chunk_setup)
-        projs_rechunked = projs.rechunk({0: chunk_setup, 1: -1, 2: -1}) # chunk data
+        projs_rechunked = projs.rechunk({0: chunk_setup, 1: -1, 2: -1})  # chunk data
         projs_rechunked = projs_rechunked - dark
         if uploader is not None:
             with uploader.progress_output:
-                display(Label(f"Dividing by flatfields and taking -log.", layout=Layout(justify_content="center")))
+                display(
+                    Label(
+                        f"Dividing by flatfields and taking -log.",
+                        layout=Layout(justify_content="center"),
+                    )
+                )
         # Don't know if putting @classmethod above a decorator will mess it up, so this fct is inside
         @dask.delayed
         def divide_arrays(x, ind):
             y = denominator[ind]
             return np.true_divide(x, y)
+
         blocks = projs_rechunked.to_delayed().ravel()
-        results = [da.from_delayed(divide_arrays(b, i), shape=(chunksize, projs_rechunked.shape[1],projs_rechunked.shape[2]), dtype=np.float32) for i, (b, chunksize) in enumerate(zip(blocks, chunk_setup))]
+        results = [
+            da.from_delayed(
+                divide_arrays(b, i),
+                shape=(chunksize, projs_rechunked.shape[1], projs_rechunked.shape[2]),
+                dtype=np.float32,
+            )
+            for i, (b, chunksize) in enumerate(zip(blocks, chunk_setup))
+        ]
         arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
-        arr = arr.rechunk((15,-1,-1))
+        arr = arr.rechunk((15, -1, -1))
         arr = RawProjectionsXRM_SSRL62.average_chunks(arr).astype(np.float32)
         arr = -da.log(arr)
         arr = arr.compute()
         return arr
-    
 
     # Groups each set of references and each set of projections together
     def group_from_run_script(self):
@@ -765,8 +827,8 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                         i = 0
                 copy_collect = [value for value in copy_collect if value != 1]
                 ref_ind = [
-                            True if "ref_" in file.name else False for file in copy_collect
-                        ]
+                    True if "ref_" in file.name else False for file in copy_collect
+                ]
                 ref_ind = [i for i in range(len(ref_ind)) if ref_ind[i]]
                 self.ref_ind = ref_ind
 
@@ -774,9 +836,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                     True if "ref_" not in file.name else False for file in collect
                 ]
                 self.flats_filenames = [
-                    file.parent / file.name
-                    for file in collect
-                    if "ref_" in file.name
+                    file.parent / file.name for file in collect if "ref_" in file.name
                 ]
                 self.data_filenames = [
                     file.parent / file.name
@@ -1047,13 +1107,13 @@ def parse_printed_time(timedict):
 
 
 # ARCHIVE OF CODE:
-                
-                # proj_ind = [
-                #     True if "ref_" not in file.name else False for file in collect
-                # ]
-                # flats_ind_positions = [i for i, val in enumerate(self.flats_ind) if val][
-                #     :: self.metadata["REFNEXPOSURES"]
-                # ]
-                # self.flats_ind = [
-                #     j for j in flats_ind_positions for i in range(self.metadata["REFNEXPOSURES"])
-                # ]
+
+# proj_ind = [
+#     True if "ref_" not in file.name else False for file in collect
+# ]
+# flats_ind_positions = [i for i, val in enumerate(self.flats_ind) if val][
+#     :: self.metadata["REFNEXPOSURES"]
+# ]
+# self.flats_ind = [
+#     j for j in flats_ind_positions for i in range(self.metadata["REFNEXPOSURES"])
+# ]
