@@ -59,6 +59,8 @@ class TomoRecon(TomoAlign):
         self.metadata = Recon.metadata.copy()
         self.pixel_range_x = Recon.pixel_range_x
         self.pixel_range_y = Recon.pixel_range_y
+        self.subset_x = self.pixel_range_x
+        self.subset_y = self.pixel_range_y
         self.pad = (Recon.paddingX, Recon.paddingY)
         self.downsample = Recon.downsample
         if self.downsample:

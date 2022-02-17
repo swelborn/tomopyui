@@ -1061,14 +1061,14 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
 
     def remove_data_outside(self, *args):
         self.remove_high_indexes = self.original_imagestack > self.vmax
-        self.original_imagestack[self.remove_high_indexes] = 1e-9
+        self.original_imagestack[self.remove_high_indexes] = 1e-6
         self.remove_low_indexes = self.original_imagestack < self.vmin
-        self.original_imagestack[self.remove_low_indexes] = 1e-9
+        self.original_imagestack[self.remove_low_indexes] = 1e-6
         self.plotted_image.image = self.original_imagestack[0]
         self.remove_high_indexes = self.imagestack > self.vmax
-        self.imagestack[self.remove_high_indexes] = 1e-9
+        self.imagestack[self.remove_high_indexes] = 1e-6
         self.remove_low_indexes = self.imagestack < self.vmin
-        self.imagestack[self.remove_low_indexes] = 1e-9
+        self.imagestack[self.remove_low_indexes] = 1e-6
         self.plotted_image.image = self.imagestack[0]
         self.hist.preflatten_imagestack(self.imagestack)
 

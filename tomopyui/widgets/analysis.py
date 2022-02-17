@@ -57,6 +57,7 @@ class AnalysisBase(ABC):
             # "text_color": "#0F52BA",
         }
         self.accordions_open = False
+        self.plot_output1 = Output()
 
     def init_widgets(self):
         """
@@ -375,8 +376,8 @@ class AnalysisBase(ABC):
         self.use_altered_button.button_style = "info"
         self.use_altered_button.description = "Creating analysis projections"
         self.use_altered_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections._data = copy.deepcopy(self.Import.projections.data)
-        self.projections.data = self.projections._data
+        self.projections._data = self.altered_plotter.original_imagestack
+        self.projections.data = self.altered_plotter.original_imagestack
         self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
         self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
         self.pixel_range_x = self.altered_plotter.pixel_range_x
@@ -628,7 +629,6 @@ class Align(AnalysisBase):
         self.progress_shifting = IntProgress(
             description="Shifting: ", value=0, min=0, max=1
         )
-        self.plot_output1 = Output()
         self.plot_output2 = Output()
 
         # -- Button to start alignment ----------------------------------------
@@ -815,7 +815,6 @@ class Recon(AnalysisBase):
 
     def init_widgets(self):
         super().init_widgets()
-        self.plot_output1 = Output()
         self.plot_output2 = Output()
 
         # -- Button to start alignment ----------------------------------------
@@ -950,6 +949,7 @@ class Recon(AnalysisBase):
                 self.save_options_accordion,
                 self.options_accordion,
                 start_button_hb,
+                self.plot_output1,
             ]
         )
 
