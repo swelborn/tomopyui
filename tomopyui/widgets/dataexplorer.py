@@ -191,8 +191,19 @@ class Filebrowser:
 
         # parent directory filechooser
         self.orig_data_fc = FileChooser()
+        self.orig_data_fc.show_only_dirs = True
         self.orig_data_fc.register_callback(self.update_orig_data_folder)
         self.fc_label = Label("Original Data", layout=Layout(justify_content="Center"))
+        self.quick_path_search = Textarea(
+            placeholder=r"Z:\swelborn\your\folder\with\normalized\projections",
+            style=extend_description_style,
+            disabled=False,
+            layout=Layout(align_items="stretch"),
+        )
+        self.quick_path_search.observe(
+            self.update_filechooser_from_quicksearch, names="value"
+        )
+        self.quick_path_label = Label("Quick path search")
 
         # subdirectory selector
         self.subdir_list = []
@@ -204,8 +215,8 @@ class Filebrowser:
         self.selected_subdir = None
 
         # method selector
-        self.methods_label = Label("Methods", layout=Layout(justify_content="Center"))
         self.methods_list = []
+        self.methods_label = Label("Methods", layout=Layout(justify_content="Center"))
         self.methods_selector = Select(
             options=self.methods_list, rows=5, disabled=False
         )
@@ -213,14 +224,11 @@ class Filebrowser:
         self.selected_method = None
 
         # data selector
-        self.data_label = Label("Data", layout=Layout(justify_content="Center"))
         self.data_list = []
+        self.data_label = Label("Data", layout=Layout(justify_content="Center"))
         self.data_selector = Select(options=self.data_list, rows=5, disabled=False)
         self.data_selector.observe(self.set_data_filename, names="value")
         self.allowed_extensions = (".npy", ".tif", ".tiff")
-        self.selected_data_filename = None
-        self.selected_data_ftype = None
-        self.selected_analysis_type = None
         self.options_metadata_table_output = Output()
 
         # load data button
@@ -230,6 +238,38 @@ class Filebrowser:
             button_style="info",
             layout=Layout(width="75px", height="86px"),
         )
+
+    def _init_lists(self):
+        self.subdir_list = []
+        self.subdir_selector.options = []
+        self.selected_subdir = None
+        self.methods_list = []
+        self.selected_method = None
+        self.data_list = []
+        self.data_selector.options = []
+        self.selected_data_filename = None
+        self.selected_data_ftype = None
+        self.selected_analysis_type = None
+
+
+    def update_filechooser_from_quicksearch(self, change):
+        self._init_lists()
+        path = pathlib.Path(change.new)
+        try:
+            self.orig_data_fc.reset(path=path)
+        except Exception as e:
+            with self.options_metadata_table_output:
+                self.options_metadata_table_output.clear_output(wait=True)
+                print(f"{e}")
+            return
+        else:
+            self.root_filedir = path
+
+    def update_orig_data_folder(self):
+        self._init_lists()
+        self.root_filedir = pathlib.Path(self.orig_data_fc.selected_path)
+        self.quick_path_search.value = str(self.root_filedir)
+        self.populate_subdirs_list()
 
     def populate_subdirs_list(self):
         self.subdir_list = [
@@ -241,14 +281,11 @@ class Filebrowser:
             if any(x in subdir.parts[-1] for x in ("-align", "-recon"))
         ]
         self.subdir_selector.options = self.subdir_list
+        self.subdir_selector.value = self.subdir_selector.options[0]
+        self.populate_methods_list()
 
-    def update_orig_data_folder(self):
-        self.root_filedir = pathlib.Path(self.orig_data_fc.selected_path)
-        self.populate_subdirs_list()
-        self.methods_selector.options = []
-
-    def populate_methods_list(self, change):
-        self.selected_subdir = pathlib.Path(self.root_filedir) / change.new
+    def populate_methods_list(self, *args):
+        self.selected_subdir = pathlib.Path(self.root_filedir) / self.subdir_selector.value
         self.methods_list = [
             pathlib.Path(f) for f in os.scandir(self.selected_subdir) if f.is_dir()
         ]
@@ -258,11 +295,14 @@ class Filebrowser:
             if not any(x in subdir.parts[-1] for x in ("-align", "-recon"))
         ]
         self.methods_selector.options = self.methods_list
+        if len(self.methods_list) > 0:
+            self.methods_selector.value = self.methods_list[0]
 
-    def populate_data_list(self, change):
-        if change.new is not None:
+
+    def populate_data_list(self, *args):
+        if len(self.methods_list) > 0:
             self.selected_method = (
-                pathlib.Path(self.root_filedir) / self.selected_subdir / change.new
+                pathlib.Path(self.root_filedir) / self.selected_subdir / self.methods_selector.value
             )
             self.file_list = [
                 pathlib.Path(f)
@@ -302,6 +342,13 @@ class Filebrowser:
                 display(self.options_table)
 
     def create_app(self):
+        quickpath = VBox(
+                    [
+                        self.quick_path_label,
+                        self.quick_path_search,
+                    ],
+                    layout=Layout(align_items="center"),
+                )
         fc = VBox([self.fc_label, self.orig_data_fc])
         subdir = VBox([self.subdir_label, self.subdir_selector])
         methods = VBox([self.methods_label, self.methods_selector])
@@ -318,7 +365,7 @@ class Filebrowser:
             align_items="stretch",
         )
         box = VBox(
-            [top_hb, self.options_metadata_table_output],
+            [quickpath, top_hb, self.options_metadata_table_output],
             layout=Layout(justify_content="center", align_items="center"),
         )
         self.app = box
