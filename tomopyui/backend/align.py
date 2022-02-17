@@ -51,6 +51,7 @@ class TomoAlign:
         self.Align = Align
         self.center = Align.center
         self.projections = Align.projections
+        self.data_before_align = deepcopy(Align.Import.projections.data)
         self.angles_rad = Align.projections.angles_rad
         self.wd_parent = Align.projections.filedir
         self.metadata = Align.metadata.copy()
@@ -216,7 +217,7 @@ class TomoAlign:
         np.save("conv", self.conv)
 
     def _shift_prjs_after_alignment(self):
-        new_prj_imgs = deepcopy(self.projections.data)
+        new_prj_imgs = self.data_before_align
         new_prj_imgs, self.pad = pad_projections(new_prj_imgs, self.pad)
         if self.current_align_is_cuda:
             new_prj_imgs = shift_prj_cp(
