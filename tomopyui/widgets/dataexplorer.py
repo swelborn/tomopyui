@@ -241,17 +241,15 @@ class Filebrowser:
 
     def _init_lists(self):
         self.data_list = []
-        # self.data_selector.options = self.data_list
         self.selected_data_filename = None
         self.selected_data_ftype = None
         self.selected_subdir = None
         self.methods_list = []
-        # self.methods_selector.options = self.methods_list
         self.selected_method = None
         self.subdir_list = []
-        # self.subdir_selector.options = self.subdir_list
         self.selected_analysis_type = None
-    
+        self.populate_subdirs_list()
+
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
         try:
@@ -263,12 +261,11 @@ class Filebrowser:
             return
         else:
             self.root_filedir = path
+            self._init_lists()
 
     def update_orig_data_folder(self):
-        self._init_lists()
         self.root_filedir = pathlib.Path(self.orig_data_fc.selected_path)
         self.quick_path_search.value = str(self.root_filedir)
-        self.populate_subdirs_list()
 
     def populate_subdirs_list(self):
         self.subdir_list = [
@@ -283,41 +280,56 @@ class Filebrowser:
             self.subdir_selector.options = self.subdir_list
             self.subdir_selector.value = self.subdir_selector.options[0]
             self.populate_methods_list()
+        else:
+            self.data_selector.options = []
+            self.methods_selector.options = []
+            self.subdir_selector.options = []
+            
+            
 
     def populate_methods_list(self, *args):
-        self.selected_subdir = pathlib.Path(self.root_filedir) / self.subdir_selector.value
-        self.methods_list = [
-            pathlib.Path(f) for f in os.scandir(self.selected_subdir) if f.is_dir()
-        ]
-        self.methods_list = [
-            subdir.parts[-1]
-            for subdir in self.methods_list
-            if not any(x in subdir.parts[-1] for x in ("-align", "-recon"))
-        ]
-        if self.methods_list != []:
-            self.methods_selector.options = self.methods_list
-            self.methods_selector.value = self.methods_list[0]
-            self.populate_data_list()
+        if self.subdir_selector.options != tuple():
+            self.selected_subdir = pathlib.Path(self.root_filedir) / self.subdir_selector.value
+            self.methods_list = [
+                pathlib.Path(f) for f in os.scandir(self.selected_subdir) if f.is_dir()
+            ]
+            self.methods_list = [
+                subdir.parts[-1]
+                for subdir in self.methods_list
+                if not any(x in subdir.parts[-1] for x in ("-align", "-recon"))
+            ]
+            if self.methods_list != []:
+                self.methods_selector.options = self.methods_list
+                self.methods_selector.value = self.methods_list[0]
+                self.populate_data_list()
+            else:
+                self.data_selector.options = []
+                self.methods_selector.options = []
+                
 
     def populate_data_list(self, *args):
-        self.selected_method = (
-            pathlib.Path(self.root_filedir) / self.selected_subdir / self.methods_selector.value
-        )
-        self.file_list = [
-            pathlib.Path(f)
-            for f in os.scandir(self.selected_method)
-            if not f.is_dir()
-        ]
-        self.data_list = [
-            file.name
-            for file in self.file_list
-            if any(x in file.name for x in self.allowed_extensions)
-        ]
-        self.data_selector.options = self.data_list
-        self.load_metadata()
+        if self.methods_selector.options != tuple():
+            self.selected_method = (
+                pathlib.Path(self.root_filedir) / self.selected_subdir / self.methods_selector.value
+            )
+            self.file_list = [
+                pathlib.Path(f)
+                for f in os.scandir(self.selected_method)
+                if not f.is_dir()
+            ]
+            self.data_list = [
+                file.name
+                for file in self.file_list
+                if any(x in file.name for x in self.allowed_extensions)
+            ]
+            if self.data_list != []:
+                self.data_selector.options = self.data_list
+                self.load_metadata()
+            else:
+                self.data_selector.options = []
 
     def set_data_filename(self, change):
-        if self.data_selector.options != []:
+        if self.data_selector.options != tuple():
             self.selected_data_filename = change.new
             self.selected_data_fullpath = self.selected_method / self.selected_data_filename
             self.selected_data_ftype = pathlib.Path(self.selected_data_filename).suffix
