@@ -961,7 +961,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                 df = df.join(newdf)
 
         # set datatable styles
-        s = df.style.hide_index()
+        s = df.style.hide(axis='index')
         s.set_table_styles(
             {
                 ("Acquisition Information", "Repeat Scan"): [
@@ -1078,7 +1078,7 @@ def metadata_to_DataFrame(metadata):
     }
     sr = pd.Series(metadata_frame)
     df = pd.DataFrame(sr).transpose()
-    s = df.style.hide_index()
+    s = df.style.hide(axis='index')
     s.set_table_styles(
         [
             {"selector": "th.col_heading", "props": "text-align: center;"},
