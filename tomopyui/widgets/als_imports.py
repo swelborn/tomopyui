@@ -263,7 +263,7 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
                 df = df.join(newdf)
 
         # set datatable styles
-        s = df.style.hide_index()
+        s = df.style.hide(axis="index")
         s.set_table_styles(
             {
                 ("Acquisition Information", "Repeat Scan"): [
