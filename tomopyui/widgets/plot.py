@@ -329,11 +329,14 @@ class BqImPlotter(ImPlotterBase, ABC):
 
     def downsample_imagestack(self, imagestack):
         self.imagestack = copy.deepcopy(imagestack)
-        self.imagestack = rescale(
-            self.imagestack,
-            (1, self.downsample_factor, self.downsample_factor),
-            anti_aliasing=False,
-        )
+        if self.downsample_factor == 1:
+            return
+        else:
+            self.imagestack = rescale(
+                self.imagestack,
+                (1, self.downsample_factor, self.downsample_factor),
+                anti_aliasing=False,
+            )
         self.image_index_slider.value = 0
         self.plotted_image.image = self.imagestack[0]
 
@@ -388,12 +391,17 @@ class BqImPlotter(ImPlotterBase, ABC):
 
     # Image plot
     def plot(
-        self, imagestack, filedir, io=None, precomputed_hists=None, nm_per_px=None
+        self,
+        imagestack,
+        filedir,
+        io=None,
+        precomputed_hists=None,
+        current_pixel_size=None,
     ):
         self.precomputed_hists = precomputed_hists
         self.io = io
         self.filedir = filedir
-        self.nm_per_px = nm_per_px
+        self.current_pixel_size = current_pixel_size
         self.pxX = imagestack.shape[2]
         self.pxY = imagestack.shape[1]
         self.original_imagestack = imagestack
@@ -618,7 +626,7 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
         self.imagestack = np.array(self.Analysis.Import.projections.data_ds[1])
         self.downsample_factor = 0.25
         self.downsample_viewer_textbox.value = self.downsample_factor
-        self.nm_per_px = self.Analysis.Import.projections.nm_per_px
+        self.current_pixel_size = self.Analysis.Import.projections.current_pixel_size
         self.precomputed_hists = self.Analysis.Import.projections.hists
         # self.downsample_imagestack(self.original_imagestack)
         self.current_image_ind = 0
@@ -665,12 +673,14 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
         ]
         self.pixel_range_y = np.around(self.pixel_range[:, 1] * (self.pxY - 1))
         self.pixel_range_y = [int(x) for x in self.pixel_range_y]
-        if self.nm_per_px is not None:
+        if self.current_pixel_size is not None:
             self.nm_x = int(
-                (self.pixel_range_x[1] - self.pixel_range_x[0]) * self.nm_per_px
+                (self.pixel_range_x[1] - self.pixel_range_x[0])
+                * self.current_pixel_size
             )
             self.nm_y = int(
-                (self.pixel_range_y[1] - self.pixel_range_y[0]) * self.nm_per_px
+                (self.pixel_range_y[1] - self.pixel_range_y[0])
+                * self.current_pixel_size
             )
             self.micron_x = round(self.nm_x / 1000, 2)
             self.micron_y = round(self.nm_y / 1000, 2)
@@ -792,7 +802,7 @@ class BqImPlotter_Center(BqImPlotter_Import_Analysis):
         self.imagestack = np.array(self.Center.Import.projections.data_ds[1])
         self.downsample_factor = 0.25
         self.downsample_viewer_textbox.value = self.downsample_factor
-        self.nm_per_px = self.Center.Import.projections.nm_per_px
+        self.current_pixel_size = self.Center.Import.projections.current_pixel_size
         self.precomputed_hists = self.Center.Import.projections.hists
         # self.downsample_imagestack(self.original_imagestack)
         self.current_image_ind = 0
@@ -949,7 +959,6 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
     def copy_parent_projections(self, *args):
         self.plot()
         self.hist.hists = copy.copy(self.plotter_parent.hist.hists)
-        # self.hist.hists_swapaxes = copy.copy(self.plotter_parent.hist.hists_swapaxes)
         self.hist.selector = bq.interacts.BrushIntervalSelector(
             orientation="vertical",
             scale=self.plotter_parent.hist.x_sc,
@@ -1200,8 +1209,8 @@ class BqImHist:
         self.fig.scale_y = bq.LinearScale()
 
         if self.implotter.precomputed_hists is not None:
-            self.bin_centers = self.implotter.precomputed_hists[3]["bin_centers"]
-            self.frequency = self.implotter.precomputed_hists[3]["frequency"]
+            self.bin_centers = self.implotter.precomputed_hists[-1]["bin_centers"]
+            self.frequency = self.implotter.precomputed_hists[-1]["frequency"]
             self.hists = [
                 bq.Bars(
                     x=self.bin_centers,
@@ -1272,8 +1281,8 @@ class ScaleBar:
         # sc_y = LinearScale(min=1, max=0)
 
         # pxX = 1024
-        # nm_per_px = 30
-        # px_per_micron = 1000 / nm_per_px
+        # current_pixel_size = 30
+        # px_per_micron = 1000 / current_pixel_size
         # px_per_micron_half = px_per_micron / 2
         # x_px_center = 0.85 * pxX
         # num_microns = 5

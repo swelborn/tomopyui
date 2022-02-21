@@ -43,12 +43,12 @@ class TomoAlign:
         self.metadata["parent_filename"] = self.projections.filename
         self.metadata["angle_start"] = self.projections.angles_deg[0]
         self.metadata["angle_end"] = self.projections.angles_deg[-1]
-
         self.make_wd()
         self.run()
 
     def _set_attributes_from_frontend(self, Align):
         self.Align = Align
+        self.import_metadata = self.Align.projections.metadata
         self.center = Align.center
         self.projections = Align.projections
         self.data_before_align = deepcopy(Align.Import.projections.data)
@@ -184,23 +184,20 @@ class TomoAlign:
         os.mkdir(savedir)
         os.chdir(savedir)
         self.metadata["savedir"] = os.getcwd()
-        save_metadata("metadata.json", self.metadata)
+        save_metadata("alignment_metadata.json", self.metadata)
+        save_metadata("import_metadata.json", self.import_metadata)
         if self.metadata["save_opts"]["tomo_after"]:
             if self.metadata["save_opts"]["npy"]:
                 np.save("projections_after_alignment", self.projections_aligned)
             if self.metadata["save_opts"]["tiff"]:
-                tf.imwrite(
-                    "projections_after_alignment.tif", self.projections_aligned
-                )
+                tf.imwrite("projections_after_alignment.tif", self.projections_aligned)
 
             # defaults to at least saving tiff if none are checked
             if (
                 not self.metadata["save_opts"]["tiff"]
                 and not self.metadata["save_opts"]["npy"]
             ):
-                tf.imwrite(
-                    "projections_after_alignment.tif", self.projections_aligned
-                )
+                tf.imwrite("projections_after_alignment.tif", self.projections_aligned)
         if self.metadata["save_opts"]["recon"] and self.current_align_is_cuda:
             if self.metadata["save_opts"]["npy"]:
                 np.save("last_recon", self.recon)
