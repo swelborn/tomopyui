@@ -406,7 +406,7 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.pxY = imagestack.shape[1]
         self.original_imagestack = imagestack
         if self.io is not None:
-            self.imagestack = np.array(self.io.data_ds[1])
+            self.imagestack = np.array(self.io.data_ds[0])
             self.downsample_factor = 0.25
             self.downsample_viewer_textbox.value = self.downsample_factor
         else:
@@ -623,7 +623,7 @@ class BqImPlotter_Import_Analysis(BqImPlotter):
         self.pxX = self.original_imagestack.shape[2]
         self.pxY = self.original_imagestack.shape[1]
         self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = np.array(self.Analysis.Import.projections.data_ds[1])
+        self.imagestack = np.array(self.Analysis.Import.projections.data_ds[0])
         self.downsample_factor = 0.25
         self.downsample_viewer_textbox.value = self.downsample_factor
         self.current_pixel_size = self.Analysis.Import.projections.current_pixel_size
@@ -799,7 +799,7 @@ class BqImPlotter_Center(BqImPlotter_Import_Analysis):
         self.pxX = self.original_imagestack.shape[2]
         self.pxY = self.original_imagestack.shape[1]
         self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = np.array(self.Center.Import.projections.data_ds[1])
+        self.imagestack = np.array(self.Center.Import.projections.data_ds[0])
         self.downsample_factor = 0.25
         self.downsample_viewer_textbox.value = self.downsample_factor
         self.current_pixel_size = self.Center.Import.projections.current_pixel_size
