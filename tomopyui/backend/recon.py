@@ -53,6 +53,7 @@ class TomoRecon(TomoAlign):
         # updating progress bars. Probably can pass references.
         self.Recon = Recon
         self.center = Recon.center
+        self.import_metadata = self.Recon.projections.metadata
         self.projections = Recon.projections
         self.angles_rad = Recon.projections.angles_rad
         self.wd_parent = Recon.projections.filedir
@@ -93,8 +94,8 @@ class TomoRecon(TomoAlign):
         os.mkdir(savedir)
         os.chdir(savedir)
         self.metadata["savedir"] = os.getcwd()
-        save_metadata("metadata.json", self.metadata)
-
+        save_metadata("recon_metadata.json", self.metadata)
+        save_metadata("import_metadata.json", self.import_metadata)
         if self.metadata["save_opts"]["tomo_before"]:
             if self.metadata["save_opts"]["npy"]:
                 np.save("tomo", self.prjs)

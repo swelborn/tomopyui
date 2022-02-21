@@ -2,7 +2,7 @@
 from ipywidgets import *
 from abc import ABC, abstractmethod
 from tomopyui.widgets.plot import BqImPlotter_Import, BqImPlotter_DataExplorer
-from tomopyui.backend.io import Projections_Prenormalized
+from tomopyui.backend.io import Projections_Prenormalized_SSRL62
 from tomopyui.backend.io import load_metadata, metadata_to_DataFrame
 from tomopyui.widgets.analysis import Align, Recon
 from ipyfilechooser import FileChooser
@@ -53,8 +53,8 @@ class DataExplorerBase(ABC):
         self.plotter_initial.create_app()
         self.plotter_analyzed = BqImPlotter_DataExplorer(self.plotter_initial)
         self.plotter_analyzed.create_app()
-        self.projections = Projections_Prenormalized()
-        self.analyzed_projections = Projections_Prenormalized()
+        self.projections = Projections_Prenormalized_SSRL62()
+        self.analyzed_projections = Projections_Prenormalized_SSRL62()
 
     @abstractmethod
     def create_app(self):
@@ -284,12 +284,12 @@ class Filebrowser:
             self.data_selector.options = []
             self.methods_selector.options = []
             self.subdir_selector.options = []
-            
-            
 
     def populate_methods_list(self, *args):
         if self.subdir_selector.options != tuple():
-            self.selected_subdir = pathlib.Path(self.root_filedir) / self.subdir_selector.value
+            self.selected_subdir = (
+                pathlib.Path(self.root_filedir) / self.subdir_selector.value
+            )
             self.methods_list = [
                 pathlib.Path(f) for f in os.scandir(self.selected_subdir) if f.is_dir()
             ]
@@ -305,12 +305,13 @@ class Filebrowser:
             else:
                 self.data_selector.options = []
                 self.methods_selector.options = []
-                
 
     def populate_data_list(self, *args):
         if self.methods_selector.options != tuple():
             self.selected_method = (
-                pathlib.Path(self.root_filedir) / self.selected_subdir / self.methods_selector.value
+                pathlib.Path(self.root_filedir)
+                / self.selected_subdir
+                / self.methods_selector.value
             )
             self.file_list = [
                 pathlib.Path(f)
@@ -331,7 +332,9 @@ class Filebrowser:
     def set_data_filename(self, change):
         if self.data_selector.options != tuple():
             self.selected_data_filename = change.new
-            self.selected_data_fullpath = self.selected_method / self.selected_data_filename
+            self.selected_data_fullpath = (
+                self.selected_method / self.selected_data_filename
+            )
             self.selected_data_ftype = pathlib.Path(self.selected_data_filename).suffix
             if "recon" in pathlib.Path(self.selected_subdir).name:
                 self.selected_analysis_type = "recon"
@@ -353,12 +356,12 @@ class Filebrowser:
 
     def create_app(self):
         quickpath = VBox(
-                    [
-                        self.quick_path_label,
-                        self.quick_path_search,
-                    ],
-                    layout=Layout(align_items="center"),
-                )
+            [
+                self.quick_path_label,
+                self.quick_path_search,
+            ],
+            layout=Layout(align_items="center"),
+        )
         fc = VBox([self.fc_label, self.orig_data_fc])
         subdir = VBox([self.subdir_label, self.subdir_selector])
         methods = VBox([self.methods_label, self.methods_selector])

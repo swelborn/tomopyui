@@ -6,9 +6,13 @@ from abc import ABC, abstractmethod
 from tomopyui._sharedvars import *
 import time
 from tomopyui.widgets.plot import BqImPlotter_Import
-from tomopyui.backend.io import RawProjectionsXRM_SSRL62, Projections_Prenormalized
+from tomopyui.backend.io import (
+    RawProjectionsXRM_SSRL62,
+    Projections_Prenormalized_SSRL62,
+)
 import pathlib
 import functools
+from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
 
 
 class ImportBase(ABC):
@@ -36,7 +40,7 @@ class ImportBase(ABC):
         self.angle_start = -90.0
         self.angle_end = 90.0
         self.angles_textboxes = self.create_angles_textboxes()
-        self.prenorm_projections = Projections_Prenormalized()
+        self.prenorm_projections = Projections_Prenormalized_SSRL62()
         self.prenorm_uploader = PrenormUploader(self)
         self.wd = None
         self.alignmeta_uploader = MetadataUploader("Import Alignment Metadata:")
@@ -180,8 +184,9 @@ class Import_SSRL62(ImportBase):
                             ]
                         ),
                         self.raw_uploader.filechooser,
-                        self.raw_uploader.nm_per_px_textbox,
                         self.raw_uploader.energy_select_multiple,
+                        self.raw_uploader.energy_overwrite_textbox,
+                        self.raw_uploader.save_tiff_on_import_checkbox,
                     ],
                 ),
                 self.raw_uploader.plotter.app,
@@ -209,6 +214,7 @@ class Import_SSRL62(ImportBase):
             selected_index=None,
             titles=("Import and Normalize Raw Data",),
         )
+
         self.norm_import = HBox(
             [
                 VBox(
@@ -222,7 +228,6 @@ class Import_SSRL62(ImportBase):
                         ),
                         self.prenorm_uploader.filechooser,
                         HBox(self.angles_textboxes),
-                        self.prenorm_uploader.nm_per_px_textbox,
                     ],
                 ),
                 self.prenorm_uploader.plotter.app,
@@ -231,7 +236,17 @@ class Import_SSRL62(ImportBase):
         )
 
         self.prenorm_accordion = Accordion(
-            children=[self.norm_import],
+            children=[
+                VBox(
+                    [
+                        HBox(
+                            [self.prenorm_uploader.metadata_table_output],
+                            layout=Layout(justify_content="center"),
+                        ),
+                        self.norm_import,
+                    ]
+                ),
+            ],
             selected_index=None,
             titles=("Import Prenormalized Data",),
         )
@@ -265,7 +280,7 @@ class UploaderBase(ABC):
     def __init__(self):
         self.filedir = pathlib.Path()
         self.filename = pathlib.Path()
-        self.nm_per_px = None
+        self.current_pixel_size = None
         self.filechooser = FileChooser()
         self.quick_path_search = Textarea(
             placeholder=r"Z:\swelborn",
@@ -282,14 +297,27 @@ class UploaderBase(ABC):
             disabled=True,
             tooltip="Load your data into memory",
         )
-        self.nm_per_px_textbox = FloatText(
-            description="nm/px (for binning 1):",
-            style=extend_description_style,
-        )
-        self.nm_per_px_textbox.observe(self.update_nm_per_px, "value")
 
-    def update_nm_per_px(self, *args):
-        self.nm_per_px = self.nm_per_px_textbox.value
+        self.metadata_table_output = Output()
+
+    def check_filepath_exists(self, path):
+        self.filename = None
+        self.filedir = None
+        try:
+            self.filechooser.reset(path=path)
+        except InvalidPathError:
+            try:
+                self.filechooser.reset(path=path.parent)
+            except InvalidPathError as e:
+                raise InvalidPathError
+            except InvalidFileNameError as e:
+                raise InvalidFileNameError
+            else:
+                self.filedir = path.parent
+                if (path.parent / path.name).exists():
+                    self.filename = str(path.name)
+        else:
+            self.filedir = path
 
     @abstractmethod
     def update_filechooser_from_quicksearch(self, change):
@@ -357,20 +385,66 @@ class PrenormUploader(UploaderBase):
         self._tmp_disable_reset = False
         self.plotter = BqImPlotter_Import()
         self.plotter.create_app()
+        self.imported_metadata = False
+        self.import_status_label = Label(layout=Layout(justify_content="center"))
+        self.find_metadata_status_label = Label(layout=Layout(justify_content="center"))
 
     def update_filechooser_from_quicksearch(self, change):
-        if not self._tmp_disable_reset:
-            path = pathlib.Path(change.new)
-            if path.is_dir():
-                self.filedir = path
-                self.filechooser.reset(path=self.filedir)
-            elif any(x in file.name for x in self.projections.allowed_extensions):
-                self.filedir = path.parent
-                self.filename = path.name
-            self.filechooser.reset(path=self.filedir)
-            if self.check_for_data():
-                self.import_button.button_style = "info"
-                self.import_button.disabled = False
+        path = pathlib.Path(change.new)
+        try:
+            self.check_filepath_exists(path)
+        except InvalidFileNameError:
+            self.find_metadata_status_label.value = (
+                "Invalid file name for that directory."
+            )
+            return
+        except InvalidPathError:
+            self.find_metadata_status_label.value = "Invalid path."
+            return
+        else:
+            self.import_button.button_style = "info"
+            self.import_button.disabled = False
+            with self.metadata_table_output:
+                self.metadata_table_output.clear_output(wait=True)
+                display(self.find_metadata_status_label)
+            try:
+                json_files = self.projections._file_finder(self.filedir, [".json"])
+                assert json_files != []
+            except AssertionError:
+                self.find_metadata_status_label.value = (
+                    "No .json files found in this directory."
+                    + " Make sure you input start/end angles correctly."
+                )
+                for tb in self.Import.angles_textboxes:
+                    tb.disabled = False
+                self.imported_metadata = False
+                return
+            else:
+                try:
+                    self.import_metadata_filepath = (
+                        self.filedir
+                        / [file for file in json_files if "import_metadata" in file][0]
+                    )
+                    assert self.import_metadata_filepath != []
+                except AssertionError:
+                    self.find_metadata_status_label.value = (
+                        "This directory has .json files but not an import_metadata.json"
+                        + " file. Make sure you input start/end angles correctly."
+                    )
+                    for tb in self.Import.angles_textboxes:
+                        tb.disabled = False
+                    self.imported_metadata = False
+                    return
+
+                else:
+                    self.projections.import_metadata(self)
+                    self.metadata_table = self.projections.metadata_to_DataFrame()
+                    with self.metadata_table_output:
+                        self.metadata_table_output.clear_output(wait=True)
+                        display(self.metadata_table)
+                    for tb in self.Import.angles_textboxes:
+                        tb.disabled = True
+                    self.imported_metadata = True
 
     def update_quicksearch_from_filechooser(self):
         self.filedir = pathlib.Path(self.filechooser.selected_path)
@@ -378,27 +452,36 @@ class PrenormUploader(UploaderBase):
         self._tmp_disable_reset = True
         self.quick_path_search.value = str(self.filedir / self.filename)
         self._tmp_disable_reset = False
-        if self.check_for_data():
-            self.import_button.button_style = "info"
-            self.import_button.disabled = False
 
     def import_data(self, change):
+        tic = time.perf_counter()
         self.import_button.button_style = "info"
         self.import_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections.set_options_from_frontend(self.Import, self)
-        if self.filechooser.selected_filename == "":
-            self.projections.import_filedir_projections(self.filedir)
+        self.angle_start = self.Import.angle_start
+        self.angle_end = self.Import.angle_end
+        with self.metadata_table_output:
+            self.metadata_table_output.clear_output(wait=True)
+            if self.imported_metadata:
+                display(self.metadata_table)
+            display(self.import_status_label)
+        if self.filename == "" or self.filename is None:
+            self.import_status_label.value = "Importing file directory."
+            self.projections.import_filedir_projections(self)
         else:
-            self.projections.import_file_projections(self.filedir / self.filename)
-        self.projections.save_normalized_as_npy()
-        self.projections._check_downsampled_data()
-        self.projections.nm_per_px = self.nm_per_px_textbox.value
+            self.import_status_label.value = "Importing single file."
+            self.projections.import_file_projections(self)
+        self.import_status_label.value = "Checking for downsampled data."
+        self.projections._check_downsampled_data(label=self.import_status_label)
+        self.import_status_label.value = (
+            "Plotting data (downsampled for viewer to 0.25x)."
+        )
         self.plotter.plot(
             self.projections.prj_imgs,
             self.projections.filedir,
             io=self.projections,
             precomputed_hists=self.projections.hists,
         )
+        toc = time.perf_counter()
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
         self.Import.use_raw_button.icon = ""
@@ -411,16 +494,9 @@ class PrenormUploader(UploaderBase):
         self.Import.use_prenorm_button.description = (
             "Click to use prenormalized data from the Import tab."
         )
-
-    def check_for_data(self):
-        file_list = self.projections._file_finder(
-            self.filedir, self.projections.allowed_extensions
+        self.import_status_label.value = (
+            f"Import, downsampling (if any), and plotting complete in ~{toc-tic:.0f}s."
         )
-
-        if len(file_list) > 0:
-            return True
-        else:
-            return False
 
 
 class RawUploader_SSRL62(UploaderBase):
@@ -429,12 +505,7 @@ class RawUploader_SSRL62(UploaderBase):
     def __init__(self, Import):
         super().__init__()
         self._init_widgets()
-        self.energy_select_multiple = SelectMultiple(
-            options=["7700.00", "7800.00", "7900.00"],
-            rows=3,
-            description="Energies (eV): ",
-            disabled=True,
-        )
+        self.user_overwrite_energy = False
         self.projections = Import.raw_projections
         self.Import = Import
         self.import_button.on_click(self.import_data)
@@ -448,7 +519,6 @@ class RawUploader_SSRL62(UploaderBase):
         self.filechooser.title = "Choose a Raw XRM File Directory"
 
     def _init_widgets(self):
-        self.metadata_table_output = Output()
         self.progress_output = Output()
         self.upload_progress = IntProgress(
             description="Uploading: ",
@@ -457,23 +527,57 @@ class RawUploader_SSRL62(UploaderBase):
             max=100,
             layout=Layout(justify_content="center"),
         )
+        self.energy_select_multiple = SelectMultiple(
+            options=["7700.00", "7800.00", "7900.00"],
+            rows=3,
+            description="Energies (eV): ",
+            disabled=True,
+            style=extend_description_style,
+        )
+        self.energy_overwrite_textbox = FloatText(
+            description="Overwrite Energy (eV): ",
+            style=extend_description_style,
+            disabled=True,
+        )
+        self.energy_overwrite_textbox.observe(self.energy_overwrite, names="value")
+        self.save_tiff_on_import_checkbox = Checkbox(
+            description="Save .tif on import.",
+            value=False,
+            style=extend_description_style,
+            disabled=False,
+        )
+
+    def energy_overwrite(self, *args):
+        if (
+            self.energy_overwrite_textbox.value
+            != self.projections.energies_list_float[0]
+            and self.energy_overwrite_textbox.value is not None
+        ):
+            self.user_input_energy_float = self.energy_overwrite_textbox.value
+            self.user_input_energy_str = str(f"{self.user_input_energy_float:08.2f}")
+            self.energy_select_multiple.options = [
+                self.user_input_energy_str,
+            ]
+            self.projections.pixel_sizes = [
+                self.projections.calculate_px_size(
+                    self.user_input_energy_float, self.projections.binning
+                )
+            ]
+
+            self.user_overwrite_energy = True
 
     def import_data(self, change):
+
         tic = time.perf_counter()
         self.import_button.button_style = "info"
         self.import_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections.import_filedir_all(self.filedir, self)
-        self.projections.nm_per_px = self.nm_per_px_textbox.value
+        self.projections.import_filedir_all(self)
         toc = time.perf_counter()
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
-        with self.progress_output:
-            display(
-                Label(
-                    f"Import and normalization took {toc-tic:.0f}s",
-                    layout=Layout(justify_content="center"),
-                )
-            )
+        self.projections.status_label.value = (
+            f"Import and normalization took {toc-tic:.0f}s"
+        )
         self.plotter.plot(
             self.projections.prj_imgs,
             self.projections.filedir,
@@ -483,16 +587,7 @@ class RawUploader_SSRL62(UploaderBase):
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
-        try:
-            self.filechooser.reset(path=path)
-        except Exception as e:
-            with self.metadata_table_output:
-                self.metadata_table_output.clear_output(wait=True)
-                print(f"{e}")
-            return
-        else:
-            self.filedir = path
-
+        self.check_filepath_exists(path)
         try:
             textfiles = self.projections._file_finder(path, [".txt"])
             assert textfiles != []
@@ -524,7 +619,8 @@ class RawUploader_SSRL62(UploaderBase):
             return
 
         else:
-            self.projections.import_metadata(path, self)
+            self.user_overwrite_energy = False
+            self.projections.import_metadata(self)
             self.metadata_table = self.projections.metadata_to_DataFrame()
             with self.metadata_table_output:
                 self.metadata_table_output.clear_output(wait=True)
@@ -537,13 +633,19 @@ class RawUploader_SSRL62(UploaderBase):
         self.filedir = pathlib.Path(self.filechooser.selected_path)
         self.filename = self.filechooser.selected_filename
         self.quick_path_search.value = str(self.filedir)
-        # metadata must be set here in case tomodata is created (for filedir
-        # import). this can be changed later.
-        self.projections.import_metadata(self.filedir, self)
+        self.user_overwrite_energy = False
+        self.projections.import_metadata(self)
         self.metadata_table = self.projections.metadata_to_DataFrame()
-
         with self.metadata_table_output:
             self.metadata_table_output.clear_output(wait=True)
             display(self.metadata_table)
-            self.import_button.button_style = "info"
-            self.import_button.disabled = False
+        self.import_button.button_style = "info"
+        self.import_button.disabled = False
+        if self.projections.energy_guessed:
+            self.energy_overwrite_textbox.disabled = False
+            self.energy_overwrite_textbox.value = self.projections.energies_list_float[
+                0
+            ]
+        else:
+            self.energy_overwrite_textbox.disabled = True
+            self.energy_overwrite_textbox.value = None
