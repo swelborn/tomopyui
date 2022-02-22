@@ -98,6 +98,7 @@ class IOBase:
 
     def _write_downsampled_data(self):
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
+        #TODO: make parallel on individual slices of data. see bottom of this .py (archived code)
         ds_data = Parallel(n_jobs=int(os.environ["num_cpu_cores"]))(
             delayed(rescale)(self.data, x) for x in self.ds_vals
         )
@@ -158,7 +159,7 @@ class ProjectionsBase(IOBase, ABC):
 
     def __init__(self):
         super().__init__()
-        self.ds_vals = [(1, 0.25, 0.25), (1, 0.5, 0.5), (1, 0.75, 0.75)]
+        self.ds_vals = [(1, 0.25, 0.25)]
         self.angles_rad = None
         self.angles_deg = None
         self.allowed_extensions = [".npy", ".tiff", ".tif"]
@@ -1424,3 +1425,36 @@ def parse_printed_time(timedict):
 # self.flats_ind = [
 #     j for j in flats_ind_positions for i in range(self.metadata["REFNEXPOSURES"])
 # ]
+
+
+# FOR PARALLEL skimage functions on image sets
+# from skimage.restoration import denoise_nl_means, estimate_sigma
+# import numpy as np
+
+# def hello(i, images=None):
+#     print(f"started fct {i}")
+#     print(f"{images[i].shape}")
+#     patch_kw = dict(patch_size=20,      # 20x20 patches
+#                 patch_distance=6)
+#     sigma_est = np.mean(estimate_sigma(images[i]))
+#     print(f'estimated noise standard deviation = {sigma_est}')
+#     return denoise_nl_means(images[i], h=1.5 * sigma_est, sigma=sigma_est,
+#                                  fast_mode=True, **patch_kw)
+
+# import multiprocessing as mp
+# from skimage.restoration import denoise_nl_means, estimate_sigma
+# from functools import partial
+# import numpy as np
+# import copy
+
+# images = np.load(r"E:\Sam_Welborn\20220118_Welborn\2_6_4_xerion_Ni\2_6_4_xerion_fast_TOMO_220118_234614\normalized_projections.npy")
+
+# global _process_image_memory_fix
+
+# def process_images5(n):
+#     with mp.Pool() as pool:
+#         print("started pool")
+#         hello_partial = partial(hello,images=images)
+#         return pool.map(hello_partial, range(n))
+
+# den = process_images5(images.shape[0])
