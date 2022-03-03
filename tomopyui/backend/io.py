@@ -21,6 +21,8 @@ import dask
 import os
 import shutil
 import copy
+import multiprocessing as mp
+from functools import partial
 
 
 class IOBase:
@@ -99,6 +101,9 @@ class IOBase:
     def _write_downsampled_data(self):
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
         #TODO: make parallel on individual slices of data. see bottom of this .py (archived code)
+        # ds_data = [rescale_parallel_pool(self.pxZ, self.data, ds_vals_list) for ds_vals_list in self.ds_vals]
+        # :
+        #     ds_data.append(rescale_parallel_pool(self.pxZ, self.data, self.ds_vals))
         ds_data = Parallel(n_jobs=int(os.environ["num_cpu_cores"]))(
             delayed(rescale)(self.data, x) for x in self.ds_vals
         )
@@ -125,6 +130,7 @@ class IOBase:
                 bin_centers=bin_center,
             )
         self._load_ds_and_hists()
+
 
     def _load_ds_and_hists(self):
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
@@ -363,7 +369,7 @@ class Projections_Prenormalized_SSRL62(Projections_Prenormalized):
                 f"Energy ({en_units})": self.metadata["energy_str"],
                 f"Pixel Size ({px_units})": f"{px_size:0.2f}",
                 "Start θ (°)": f"{start_angle:0.1f}",
-                "End θ (°)": f"{start_angle:0.1f}",
+                "End θ (°)": f"{end_angle:0.1f}",
                 "Scan Type": self.metadata["scan_type"],
                 "Ref. Exp. Time": exp_time_ref,
                 "Proj. Exp. Time": exp_time_proj,
@@ -1413,6 +1419,16 @@ def parse_printed_time(timedict):
     time = f"{time:.1f}"
     return time, title
 
+def rescale_parallel(i, images=None, ds_factor_list=None):
+    print(i)
+    print(ds_factor_list)
+    return rescale(images[i], (ds_factor_list[1], ds_factor_list[2]))
+
+def rescale_parallel_pool(n, images, ds_factor_list):
+    with mp.Pool() as pool:
+        rescale_partial = partial(rescale_parallel, images=images, ds_factor_list=ds_factor_list)
+        return pool.map(rescale_partial, range(n))
+
 
 # ARCHIVE:
 
@@ -1425,36 +1441,3 @@ def parse_printed_time(timedict):
 # self.flats_ind = [
 #     j for j in flats_ind_positions for i in range(self.metadata["REFNEXPOSURES"])
 # ]
-
-
-# FOR PARALLEL skimage functions on image sets
-# from skimage.restoration import denoise_nl_means, estimate_sigma
-# import numpy as np
-
-# def hello(i, images=None):
-#     print(f"started fct {i}")
-#     print(f"{images[i].shape}")
-#     patch_kw = dict(patch_size=20,      # 20x20 patches
-#                 patch_distance=6)
-#     sigma_est = np.mean(estimate_sigma(images[i]))
-#     print(f'estimated noise standard deviation = {sigma_est}')
-#     return denoise_nl_means(images[i], h=1.5 * sigma_est, sigma=sigma_est,
-#                                  fast_mode=True, **patch_kw)
-
-# import multiprocessing as mp
-# from skimage.restoration import denoise_nl_means, estimate_sigma
-# from functools import partial
-# import numpy as np
-# import copy
-
-# images = np.load(r"E:\Sam_Welborn\20220118_Welborn\2_6_4_xerion_Ni\2_6_4_xerion_fast_TOMO_220118_234614\normalized_projections.npy")
-
-# global _process_image_memory_fix
-
-# def process_images5(n):
-#     with mp.Pool() as pool:
-#         print("started pool")
-#         hello_partial = partial(hello,images=images)
-#         return pool.map(hello_partial, range(n))
-
-# den = process_images5(images.shape[0])
