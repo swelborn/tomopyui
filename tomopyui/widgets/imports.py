@@ -457,8 +457,9 @@ class PrenormUploader(UploaderBase):
         tic = time.perf_counter()
         self.import_button.button_style = "info"
         self.import_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.angle_start = self.Import.angle_start
-        self.angle_end = self.Import.angle_end
+        if not self.imported_metadata:
+            self.angle_start = self.Import.angle_start
+            self.angle_end = self.Import.angle_end
         with self.metadata_table_output:
             self.metadata_table_output.clear_output(wait=True)
             if self.imported_metadata:
