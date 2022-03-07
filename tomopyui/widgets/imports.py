@@ -10,9 +10,11 @@ from tomopyui.backend.io import (
     RawProjectionsXRM_SSRL62,
     Projections_Prenormalized_SSRL62,
 )
+import numpy as np
 import pathlib
 import functools
 from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
+import re
 
 
 class ImportBase(ABC):
@@ -176,6 +178,7 @@ class Import_SSRL62(ImportBase):
             [
                 VBox(
                     [
+                        self.raw_uploader.file_chooser_label,
                         self.raw_uploader.quick_path_label,
                         HBox(
                             [
@@ -184,9 +187,17 @@ class Import_SSRL62(ImportBase):
                             ]
                         ),
                         self.raw_uploader.filechooser,
+                        self.raw_uploader.energy_select_label,
                         self.raw_uploader.energy_select_multiple,
                         self.raw_uploader.energy_overwrite_textbox,
                         self.raw_uploader.save_tiff_on_import_checkbox,
+                        VBox(
+                            [
+                                self.raw_uploader.already_uploaded_energies_label,
+                                self.raw_uploader.already_uploaded_energies_select,
+                            ],
+                            layout=Layout(align_content="center"),
+                        ),
                     ],
                 ),
                 self.raw_uploader.plotter.app,
@@ -228,6 +239,12 @@ class Import_SSRL62(ImportBase):
                         ),
                         self.prenorm_uploader.filechooser,
                         HBox(self.angles_textboxes),
+                        HBox(
+                            [
+                                self.prenorm_uploader.renormalize_by_roi_button,
+                                self.prenorm_uploader.overwrite_normalized_button,
+                            ]
+                        ),
                     ],
                 ),
                 self.prenorm_uploader.plotter.app,
@@ -385,9 +402,56 @@ class PrenormUploader(UploaderBase):
         self._tmp_disable_reset = False
         self.plotter = BqImPlotter_Import()
         self.plotter.create_app()
+        self.renormalize_by_roi_button = Button(
+            description="Click to normalize by ROI.",
+            button_style="info",
+            layout=Layout(width="auto", height="auto", align_items="stretch"),
+            disabled=True,
+            # style={"font_size": "18px"},
+        )
+        self.renormalize_by_roi_button.on_click(self.renormalize_by_roi)
+        self.overwrite_normalized_button = Button(
+            description="Overwrite normalized_projections.npy?",
+            button_style="info",
+            layout=Layout(width="auto", height="auto", align_items="stretch"),
+            disabled=True,
+            # style={"font_size": "18px"},
+        )
+        self.overwrite_normalized_button.on_click(self.overwrite_normalized)
         self.imported_metadata = False
         self.import_status_label = Label(layout=Layout(justify_content="center"))
         self.find_metadata_status_label = Label(layout=Layout(justify_content="center"))
+        self.plotter.rectangle_selector_button.observe(self.rectangle_selector_on)
+        self.plotter.rectangle_selector_on = False
+
+    def renormalize_by_roi(self, change):
+        self.renormalize_by_roi_button.description = "Renormalizing."
+        self.renormalize_by_roi_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.projections.renormalize_by_roi(self)
+        self.plotter.downsample_factor = 1
+        self.plotter.plot(
+            self.projections.prj_imgs,
+            self.projections.filedir,
+            io=self.projections,
+            precomputed_hists=self.projections.hists,
+            current_pixel_size=self.projections.current_pixel_size,
+        )
+        self.renormalize_by_roi_button.icon = "fa-check-square"
+        self.renormalize_by_roi_button.description = "Finished renormalizing."
+        self.overwrite_normalized_button.disabled = False
+
+    def overwrite_normalized(self, change):
+        np.save(
+            self.projections.filedir / "normalized_projections.npy",
+            self.projections.data,
+        )
+
+    def rectangle_selector_on(self, change):
+        time.sleep(0.1)
+        if self.plotter.rectangle_selector_on:
+            self.renormalize_by_roi_button.disabled = False
+        else:
+            self.renormalize_by_roi_button.disabled = True
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
@@ -481,6 +545,7 @@ class PrenormUploader(UploaderBase):
             self.projections.filedir,
             io=self.projections,
             precomputed_hists=self.projections.hists,
+            current_pixel_size=self.projections.current_pixel_size,
         )
         toc = time.perf_counter()
         self.import_button.button_style = "success"
@@ -520,6 +585,12 @@ class RawUploader_SSRL62(UploaderBase):
         self.filechooser.title = "Choose a Raw XRM File Directory"
 
     def _init_widgets(self):
+        self.header_font_style = {
+            "font_size": "22px",
+            "font_weight": "bold",
+            "font_variant": "small-caps",
+            # "text_color": "#0F52BA",
+        }
         self.progress_output = Output()
         self.upload_progress = IntProgress(
             description="Uploading: ",
@@ -528,12 +599,20 @@ class RawUploader_SSRL62(UploaderBase):
             max=100,
             layout=Layout(justify_content="center"),
         )
+        self.file_chooser_label = "Find data folder"
+        self.file_chooser_label = Label(
+            self.file_chooser_label, style=self.header_font_style
+        )
         self.energy_select_multiple = SelectMultiple(
             options=["7700.00", "7800.00", "7900.00"],
             rows=3,
             description="Energies (eV): ",
             disabled=True,
             style=extend_description_style,
+        )
+        self.energy_select_label = "Select energies"
+        self.energy_select_label = Label(
+            self.energy_select_label, style=self.header_font_style
         )
         self.energy_overwrite_textbox = FloatText(
             description="Overwrite Energy (eV): ",
@@ -546,6 +625,17 @@ class RawUploader_SSRL62(UploaderBase):
             value=False,
             style=extend_description_style,
             disabled=False,
+        )
+        self.already_uploaded_energies_select = Select(
+            options=["7700.00", "7800.00", "7900.00"],
+            rows=3,
+            description="Uploaded Energies (eV): ",
+            disabled=True,
+            style=extend_description_style,
+        )
+        self.already_uploaded_energies_label = "Previously uploaded energies"
+        self.already_uploaded_energies_label = Label(
+            self.already_uploaded_energies_label, style=self.header_font_style
         )
 
     def energy_overwrite(self, *args):
@@ -564,7 +654,6 @@ class RawUploader_SSRL62(UploaderBase):
                     self.user_input_energy_float, self.projections.binning
                 )
             ]
-
             self.user_overwrite_energy = True
 
     def import_data(self, change):
@@ -579,6 +668,7 @@ class RawUploader_SSRL62(UploaderBase):
         self.projections.status_label.value = (
             f"Import and normalization took {toc-tic:.0f}s"
         )
+        self.projections.filedir = self.projections.energy_filedir
         self.plotter.plot(
             self.projections.prj_imgs,
             self.projections.filedir,
@@ -628,9 +718,20 @@ class RawUploader_SSRL62(UploaderBase):
                 display(self.metadata_table)
             self.import_button.button_style = "info"
             self.import_button.disabled = False
+            self.already_uploaded_energies_select.disabled = True
+            self.check_energy_folders()
+
+    def check_energy_folders(self):
+        folders = [pathlib.Path(f) for f in os.scandir(self.filedir) if f.is_dir()]
+        reg_exp = re.compile("\d\d\d\d\d.\d\deV")
+        ener_folders = map(reg_exp.findall, [str(folder) for folder in folders])
+        self.already_uploaded_energies = [
+            str(folder[0][:-2]) for folder in ener_folders
+        ]
+        self.already_uploaded_energies_select.options = self.already_uploaded_energies
+        self.already_uploaded_energies_select.disabled = False
 
     def update_quicksearch_from_filechooser(self):
-
         self.filedir = pathlib.Path(self.filechooser.selected_path)
         self.filename = self.filechooser.selected_filename
         self.quick_path_search.value = str(self.filedir)
