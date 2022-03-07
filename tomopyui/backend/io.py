@@ -100,7 +100,7 @@ class IOBase:
 
     def _write_downsampled_data(self):
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
-        #TODO: make parallel on individual slices of data. see bottom of this .py (archived code)
+        # TODO: make parallel on individual slices of data. see bottom of this .py (archived code)
         # ds_data = [rescale_parallel_pool(self.pxZ, self.data, ds_vals_list) for ds_vals_list in self.ds_vals]
         # :
         #     ds_data.append(rescale_parallel_pool(self.pxZ, self.data, self.ds_vals))
@@ -130,7 +130,6 @@ class IOBase:
                 bin_centers=bin_center,
             )
         self._load_ds_and_hists()
-
 
     def _load_ds_and_hists(self):
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
@@ -503,8 +502,39 @@ class Projections_Prenormalized_SSRL62(Projections_Prenormalized):
         self.filedir_ds = pathlib.Path(
             self.metadata["downsampled_projections_directory"]
         )
+        if "flats_ind" in self.metadata:
+            self.flats_ind = self.metadata["flats_ind"]
         self.ds_vals = self.metadata["downsampled_values"]
         self.saved_as_tiff = self.metadata["saved_as_tiff"]
+
+    def renormalize_by_roi(self, Uploader):
+        px_range_x = Uploader.plotter.pixel_range_x
+        px_range_y = Uploader.plotter.pixel_range_y
+        exp_full = np.exp(-self.data)
+        averages = [
+            np.mean(
+                exp_full[
+                    i, px_range_y[0] : px_range_y[1], px_range_x[0] : px_range_x[1]
+                ]
+            )
+            for i in range(len(exp_full))
+        ]
+        prj = [exp_full[i] / averages[i] for i in range(len(exp_full))]
+        prj = -np.log(prj)
+        self.data = prj
+        # self.flats = None
+        # self._data = None
+        # self.flats = np.load(self.energy_filedir / "flats.npy", mmap_mode="r")
+        # self._data = np.load(self.energy_filedir / "projections.npy", mmap_mode="r")
+        # self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
+        # projs = da.from_array(
+        #     self._data, chunks=(self.scan_info["NEXPOSURES"], -1, -1)
+        # ).astype(np.float32)
+        # flats = da.from_array(
+        #     self.flats, chunks=(self.scan_info["REFNEXPOSURES"], -1, -1)
+        # ).astype(np.float32)
+        # darks = da.from_array(self.darks, chunks=(-1, -1, -1)).astype(np.float32)
+        # return projs, flats, darks
 
 
 class RawProjectionsBase(ProjectionsBase, ABC):
@@ -552,7 +582,12 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         return arr
 
     def normalize_and_average(
-        projs, flats, dark, flat_loc, num_exposures_per_proj, status_label=None
+        projs,
+        flats,
+        dark,
+        flat_loc,
+        num_exposures_per_proj,
+        status_label=None,
     ):
         """
         Function takes pre-chunked dask arrays of projections, flats, darks, along
@@ -686,6 +721,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.angles_from_filenames = True
 
     def import_metadata(self, Uploader):
+        self.data_hierarchy_level = 0
         filetypes = [".txt"]
         textfiles = self._file_finder(Uploader.filedir, filetypes)
         self.scan_info_path = [
@@ -712,6 +748,9 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         self.scan_info["PROJECTION_METADATA"] = self.read_xrms_metadata(
             [self.data_filenames[0]]
         )
+        self.scan_info["FLAT_METADATA"] = self.read_xrms_metadata(
+            [self.flats_filenames[0]]
+        )
         if self.angles_from_filenames:
             self.get_angles_from_filenames()
         else:
@@ -730,6 +769,8 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         )  # nm
         self.get_and_set_energies(Uploader)
         self.filedir = Uploader.filedir
+        self.set_metadata_raw()
+        save_metadata(self.filedir / "raw_metadata.json", self.metadata)
 
     def import_filedir_all(self, Uploader):
         self.user_overwrite_energy = Uploader.user_overwrite_energy
@@ -764,7 +805,7 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
     def import_file_darks(self, fullpath):
         pass
 
-    def set_metadata(self):
+    def set_metadata_raw(self):
         self.metadata["scan_info"] = copy.deepcopy(self.scan_info)
         self.metadata["scan_info"]["FILES"] = [
             str(file) for file in self.metadata["scan_info"]["FILES"]
@@ -794,16 +835,21 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         ][0]["exposure_time"]
         self.metadata["all_raw_energies_float"] = self.energies_list_float
         self.metadata["all_raw_energies_str"] = self.energies_list_str
-        self.metadata["user_overwrite_energy"] = self.user_overwrite_energy
-        self.metadata["energy_str"] = self.current_energy_str
-        self.metadata["energy_float"] = self.current_energy_float
-        self.metadata["energy_units"] = "eV"
         self.metadata["all_raw_pixel_sizes"] = self.raw_pixel_sizes
         self.metadata["pixel_size_from_scan_info"] = self.pixel_size_from_metadata
-        self.metadata["pixel_size"] = self.current_pixel_size
+        self.metadata["energy_units"] = "eV"
         self.metadata["pixel_units"] = "nm"
         self.metadata["raw_projections_dtype"] = str(self.raw_data_type)
         self.metadata["raw_projections_directory"] = str(self.data_filenames[0].parent)
+        self.metadata["data_hierarchy_level"] = self.data_hierarchy_level
+
+    def set_metadata_energy(self):
+        self.data_hierarchy_level = 1
+        self.metadata["flats_ind"] = self.flats_ind
+        self.metadata["user_overwrite_energy"] = self.user_overwrite_energy
+        self.metadata["energy_str"] = self.current_energy_str
+        self.metadata["energy_float"] = self.current_energy_float
+        self.metadata["pixel_size"] = self.current_pixel_size
         self.metadata["normalized_projections_dtype"] = str(np.dtype(np.float32))
         self.metadata["normalized_projections_size_gb"] = self.size_gb
         self.metadata["normalized_projections_directory"] = str(self.energy_filedir)
@@ -892,24 +938,6 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
         # From Johanna's calibration doc
         energy = (pixel_size / binning + 0.792164997) / 0.002039449
         return energy
-
-    # def import_from_metadata(self):
-    #     for file in self.scan_info["FILES"]:
-    #         for line in f.readlines():
-    #             if line.startswith("sete "):
-    #                 energies.append(float(line[5:]))
-    #                 flats.append([])
-    #                 collects.append([])
-    #             elif line.startswith("collect "):
-    #                 filename = line[8:].strip()
-    #                 if "ref_" in filename:
-    #                     flats[-1].append(self.run_script_path.parent / filename)
-    #                 else:
-    #                     collects[-1].append(self.run_script_path.parent / filename)
-    #     energies.pop(0)
-    #     flats.pop(0)
-    #     collects.pop(0)
-    #     return energies, flats, collects
 
     def get_all_data_filenames(self):
         flats = [
@@ -1029,7 +1057,6 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                 Uploader.upload_progress.max = len(self.flats_filenames) + len(
                     self.data_filenames
                 )
-
                 self.flats, self.scan_info["FLAT_METADATA"] = self.load_xrms(
                     self.flats_filenames, Uploader
                 )
@@ -1045,45 +1072,9 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                 np.save(self.energy_filedir / "flats", self.flats)
                 self.status_label.value = "Saving projections."
                 np.save(self.energy_filedir / "projections", self._data)
-                self.flats = None
-                self._data = None
-                self.flats = np.load(self.energy_filedir / "flats.npy", mmap_mode="r")
-                self._data = np.load(
-                    self.energy_filedir / "projections.npy", mmap_mode="r"
-                )
-                self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
-                # Collecting information on where references are in the data stack
+                projs, flats, darks = self.setup_normalize()
                 self.status_label.value = "Calculating flat positions."
-                copy_collect = collect.copy()
-                i = 0
-                for pos, file in enumerate(copy_collect):
-                    if "ref_" in file.name:
-                        if i == 0:
-                            i = 1
-                        elif i == 1:
-                            copy_collect[pos] = 1
-                    elif "ref_" not in file.name:
-                        i = 0
-                copy_collect = [value for value in copy_collect if value != 1]
-                ref_ind = [
-                    True if "ref_" in file.name else False for file in copy_collect
-                ]
-                ref_ind = [i for i in range(len(ref_ind)) if ref_ind[i]]
-                ref_ind = sorted(list(set(ref_ind)))
-                ref_ind = [ind - i for i, ind in enumerate(ref_ind)]
-                # These indexes are at the position of self.data_filenames that
-                # STARTS the next round after the references are taken
-                self.flats_ind = ref_ind
-                self.status_label.value = "Chunking data for dask normalization."
-                projs = da.from_array(
-                    self._data, chunks=(self.scan_info["NEXPOSURES"], -1, -1)
-                ).astype(np.float32)
-                flats = da.from_array(
-                    self.flats, chunks=(self.scan_info["REFNEXPOSURES"], -1, -1)
-                ).astype(np.float32)
-                darks = da.from_array(self.darks, chunks=(-1, -1, -1)).astype(
-                    np.float32
-                )
+                self.flats_ind_from_collect(collect)
                 self.status_label.value = "Normalizing."
                 self._data = RawProjectionsBase.normalize_and_average(
                     projs,
@@ -1104,10 +1095,46 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                 self.status_label.value = "Downsampling data for faster viewing."
                 self._check_downsampled_data(energy)
                 self.status_label.value = "Saving metadata."
-                self.set_metadata()
+                self.set_metadata_raw()
+                self.set_metadata_energy()
                 save_metadata(
                     self.energy_filedir / "import_metadata.json", self.metadata
                 )
+
+    def setup_normalize(self):
+        self.flats = None
+        self._data = None
+        self.flats = np.load(self.energy_filedir / "flats.npy", mmap_mode="r")
+        self._data = np.load(self.energy_filedir / "projections.npy", mmap_mode="r")
+        self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
+        projs = da.from_array(
+            self._data, chunks=(self.scan_info["NEXPOSURES"], -1, -1)
+        ).astype(np.float32)
+        flats = da.from_array(
+            self.flats, chunks=(self.scan_info["REFNEXPOSURES"], -1, -1)
+        ).astype(np.float32)
+        darks = da.from_array(self.darks, chunks=(-1, -1, -1)).astype(np.float32)
+        return projs, flats, darks
+
+    def flats_ind_from_collect(collect):
+        copy_collect = collect.copy()
+        i = 0
+        for pos, file in enumerate(copy_collect):
+            if "ref_" in file.name:
+                if i == 0:
+                    i = 1
+                elif i == 1:
+                    copy_collect[pos] = 1
+            elif "ref_" not in file.name:
+                i = 0
+        copy_collect = [value for value in copy_collect if value != 1]
+        ref_ind = [True if "ref_" in file.name else False for file in copy_collect]
+        ref_ind = [i for i in range(len(ref_ind)) if ref_ind[i]]
+        ref_ind = sorted(list(set(ref_ind)))
+        ref_ind = [ind - i for i, ind in enumerate(ref_ind)]
+        # These indexes are at the position of self.data_filenames that
+        # STARTS the next round after the references are taken
+        self.flats_ind = ref_ind
 
     # Groups each set of references and each set of projections together. Unused.
     def group_from_run_script(self):
@@ -1189,14 +1216,6 @@ class RawProjectionsXRM_SSRL62(RawProjectionsBase):
                         file_type.append("projection")
 
         return files_grouped, file_type
-        # flats = [
-        #     file.parent / file.name for file in collect if "ref_" in file.name
-        # ]
-        # projs = [
-        #     file.parent / file.name
-        #     for file in collect
-        #     if "ref_" not in file.name
-        # ]
 
     def metadata_to_DataFrame(self):
 
@@ -1419,14 +1438,18 @@ def parse_printed_time(timedict):
     time = f"{time:.1f}"
     return time, title
 
+
 def rescale_parallel(i, images=None, ds_factor_list=None):
     print(i)
     print(ds_factor_list)
     return rescale(images[i], (ds_factor_list[1], ds_factor_list[2]))
 
+
 def rescale_parallel_pool(n, images, ds_factor_list):
     with mp.Pool() as pool:
-        rescale_partial = partial(rescale_parallel, images=images, ds_factor_list=ds_factor_list)
+        rescale_partial = partial(
+            rescale_parallel, images=images, ds_factor_list=ds_factor_list
+        )
         return pool.map(rescale_partial, range(n))
 
 
