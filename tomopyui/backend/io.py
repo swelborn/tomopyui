@@ -73,6 +73,17 @@ class IOBase:
         self._fullpath = value
 
     def _check_downsampled_data(self, energy=None, label=None):
+        """
+        Checks to see if there is downsampled data in a directory. If it doesn't it
+        will write new downsampled data.
+
+        Parameters
+        ----------
+        energy : str, optional
+            Energy in string format "\d\d\d\d\d.\d\d"
+        label : widgets.Label, optional
+            This is a label that will update in the frontend.
+        """
         if energy is not None:
             filedir = self.energy_filedir
         else:
@@ -99,6 +110,17 @@ class IOBase:
             self._write_downsampled_data()
 
     def _write_downsampled_data(self):
+        """
+        Writes downsampled data into folder using self.ds_vals.
+
+        Parameters
+        ----------
+        self.ds_vals : list
+            List of downsampling values to use for faster viewing. Currently, this is
+            just [[1, 0.25, 0.25],]. List used to be longer, but deprecated in favor of
+            only using one downsampling (for time savings).
+
+        """
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
         # TODO: make parallel on individual slices of data. see bottom of this .py (archived code)
         # ds_data = [rescale_parallel_pool(self.pxZ, self.data, ds_vals_list) for ds_vals_list in self.ds_vals]
@@ -132,6 +154,11 @@ class IOBase:
         self._load_ds_and_hists()
 
     def _load_ds_and_hists(self):
+        """
+        Loads in downsampled data and their respective histograms to memory for
+        fast viewing in the plotters.
+
+        """
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
         self.hists = [
             np.load(self.filedir_ds / str("ds" + string + "hist.npz"))
@@ -143,6 +170,16 @@ class IOBase:
         ]
 
     def _file_finder(self, filedir, filetypes: list):
+        """
+        Used to find files of a given filetype in a directory. TODO: can go elsewhere.
+
+        Parameters
+        ----------
+        filedir : pathlike, relative or absolute
+            Folder in which to search for files.
+        filetypes : list of str
+            Filetypes list. e.g. [".txt", ".npy"]
+        """
         files = [pathlib.PurePath(f) for f in os.scandir(filedir) if not f.is_dir()]
         files_with_ext = [
             file.name for file in files if any(x in file.name for x in filetypes)
@@ -151,6 +188,14 @@ class IOBase:
 
 
 class ProjectionsBase(IOBase, ABC):
+
+    """
+    Base class for projections data. Abstract methods include importing/exporting data
+    and metadata. One can import a file directory, or a particular file within a
+    directory. Aliases give options for users to extract their data with other keywords.
+
+    """
+
     # https://stackoverflow.com/questions/4017572/how-can-i-make-an-alias-to-a-non-function-member-attribute-in-a-python-class
     aliases = {
         "prj_imgs": "data",
@@ -165,6 +210,7 @@ class ProjectionsBase(IOBase, ABC):
     def __init__(self):
         super().__init__()
         self.ds_vals = [(1, 0.25, 0.25)]
+        self.current_pixel_size = 1
         self.angles_rad = None
         self.angles_deg = None
         self.allowed_extensions = [".npy", ".tiff", ".tif"]
@@ -208,6 +254,20 @@ class ProjectionsBase(IOBase, ABC):
 
 
 class Projections_Prenormalized(ProjectionsBase, ABC):
+    """
+    Prenormalized projections base class. This allows one to bring in data from a file
+    directory or from a single tiff or npy, or multiple tiffs in a tiffstack. If the
+    data has been normalized using tomopyui (at least for SSRL), importing from a
+    folder will assume that "normalized_projections.npy" is in the folder, given that
+    there is an import_metadata.json in that folder.
+
+    If the user does not have an import_metadata.json file, the parameters required for
+    input are the start and end angles of the data.
+
+    Each method uses a parent Uploader instance for callbacks.
+
+    """
+
     def import_filedir_projections(self, Uploader):
         self.filedir = Uploader.filedir
         if Uploader.imported_metadata:
@@ -321,11 +381,6 @@ class Projections_Prenormalized(ProjectionsBase, ABC):
 
         return (sizeZ, sizeY, sizeX)
 
-    def set_prj_ranges(self):
-        self.pixel_range_x = (0, self.prj_shape[2] - 1)
-        self.pixel_range_y = (0, self.prj_shape[1] - 1)
-        self.pixel_range_z = (0, self.prj_shape[0] - 1)
-
     def make_angles(self):
         self.angles_rad = angle_maker(
             self.pxZ,
@@ -425,25 +480,15 @@ class Projections_Prenormalized_SSRL62(Projections_Prenormalized):
                 ("Acquisition Information", middle_headers[0][0]): [
                     {"selector": "td", "props": "border-left: 1px solid white"},
                     {"selector": "th", "props": "border-left: 1px solid white"},
-                ]
-            },
-            overwrite=False,
-        )
-        s.set_table_styles(
-            {
+                ],
                 ("Image Information", middle_headers[1][0]): [
                     {"selector": "td", "props": "border-left: 1px solid white"},
                     {"selector": "th", "props": "border-left: 1px solid white"},
-                ]
-            },
-            overwrite=False,
-        )
-        s.set_table_styles(
-            {
+                ],
                 ("Other Information", middle_headers[2][0]): [
                     {"selector": "td", "props": "border-left: 1px solid white"},
                     {"selector": "th", "props": "border-left: 1px solid white"},
-                ]
+                ],
             },
             overwrite=False,
         )

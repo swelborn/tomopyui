@@ -5,7 +5,7 @@ from ipywidgets import *
 from abc import ABC, abstractmethod
 from tomopyui._sharedvars import *
 import time
-from tomopyui.widgets.plot import BqImPlotter_Import
+from tomopyui.widgets.view import BqImViewer_Import
 from tomopyui.backend.io import (
     RawProjectionsXRM_SSRL62,
     Projections_Prenormalized_SSRL62,
@@ -299,11 +299,15 @@ class UploaderBase(ABC):
         self.filename = pathlib.Path()
         self.current_pixel_size = None
         self.filechooser = FileChooser()
+        self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
         self.quick_path_search = Textarea(
             placeholder=r"Z:\swelborn",
             style=extend_description_style,
             disabled=False,
             layout=Layout(align_items="stretch"),
+        )
+        self.quick_path_search.observe(
+            self.update_filechooser_from_quicksearch, names="value"
         )
         self.quick_path_label = Label("Quick path search")
         self.import_button = Button(
@@ -314,6 +318,7 @@ class UploaderBase(ABC):
             disabled=True,
             tooltip="Load your data into memory",
         )
+        self.import_button.on_click(self.import_data)
 
         self.metadata_table_output = Output()
 
@@ -345,7 +350,7 @@ class UploaderBase(ABC):
         ...
 
     @abstractmethod
-    def import_data(UploaderBase):
+    def import_data(self):
         ...
 
 
@@ -358,7 +363,6 @@ class MetadataUploader(UploaderBase):
         self.filedir = None
         self.filename = None
         self.filechooser = FileChooser()
-        self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
         self.filechooser.title = title
         self.quick_path_search = Textarea(
             placeholder=r"Z:\swelborn\data\metadata.json",
@@ -393,21 +397,15 @@ class PrenormUploader(UploaderBase):
         super().__init__()
         self.projections = Import.prenorm_projections
         self.Import = Import
-        self.quick_path_search.observe(
-            self.update_filechooser_from_quicksearch, names="value"
-        )
-        self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
         self.filechooser.title = "Import prenormalized data:"
-        self.import_button.on_click(self.import_data)
         self._tmp_disable_reset = False
-        self.plotter = BqImPlotter_Import()
+        self.plotter = BqImViewer_Import()
         self.plotter.create_app()
         self.renormalize_by_roi_button = Button(
             description="Click to normalize by ROI.",
             button_style="info",
             layout=Layout(width="auto", height="auto", align_items="stretch"),
             disabled=True,
-            # style={"font_size": "18px"},
         )
         self.renormalize_by_roi_button.on_click(self.renormalize_by_roi)
         self.overwrite_normalized_button = Button(
@@ -415,7 +413,6 @@ class PrenormUploader(UploaderBase):
             button_style="info",
             layout=Layout(width="auto", height="auto", align_items="stretch"),
             disabled=True,
-            # style={"font_size": "18px"},
         )
         self.overwrite_normalized_button.on_click(self.overwrite_normalized)
         self.imported_metadata = False
@@ -429,13 +426,7 @@ class PrenormUploader(UploaderBase):
         self.renormalize_by_roi_button.icon = "fas fa-cog fa-spin fa-lg"
         self.projections.renormalize_by_roi(self)
         self.plotter.downsample_factor = 1
-        self.plotter.plot(
-            self.projections.prj_imgs,
-            self.projections.filedir,
-            io=self.projections,
-            precomputed_hists=self.projections.hists,
-            current_pixel_size=self.projections.current_pixel_size,
-        )
+        self.plotter.plot(self.projections)
         self.renormalize_by_roi_button.icon = "fa-check-square"
         self.renormalize_by_roi_button.description = "Finished renormalizing."
         self.overwrite_normalized_button.disabled = False
@@ -540,13 +531,7 @@ class PrenormUploader(UploaderBase):
         self.import_status_label.value = (
             "Plotting data (downsampled for viewer to 0.25x)."
         )
-        self.plotter.plot(
-            self.projections.prj_imgs,
-            self.projections.filedir,
-            io=self.projections,
-            precomputed_hists=self.projections.hists,
-            current_pixel_size=self.projections.current_pixel_size,
-        )
+        self.plotter.plot(self.projections)
         toc = time.perf_counter()
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
@@ -574,14 +559,9 @@ class RawUploader_SSRL62(UploaderBase):
         self.user_overwrite_energy = False
         self.projections = Import.raw_projections
         self.Import = Import
-        self.import_button.on_click(self.import_data)
-        self.projections.set_options_from_frontend(self.Import, self)
-        self.plotter = BqImPlotter_Import()
+        # self.projections.set_options_from_frontend(self.Import, self)
+        self.plotter = BqImViewer_Import()
         self.plotter.create_app()
-        self.quick_path_search.observe(
-            self.update_filechooser_from_quicksearch, names="value"
-        )
-        self.filechooser.register_callback(self.update_quicksearch_from_filechooser)
         self.filechooser.title = "Choose a Raw XRM File Directory"
 
     def _init_widgets(self):
@@ -669,12 +649,7 @@ class RawUploader_SSRL62(UploaderBase):
             f"Import and normalization took {toc-tic:.0f}s"
         )
         self.projections.filedir = self.projections.energy_filedir
-        self.plotter.plot(
-            self.projections.prj_imgs,
-            self.projections.filedir,
-            io=self.projections,
-            precomputed_hists=self.projections.hists,
-        )
+        self.plotter.plot(self.projections)
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)

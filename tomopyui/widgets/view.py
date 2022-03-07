@@ -15,44 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 
-class ImPlotterBase(ABC):
-    def __init__(self, imagestack=None, title=None):
-        if imagestack is None:
-            self.original_imagestack = np.random.rand(100, 100, 100)
-            self.imagestack = self.original_imagestack
-        else:
-            self.original_imagestack = imagestack
-            self.imagestack = imagestack
-        self.current_image_ind = 0
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.title = title
-        self.pxX = self.imagestack.shape[2]
-        self.pxY = self.imagestack.shape[1]
-        self.aspect_ratio = self.pxX / self.pxY
-        self.fig = None
-        self.downsample_factor = 0.2
-        self.precomputed_hists = None
-        self.current_pixel_size = 1
-
-    @abstractmethod
-    def _init_fig(self):
-        ...
-
-    @abstractmethod
-    def _init_widgets(self):
-        ...
-
-    @abstractmethod
-    def _init_observes(self):
-        ...
-
-    @abstractmethod
-    def plot(self, imagestack):
-        ...
-
-
-class BqImPlotter(ImPlotterBase, ABC):
+class BqImViewerBase(ABC):
     lin_schemes = [
         "viridis",
         "plasma",
@@ -78,17 +41,32 @@ class BqImPlotter(ImPlotterBase, ABC):
         "PuBuGn",
     ]
 
-    def __init__(self, imagestack=None, title=None, dimensions=("1024px", "1024px")):
-        super().__init__(imagestack, title)
-        self.dimensions = dimensions
+    def __init__(self, imagestack=None):
+        if imagestack is None:
+            self.original_imagestack = np.random.rand(5, 50, 50)
+            self.imagestack = self.original_imagestack
+        else:
+            self.original_imagestack = imagestack
+            self.imagestack = imagestack
+        self.current_image_ind = 0
+        self.vmin = np.min(self.imagestack)
+        self.vmax = np.max(self.imagestack)
+        self.pxX = self.imagestack.shape[2]
+        self.pxY = self.imagestack.shape[1]
+        self.aspect_ratio = self.pxX / self.pxY
+        self.fig = None
+        self.downsample_factor = 0.25
+        self.precomputed_hists = None
+        self.current_pixel_size = 1
+        self.dimensions = ("550px", "550px")
         self.current_plot_axis = 0
         self.rectangle_selector_on = False
         self.current_interval = 300
-        # self.
         self._init_fig()
         self._init_widgets()
         self._init_observes()
         self._init_links()
+        self._init_app()
 
     def _init_fig(self):
         self.scale_x = bq.LinearScale(min=0, max=1)
@@ -117,8 +95,6 @@ class BqImPlotter(ImPlotterBase, ABC):
         self.fig.marks = (self.plotted_image,)
         self.fig.layout.width = self.dimensions[0]
         self.fig.layout.height = self.dimensions[1]
-        if self.title is not None:
-            self.fig.title = f"{self.title}"
         self.panzoom = PanZoom(scales={"x": [self.scale_x], "y": [self.scale_y]})
         self.msg_interaction = MouseInteraction(
             x_scale=self.scale_x,
@@ -304,7 +280,6 @@ class BqImPlotter(ImPlotterBase, ABC):
     def change_image(self, change):
         self.plotted_image.image = self.imagestack[change.new]
         self.current_image_ind = change.new
-        # self.hist.update()
 
     # Color range
     def update_color_range(self, change):
@@ -326,7 +301,6 @@ class BqImPlotter(ImPlotterBase, ABC):
             self.current_plot_axis = 1
         else:
             self.current_plot_axis = 0
-        # self.hist.update()
 
     # Removing high/low intensities
     def rm_high_low_int(self, change):
@@ -356,9 +330,9 @@ class BqImPlotter(ImPlotterBase, ABC):
 
     def downsample_imagestack(self, imagestack):
         self.imagestack = copy.deepcopy(imagestack)
+        self.image_index_slider.value = 0
         if self.downsample_factor == 1:
-            self.image_index_slider.value = 0
-            self.plotted_image.image = self.imagestack[0]
+            self.plotted_image.image = self.original_imagestack[0]
             return
         else:
             self.imagestack = rescale(
@@ -366,7 +340,6 @@ class BqImPlotter(ImPlotterBase, ABC):
                 (1, self.downsample_factor, self.downsample_factor),
                 anti_aliasing=False,
             )
-            self.image_index_slider.value = 0
             self.plotted_image.image = self.imagestack[0]
 
     # Reset
@@ -470,42 +443,9 @@ class BqImPlotter(ImPlotterBase, ABC):
             self.status_bar_ydistance.value = f"Y Distance (μm): {self.micron_y}"
 
     # Image plot
-    def plot(
-        self,
-        imagestack,
-        filedir,
-        io=None,
-        precomputed_hists=None,
-        current_pixel_size=None,
-    ):
-        self.precomputed_hists = precomputed_hists
-        self.io = io
-        self.filedir = filedir
-        self.current_pixel_size = current_pixel_size
-        self.pxX = imagestack.shape[2]
-        self.pxY = imagestack.shape[1]
-        self.original_imagestack = imagestack
-        if self.io is not None:
-            self.imagestack = np.array(self.io.data_ds[0])
-            self.downsample_factor = 0.25
-            self.downsample_viewer_textbox.value = self.downsample_factor
-        else:
-            self.downsample_imagestack(imagestack)
-        self.change_downsample_button()
-        self.current_image_ind = 0
-        self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
-        self.image_index_slider.value = 0
-        self.hist.preflatten_imagestack(self.imagestack)
-        self.rm_high_low_int(None)
 
     # Intensity message
     def on_mouse_msg_intensity(self, interaction, data, buffers):
-        # it might be a good idea to throttle on the Python side as well, for instance when many computations
-        # happen, we can effectively ignore the queue of messages
         if data["event"] == "mousemove":
             domain_x = data["domain"]["x"]
             domain_y = data["domain"]["y"]
@@ -515,7 +455,6 @@ class BqImPlotter(ImPlotterBase, ABC):
             normalized_y = (domain_y - self.plotted_image.y[0]) / (
                 self.plotted_image.y[1] - self.plotted_image.y[0]
             )
-            # TODO: think about +/-1 and pixel edges
             pixel_x = int(np.floor(normalized_x * self.plotted_image.image.shape[1]))
             pixel_y = int(np.floor(normalized_y * self.plotted_image.image.shape[0]))
             if (
@@ -551,49 +490,49 @@ class BqImPlotter(ImPlotterBase, ABC):
             # This is set to default dimensions of 550, not great:
             self.fig.layout.height = str(int(550 / self.aspect_ratio)) + "px"
 
-    @abstractmethod
-    def create_app(self):
-        ...
-
-
-class BqImPlotter_Import(BqImPlotter):
-    def __init__(self, dimensions=("550px", "550px")):
-        super().__init__(dimensions=dimensions)
-
-    def create_app(self):
-        left_sidebar_layout = Layout(
-            justify_content="space-around", align_items="center"
-        )
-        right_sidebar_layout = Layout(
-            justify_content="space-around", align_items="center"
-        )
-        header_layout = Layout(justify_content="center", align_items="center")
-        footer_layout = Layout(justify_content="center")
-        center_layout = Layout(justify_content="center", align_content="center")
-        header = HBox(
+    def _init_app(self):
+        self.header_layout = Layout(justify_content="center", align_items="center")
+        self.header = HBox(
             [
                 self.downsample_viewer_button,
                 self.downsample_viewer_textbox,
                 self.scheme_dropdown,
             ],
-            layout=header_layout,
+            layout=self.header_layout,
         )
-        left_sidebar = None
-        right_sidebar = None
-        center = HBox([self.fig, self.hist.fig], layout=center_layout)
+        self.center_layout = Layout(justify_content="center", align_content="center")
+        self.center = HBox([self.fig, self.hist.fig], layout=self.center_layout)
+        self.footer_layout = Layout(justify_content="center")
+        self.footer1 = HBox(
+            [self.play, self.image_index_slider], layout=self.footer_layout
+        )
+        self.init_buttons = [
+            self.plus_button,
+            self.minus_button,
+            self.reset_button,
+            self.rm_high_low_int_button,
+            self.swap_axes_button,
+            self.rectangle_selector_button,
+            self.save_movie_button,
+        ]
+        self.all_buttons = self.init_buttons
+
+    @abstractmethod
+    def plot(self):
+        ...
+
+    @abstractmethod
+    def create_app(self):
+        ...
+
+
+class BqImViewer_Import(BqImViewerBase):
+    def create_app(self):
         self.button_box = HBox(
-            [
-                self.plus_button,
-                self.minus_button,
-                self.reset_button,
-                self.rm_high_low_int_button,
-                self.swap_axes_button,
-                self.rectangle_selector_button,
-                self.save_movie_button,
-            ],
-            layout=footer_layout,
+            self.init_buttons,
+            layout=self.footer_layout,
         )
-        footer1 = HBox([self.play, self.image_index_slider], layout=footer_layout)
+
         footer2 = VBox(
             [
                 self.button_box,
@@ -603,32 +542,52 @@ class BqImPlotter_Import(BqImPlotter):
                         self.status_bar_yrange,
                         self.status_bar_intensity,
                     ],
-                    layout=footer_layout,
+                    layout=self.footer_layout,
                 ),
                 HBox(
                     [
                         self.status_bar_xdistance,
                         self.status_bar_ydistance,
                     ],
-                    layout=footer_layout,
+                    layout=self.footer_layout,
                 ),
             ],
-            layout=footer_layout,
+            layout=self.footer_layout,
         )
+        footer = VBox([self.footer1, footer2])
+        self.app = VBox([self.header, self.center, footer])
 
-        footer = VBox([footer1, footer2])
+    def plot(self, projections):
+        self.projections = projections
+        self.filedir = projections.filedir
+        self.precomputed_hists = projections.hists
+        self.current_pixel_size = projections.current_pixel_size
+        self.pxX = projections.data.shape[2]
+        self.pxY = projections.data.shape[1]
+        self.original_imagestack = projections.data
+        self.imagestack = np.array(self.projections.data_ds[0])
+        self.downsample_factor = 0.25
+        self.downsample_viewer_textbox.value = self.downsample_factor
+        self.change_downsample_button()
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = self.imagestack[0]
+        self.vmin = np.min(self.imagestack)
+        self.vmax = np.max(self.imagestack)
+        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.value = 0
+        self.hist.preflatten_imagestack(self.imagestack)
+        self.rm_high_low_int(None)
 
-        self.app = VBox([header, center, footer])
 
-
-class BqImPlotter_Import_Analysis(BqImPlotter_Import):
-    def __init__(self, Analysis, dimensions=("550px", "550px")):
+class BqImViewer_Import_Analysis(BqImViewer_Import):
+    def __init__(self, Analysis):
         self.Analysis = Analysis
-        super().__init__(dimensions=dimensions)
+        super().__init__()
         # Rectangle selector button
         self.rectangle_selector_button.tooltip = (
             "Turn on the rectangular region selector. Select a region "
-            "and copy it over to  Altered Projections."
+            "and copy it over to Altered Projections."
         )
 
     def plot(self):
@@ -661,7 +620,7 @@ class BqImPlotter_Import_Analysis(BqImPlotter_Import):
         self.change_downsample_button()
 
 
-class BqImPlotter_Center(BqImPlotter_Import_Analysis):
+class BqImViewer_Center(BqImViewer_Import_Analysis):
     def __init__(self, Center):
         super().__init__(None)
         self.Center = Center
@@ -682,40 +641,11 @@ class BqImPlotter_Center(BqImPlotter_Import_Analysis):
         self.center_line_button.on_click(self.center_line_on_update)
 
     def create_app(self):
-        left_sidebar_layout = Layout(
-            justify_content="space-around", align_items="center"
-        )
-        right_sidebar_layout = Layout(
-            justify_content="space-around", align_items="center"
-        )
-        header_layout = Layout(justify_content="center", align_items="center")
-        footer_layout = Layout(justify_content="center")
-        center_layout = Layout(justify_content="center", align_content="center")
-        header = HBox(
-            [
-                self.downsample_viewer_button,
-                self.downsample_viewer_textbox,
-                self.scheme_dropdown,
-            ],
-            layout=header_layout,
-        )
-        left_sidebar = None
-        right_sidebar = None
-        center = HBox([self.fig, self.hist.fig], layout=center_layout)
+        self.all_buttons.insert(-2, self.center_line_button)
         self.button_box = HBox(
-            [
-                self.plus_button,
-                self.minus_button,
-                self.reset_button,
-                self.rm_high_low_int_button,
-                self.swap_axes_button,
-                self.rectangle_selector_button,
-                self.center_line_button,
-                self.save_movie_button,
-            ],
-            layout=footer_layout,
+            self.all_buttons,
+            layout=self.footer_layout,
         )
-        footer1 = HBox([self.play, self.image_index_slider], layout=footer_layout)
         footer2 = VBox(
             [
                 self.button_box,
@@ -725,22 +655,20 @@ class BqImPlotter_Center(BqImPlotter_Import_Analysis):
                         self.status_bar_yrange,
                         self.status_bar_intensity,
                     ],
-                    layout=footer_layout,
+                    layout=self.footer_layout,
                 ),
                 HBox(
                     [
                         self.status_bar_xdistance,
                         self.status_bar_ydistance,
                     ],
-                    layout=footer_layout,
+                    layout=self.footer_layout,
                 ),
             ],
-            layout=footer_layout,
+            layout=self.footer_layout,
         )
-
-        footer = VBox([footer1, footer2])
-
-        self.app = VBox([header, center, footer])
+        footer = VBox([self.footer1, footer2])
+        self.app = VBox([self.header, self.center, footer])
 
     # Rectangle selector button
     def center_line_on_update(self, *args):
@@ -788,15 +716,33 @@ class BqImPlotter_Center(BqImPlotter_Import_Analysis):
         self.center_line_on_update()
 
 
-class BqImPlotter_Center_Recon(BqImPlotter_Import):
+class BqImViewer_Center_Recon(BqImViewer_Import):
     def __init__(self):
         super().__init__()
 
+    def plot(self, rec):
+        self.pxX = rec.shape[2]
+        self.pxY = rec.shape[1]
+        self.original_imagestack = rec
+        self.imagestack = rec
+        self.downsample_factor = 1
+        self.downsample_viewer_textbox.value = self.downsample_factor
+        self.change_downsample_button()
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = self.imagestack[0]
+        self.vmin = np.min(self.imagestack)
+        self.vmax = np.max(self.imagestack)
+        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.value = 0
+        self.hist.preflatten_imagestack(self.imagestack)
+        self.rm_high_low_int(None)
 
-class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
-    def __init__(self, plotter_parent, Analysis, dimensions=("550px", "550px")):
+
+class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
+    def __init__(self, plotter_parent, Analysis):
         self.Analysis = Analysis
-        super().__init__(Analysis, dimensions=dimensions)
+        super().__init__(Analysis)
         self.plotter_parent = plotter_parent
 
         # Copy from plotter
@@ -837,43 +783,13 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
         self.rectangle_selector.observe(self.rectangle_to_pixel_range, "selected")
 
     def create_app(self):
-
-        left_sidebar_layout = Layout(
-            justify_content="space-around", align_items="center"
-        )
-        right_sidebar_layout = Layout(
-            justify_content="space-around", align_items="center"
-        )
-        header_layout = Layout(justify_content="center", align_items="center")
-        footer_layout = Layout(justify_content="center")
-        center_layout = Layout(justify_content="center")
-        header = HBox(
-            [
-                self.downsample_viewer_button,
-                self.downsample_viewer_textbox,
-                self.scheme_dropdown,
-            ],
-            layout=header_layout,
-        )
-        left_sidebar = None
-        right_sidebar = None
-        center = HBox([self.fig, self.hist.fig], layout=center_layout)
+        self.all_buttons.insert(-2, self.copy_button)
+        self.all_buttons.insert(-2, self.link_plotted_projections_button)
+        self.all_buttons.insert(-2, self.range_from_parent_button)
         self.button_box = HBox(
-            [
-                self.plus_button,
-                self.minus_button,
-                self.reset_button,
-                self.rm_high_low_int_button,
-                self.swap_axes_button,
-                self.copy_button,
-                self.link_plotted_projections_button,
-                self.range_from_parent_button,
-                self.rectangle_selector_button,
-                self.save_movie_button,
-            ],
-            layout=footer_layout,
+            self.all_buttons,
+            layout=self.footer_layout,
         )
-        footer1 = HBox([self.play, self.image_index_slider], layout=footer_layout)
         footer2 = VBox(
             [
                 self.button_box,
@@ -892,9 +808,9 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
             ]
         )
 
-        footer = VBox([footer1, footer2])
+        footer = VBox([self.footer1, footer2])
 
-        self.app = VBox([header, center, footer])
+        self.app = VBox([self.header, self.center, footer])
 
     # Image plot
     def plot(self):
@@ -1044,9 +960,9 @@ class BqImPlotter_Altered_Analysis(BqImPlotter_Import_Analysis):
         self.hist.preflatten_imagestack(self.imagestack)
 
 
-class BqImPlotter_DataExplorer(BqImPlotter):
-    def __init__(self, plotter_parent=None, dimensions=("550px", "550px")):
-        super().__init__(dimensions=dimensions)
+class BqImViewer_DataExplorer(BqImViewer_Import):
+    def __init__(self, plotter_parent=None):
+        super().__init__()
         self.plotter_parent = plotter_parent
         self.link_plotted_projections_button = Button(
             icon="unlink",
@@ -1058,49 +974,21 @@ class BqImPlotter_DataExplorer(BqImPlotter):
         self.downsample_factor = 0.5
 
     def create_app(self):
-
-        left_sidebar_layout = Layout(
-            justify_content="space-around", align_items="center"
-        )
-        right_sidebar_layout = Layout(
-            justify_content="space-around", align_items="center"
-        )
-        header_layout = Layout(justify_content="center", align_items="center")
-        footer_layout = Layout(justify_content="center")
-        center_layout = Layout(justify_content="center")
-        header = HBox(
-            [
-                self.downsample_viewer_button,
-                self.downsample_viewer_textbox,
-                self.scheme_dropdown,
-            ],
-            layout=header_layout,
-        )
-        left_sidebar = None
-        right_sidebar = None
-        center = HBox([self.fig, self.hist.fig], layout=center_layout)
+        self.all_buttons = self.init_buttons
+        self.all_buttons.insert(-2, self.link_plotted_projections_button)
         self.button_box = HBox(
-            [
-                self.plus_button,
-                self.minus_button,
-                self.reset_button,
-                self.rm_high_low_int_button,
-                self.link_plotted_projections_button,
-                self.swap_axes_button,
-                self.save_movie_button,
-            ],
-            layout=footer_layout,
+            self.all_buttons,
+            layout=self.footer_layout,
         )
-        footer1 = HBox([self.play, self.image_index_slider], layout=footer_layout)
         footer2 = VBox(
             [
                 self.button_box,
             ]
         )
 
-        footer = VBox([footer1, footer2])
+        footer = VBox([self.footer1, footer2])
 
-        self.app = VBox([header, center, footer])
+        self.app = VBox([self.header, self.center, footer])
 
     def link_plotted_projections(self, *args):
         if not self.plots_linked:
@@ -1151,7 +1039,7 @@ class BqImPlotter_DataExplorer(BqImPlotter):
 
 
 class BqImHist:
-    def __init__(self, implotter: BqImPlotter):
+    def __init__(self, implotter: BqImViewerBase):
         self.implotter = implotter
         self.fig = bq.Figure(
             padding=0,

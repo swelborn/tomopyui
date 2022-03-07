@@ -18,7 +18,7 @@ import logging
 from ipywidgets import *
 from tomopyui._sharedvars import *
 import time
-from tomopyui.widgets.plot import BqImPlotter_Import
+from tomopyui.widgets.view import BqImViewer_Import
 from tomopyui.widgets.imports import ImportBase, UploaderBase
 
 
@@ -341,7 +341,7 @@ class RawUploader_ALS832(UploaderBase):
         self.Import = Import
         self.import_button.on_click(self.import_data)
         self.projections.set_options_from_frontend(self.Import, self)
-        self.plotter = BqImPlotter_Import()
+        self.plotter = BqImViewer_Import()
         self.plotter.create_app()
         self.quick_path_search.observe(
             self.update_filechooser_from_quicksearch, names="value"
