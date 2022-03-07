@@ -1,7 +1,7 @@
 # TODO: reimplement this
 from ipywidgets import *
 from abc import ABC, abstractmethod
-from tomopyui.widgets.plot import BqImPlotter_Import, BqImPlotter_DataExplorer
+from tomopyui.widgets.view import BqImViewer_Import, BqImViewer_DataExplorer
 from tomopyui.backend.io import Projections_Prenormalized_SSRL62
 from tomopyui.backend.io import load_metadata, metadata_to_DataFrame
 from tomopyui.widgets.analysis import Align, Recon
@@ -49,9 +49,9 @@ class DataExplorerTab:
 class DataExplorerBase(ABC):
     def __init__(self):
         self.metadata = None
-        self.plotter_initial = BqImPlotter_DataExplorer()
+        self.plotter_initial = BqImViewer_DataExplorer()
         self.plotter_initial.create_app()
-        self.plotter_analyzed = BqImPlotter_DataExplorer(self.plotter_initial)
+        self.plotter_analyzed = BqImViewer_DataExplorer(self.plotter_initial)
         self.plotter_analyzed.create_app()
         self.projections = Projections_Prenormalized_SSRL62()
         self.analyzed_projections = Projections_Prenormalized_SSRL62()

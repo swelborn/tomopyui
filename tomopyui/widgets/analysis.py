@@ -3,10 +3,10 @@ from ipywidgets import *
 from tomopyui._sharedvars import *
 import copy
 from abc import ABC, abstractmethod
-from tomopyui.widgets.plot import (
-    BqImPlotter_Import_Analysis,
-    BqImPlotter_Altered_Analysis,
-    BqImPlotter_DataExplorer,
+from tomopyui.widgets.view import (
+    BqImViewer_Import_Analysis,
+    BqImViewer_Altered_Analysis,
+    BqImViewer_DataExplorer,
 )
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
@@ -20,9 +20,9 @@ class AnalysisBase(ABC):
         self.Import = Import
         self.Center = Center
         self.projections = copy.deepcopy(Import.projections)
-        self.imported_plotter = BqImPlotter_Import_Analysis(self)
+        self.imported_plotter = BqImViewer_Import_Analysis(self)
         self.imported_plotter.create_app()
-        self.altered_plotter = BqImPlotter_Altered_Analysis(self.imported_plotter, self)
+        self.altered_plotter = BqImViewer_Altered_Analysis(self.imported_plotter, self)
         self.altered_plotter.create_app()
         self.result_before_plotter = self.altered_plotter
         self.wd = None
@@ -362,7 +362,7 @@ class AnalysisBase(ABC):
         self.pixel_range_x = self.projections.pixel_range_x
         self.pixel_range_y = self.projections.pixel_range_y
         self.result_before_plotter = self.imported_plotter
-        self.result_after_plotter = BqImPlotter_DataExplorer(self.result_before_plotter)
+        self.result_after_plotter = BqImViewer_DataExplorer(self.result_before_plotter)
         self.use_imported_button.button_style = "success"
         self.use_imported_button.description = (
             "You can now align/reconstruct your data."
@@ -383,7 +383,7 @@ class AnalysisBase(ABC):
         self.pixel_range_x = self.altered_plotter.pixel_range_x
         self.pixel_range_y = self.altered_plotter.pixel_range_y
         self.result_before_plotter = self.altered_plotter
-        self.result_after_plotter = BqImPlotter_DataExplorer(self.result_before_plotter)
+        self.result_after_plotter = BqImViewer_DataExplorer(self.result_before_plotter)
         self.use_altered_button.button_style = "success"
         self.use_altered_button.description = "You can now align/reconstruct your data."
         self.use_altered_button.icon = "fa-check-square"

@@ -5,7 +5,7 @@ from ipywidgets import *
 from tomopyui._sharedvars import *
 import numpy as np
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
-from tomopyui.widgets.plot import BqImPlotter_Center, BqImPlotter_Center_Recon
+from tomopyui.widgets.view import BqImViewer_Center, BqImViewer_Center_Recon
 from tomopyui.backend.util.center import write_center
 
 
@@ -20,8 +20,6 @@ class Center:
         Needs an import object to be constructed.
     current_center : double
         Current center of rotation. Updated when center_textbox is updated.
-
-        TODO: this should be linked to both `Align` and `Recon`.
     center_guess : double
         Guess value for center of rotation for automatic alignment (`~tomopy.recon.rotation.find_center`).
     index_to_try : int
@@ -57,9 +55,9 @@ class Center:
         self.algorithm = "gridrec"
         self.filter = "parzen"
         self.metadata = {}
-        self.projection_plotter = BqImPlotter_Center(self)
+        self.projection_plotter = BqImViewer_Center(self)
         self.projection_plotter.create_app()
-        self.rec_plotter = BqImPlotter_Center_Recon()
+        self.rec_plotter = BqImViewer_Center_Recon()
         self.rec_plotter.create_app()
 
         self._init_widgets()
@@ -110,7 +108,7 @@ class Center:
             layout=Layout(width="auto", justify_content="center"),
         )
         self.index_to_try_textbox = IntText(
-            description="Slice to use for auto:",
+            description="Slice to use: ",
             disabled=False,
             style=extend_description_style,
             placeholder="Default is 1/2*y pixels",
@@ -326,7 +324,7 @@ class Center:
                 "Your projections do not have associated theta values."
             )
 
-        self.rec_plotter.plot(self.rec, self.Import.projections.filedir)
+        self.rec_plotter.plot(self.rec)
         self.find_center_manual_button.button_style = "success"
         self.find_center_manual_button.icon = "fa-check-square"
         self.find_center_manual_button.description = "Finished reconstruction."
