@@ -15,6 +15,7 @@ import pathlib
 import functools
 from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
 import re
+from tomopyui.backend.io import load_metadata
 
 
 class ImportBase(ABC):
@@ -80,6 +81,7 @@ class ImportBase(ABC):
         self.Recon.refresh_plots()
         self.Align.refresh_plots()
         self.Center.refresh_plots()
+        self.Prep.refresh_plots()
         self.use_prenorm_button.icon = "fa-check-square"
         self.use_prenorm_button.button_style = "success"
         self.use_prenorm_button.description = (
@@ -106,6 +108,7 @@ class ImportBase(ABC):
         self.Recon.refresh_plots()
         self.Align.refresh_plots()
         self.Center.refresh_plots()
+        self.Prep.refresh_plots()
         self.use_raw_button.icon = "fa-check-square"
         self.use_raw_button.button_style = "success"
         self.use_raw_button.description = (
@@ -239,12 +242,6 @@ class Import_SSRL62(ImportBase):
                         ),
                         self.prenorm_uploader.filechooser,
                         HBox(self.angles_textboxes),
-                        HBox(
-                            [
-                                self.prenorm_uploader.renormalize_by_roi_button,
-                                self.prenorm_uploader.overwrite_normalized_button,
-                            ]
-                        ),
                     ],
                 ),
                 self.prenorm_uploader.plotter.app,
@@ -390,6 +387,128 @@ class MetadataUploader(UploaderBase):
         pass
 
 
+class ShiftsUploader(UploaderBase):
+    """"""
+
+    def __init__(self, Prep):
+        super().__init__()
+        self.Prep = Prep
+        self.projections = Prep.imported_projections
+        self.filechooser.title = "Import shifts: "
+        self._tmp_disable_reset = False
+        self.imported_metadata = False
+        self.import_status_label = Label(layout=Layout(justify_content="center"))
+        self.find_metadata_status_label = Label(layout=Layout(justify_content="center"))
+
+    def update_filechooser_from_quicksearch(self, change):
+        path = pathlib.Path(change.new)
+        try:
+            self.check_filepath_exists(path)
+        except InvalidFileNameError:
+            self.find_metadata_status_label.value = (
+                "Invalid file name for that directory."
+            )
+            return
+        except InvalidPathError:
+            self.find_metadata_status_label.value = "Invalid path."
+            return
+        else:
+            self.import_button.button_style = "info"
+            self.import_button.disabled = False
+            with self.metadata_table_output:
+                self.metadata_table_output.clear_output(wait=True)
+                display(self.find_metadata_status_label)
+            try:
+                # TODO: eventually deprecate finding sx.npy and sy.npy in favor of
+                # saving in the align_metadata.json file
+                self.shifts_from_json = False
+                self.shifts_from_npy = False
+                shifts_files = self.projections._file_finder(
+                    self.filedir, ["sx.npy", "sy.npy"]
+                )
+                if shifts_files == []:
+                    self.shifts_from_npy = False
+                    self.shifts_from_json = True
+                    shifts_files = self.projections._file_finder(
+                        self.filedir, [".json"]
+                    )
+                else:
+                    self.shifts_from_npy = True
+                    self.shifts_from_json = False
+                assert shifts_files != []
+            except AssertionError:
+                self.find_metadata_status_label.value = (
+                    "No shifts files found in this directory."
+                )
+                self.shifts_from_npy = False
+                self.shifts_from_json = False
+                self.imported_metadata = False
+                return
+            else:
+                if self.shifts_from_json:
+                    try:
+                        self.align_metadata_filepath = (
+                            self.filedir
+                            / [
+                                file
+                                for file in json_files
+                                if "alignment_metadata" in file
+                            ][0]
+                        )
+                        assert self.align_metadata_filepath != []
+                    except AssertionError:
+                        self.find_metadata_status_label.value = (
+                            "This directory has .json files but not an"
+                            + " alignment_metadata.json file."
+                        )
+                        self.imported_metadata = False
+                        return
+                    else:
+                        self.import_shifts_from_metadata()
+                        self.update_shift_lists()
+                        self.imported_metadata = True
+                else:
+                    self.imported_metadata = False
+                    self.import_shifts_from_npy()
+                    self.update_shift_lists()
+
+    def import_shifts_from_npy(self):
+        self.sx = np.load(self.filedir / "sx.npy")
+        self.sy = np.load(self.filedir / "sy.npy")
+        self.conv = np.load(self.filedir / "conv.npy")
+        self.align_metadata = load_metadata(
+            fullpath=self.filedir / "alignment_metadata.json"
+        )
+        if self.align_metadata["opts"]["downsample"]:
+            self.sx = self.sx / self.align_metadata["opts"]["downsample_factor"]
+            self.sy = self.sy / self.align_metadata["opts"]["downsample_factor"]
+
+    def import_shifts_from_metadata(self):
+        self.align_metadata = load_metadata(
+            fullpath=self.filedir / "alignment_metadata.json"
+        )
+        self.sx = self.align_metadata["sx"]
+        self.sy = self.align_metadata["sy"]
+        self.conv = self.align_metadata["conv"]
+        if self.align_metadata["opts"]["downsample"]:
+            self.sx = self.sx / self.align_metadata["opts"]["downsample_factor"]
+            self.sy = self.sy / self.align_metadata["opts"]["downsample_factor"]
+
+    def update_shift_lists(self):
+        self.Prep.shifts_sx_select.options = self.sx
+        self.Prep.shifts_sy_select.options = self.sy
+
+    def update_quicksearch_from_filechooser(self):
+        self.filedir = pathlib.Path(self.filechooser.selected_path)
+        self.filename = self.filechooser.selected_filename
+        self._tmp_disable_reset = True
+        self.quick_path_search.value = str(self.filedir / self.filename)
+        self._tmp_disable_reset = False
+
+    def import_data(self, change):
+        pass
+
+
 class PrenormUploader(UploaderBase):
     """"""
 
@@ -401,13 +520,6 @@ class PrenormUploader(UploaderBase):
         self._tmp_disable_reset = False
         self.plotter = BqImViewer_Import()
         self.plotter.create_app()
-        self.renormalize_by_roi_button = Button(
-            description="Click to normalize by ROI.",
-            button_style="info",
-            layout=Layout(width="auto", height="auto", align_items="stretch"),
-            disabled=True,
-        )
-        self.renormalize_by_roi_button.on_click(self.renormalize_by_roi)
         self.overwrite_normalized_button = Button(
             description="Overwrite normalized_projections.npy?",
             button_style="info",

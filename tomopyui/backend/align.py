@@ -183,6 +183,9 @@ class TomoAlign:
         savedir = dt_string + method_str
         os.mkdir(savedir)
         os.chdir(savedir)
+        self.metadata["sx"] = self.sx
+        self.metadata["sy"] = self.sy
+        self.metadata["convergence"] = self.conv
         self.metadata["savedir"] = os.getcwd()
         save_metadata("alignment_metadata.json", self.metadata)
         save_metadata("import_metadata.json", self.import_metadata)
@@ -209,9 +212,6 @@ class TomoAlign:
             ):
                 tf.imwrite("last_recon.tif", self.recon)
         self.Align.run_list.append({savedir: self.metadata})
-        np.save("sx", self.sx)
-        np.save("sy", self.sy)
-        np.save("conv", self.conv)
 
     def _shift_prjs_after_alignment(self):
         new_prj_imgs = self.data_before_align

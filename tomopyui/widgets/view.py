@@ -580,6 +580,71 @@ class BqImViewer_Import(BqImViewerBase):
         self.rm_high_low_int(None)
 
 
+class BqImViewer_Prep(BqImViewer_Import):
+    def __init__(self, Prep):
+        self.Prep = Prep
+        super().__init__()
+
+    def create_app(self):
+        # self.all_buttons.insert(-2, self.center_line_button)
+        self.button_box = HBox(
+            self.all_buttons,
+            layout=self.footer_layout,
+        )
+        footer2 = VBox(
+            [
+                self.button_box,
+                HBox(
+                    [
+                        self.status_bar_xrange,
+                        self.status_bar_yrange,
+                        self.status_bar_intensity,
+                    ],
+                    layout=self.footer_layout,
+                ),
+                HBox(
+                    [
+                        self.status_bar_xdistance,
+                        self.status_bar_ydistance,
+                    ],
+                    layout=self.footer_layout,
+                ),
+            ],
+            layout=self.footer_layout,
+        )
+        footer = VBox([self.footer1, footer2])
+        self.app = VBox([self.header, self.center, footer])
+
+    def plot(self):
+        self.original_imagestack = self.Prep.Import.projections.data
+        self.pxX = self.original_imagestack.shape[2]
+        self.pxY = self.original_imagestack.shape[1]
+        self.pxZ = self.original_imagestack.shape[0]
+        self.imagestack = np.array(self.Prep.Import.projections.data_ds[0])
+        self.downsample_factor = 0.25
+        self.downsample_viewer_textbox.value = self.downsample_factor
+        self.current_pixel_size = self.Prep.Import.projections.current_pixel_size
+        self.precomputed_hists = self.Prep.Import.projections.hists
+        # self.downsample_imagestack(self.original_imagestack)
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = self.imagestack[0]
+        self.vmin = np.min(self.imagestack)
+        self.vmax = np.max(self.imagestack)
+        self.image_scale["image"].min = float(self.vmin)
+        self.image_scale["image"].max = float(self.vmax)
+        self.pixel_range_x = [0, self.pxX - 1]
+        self.pixel_range_y = [0, self.pxY - 1]
+        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
+        # self.update_pixel_range_status_bar()
+        self.hist.selector.selected = None
+        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.value = 0
+        self.hist.preflatten_imagestack(self.imagestack)
+        self.rm_high_low_int(None)
+        self.change_downsample_button()
+
+
 class BqImViewer_Import_Analysis(BqImViewer_Import):
     def __init__(self, Analysis):
         self.Analysis = Analysis
@@ -835,6 +900,7 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         self.image_index_slider.value = 0
 
     def copy_parent_projections(self, *args):
+        self.copying = True
         self.plot()
         self.hist.hists = copy.copy(self.plotter_parent.hist.hists)
         self.hist.selector = bq.interacts.BrushIntervalSelector(
@@ -847,6 +913,7 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         self.link_plotted_projections_button.button_style = "info"
         self.link_plotted_projections_button.disabled = False
         self.range_from_parent_button.disabled = False
+        self.copying = False
 
     def link_plotted_projections(self, *args):
         if not self.plots_linked:
@@ -1036,6 +1103,43 @@ class BqImViewer_DataExplorer(BqImViewer_Import):
         _ = ani.save(str(pathlib.Path(self.filedir / "movie.mp4")), writer=writer)
         self.save_movie_button.icon = "file-video"
         self.save_movie_button.button_style = "success"
+
+
+class BqImViewer_Altered_Prep(BqImViewer_Altered_Analysis):
+    def __init__(self, plotter_parent, Prep):
+        super().__init__(plotter_parent, Prep)
+        self.Prep = Prep
+        self.plotter_parent
+        self.downsample_factor = 1
+
+    def update_pixel_range_status_bar(self):
+        self.status_bar_xrange.value = f"X Pixel Range: {self.printed_range_x} | "
+        self.status_bar_yrange.value = f"Y Pixel Range: {self.printed_range_y}"
+
+    def plot(self):
+        if self.copying:
+            self.Prep.prepped_data = copy.deepcopy(
+                self.plotter_parent.original_imagestack
+            )
+        self.original_imagestack = self.Prep.prepped_data
+        self.pxX = self.original_imagestack.shape[2]
+        self.pxY = self.original_imagestack.shape[1]
+        self.pxZ = self.original_imagestack.shape[0]
+        self.imagestack = self.original_imagestack
+        self.pixel_range_x = [0, self.pxX - 1]
+        self.pixel_range_y = [0, self.pxY - 1]
+        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
+        self.subset_pixel_range_x = self.pixel_range_x
+        self.subset_pixel_range_y = self.pixel_range_y
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = self.imagestack[0]
+        self.vmin = self.plotter_parent.vmin
+        self.vmax = self.plotter_parent.vmax
+        self.image_scale["image"].min = self.vmin
+        self.image_scale["image"].max = self.vmax
+        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.value = 0
 
 
 class BqImHist:
