@@ -7,6 +7,7 @@ from tomopyui.widgets.imports import Import_SSRL62
 from tomopyui.widgets.center import Center
 from tomopyui.widgets.analysis import Align, Recon
 from tomopyui.widgets.dataexplorer import DataExplorerTab
+from tomopyui.widgets.prep import Prep
 
 # checks if cupy is installed. if not, disable cuda and certain gui aspects
 # TODO: can put this somewhere else
@@ -35,6 +36,7 @@ def create_dashboard():
     """
 
     file_import = Import_SSRL62()
+    prep = Prep(file_import)
     center = Center(file_import)
     align = Align(file_import, center)
     recon = Recon(file_import, center)
@@ -55,6 +57,7 @@ def create_dashboard():
 
     dashboard_tabs = [
         file_import.tab,
+        prep.tab,
         center.tab,
         align.tab,
         recon.tab,
@@ -64,6 +67,7 @@ def create_dashboard():
 
     dashboard_titles = [
         "Import",
+        "Prep",
         "Center",
         "Align",
         "Reconstruct",
@@ -84,6 +88,7 @@ def create_dashboard():
     accordions = [
         file_import.raw_accordion,
         file_import.prenorm_accordion,
+        prep.plotter_accordion,
         center.manual_center_accordion,
         align.plotter_accordion,
         recon.plotter_accordion,
@@ -102,4 +107,4 @@ def create_dashboard():
     with dashboard_output:
         display(dashboard)
 
-    return (dashboard_output, file_import, center, align, recon, dataexplorer)
+    return (dashboard_output, file_import, prep, center, align, recon, dataexplorer)

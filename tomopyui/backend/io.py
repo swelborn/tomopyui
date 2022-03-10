@@ -402,6 +402,17 @@ class Projections_Prenormalized(ProjectionsBase, ABC):
         ...
 
 
+class Projections_Prenormalized_General(Projections_Prenormalized):
+    def import_metadata(self):
+        pass
+
+    def metadata_to_DataFrame(self):
+        pass
+
+    def set_attributes_from_metadata(self):
+        pass
+
+
 class Projections_Prenormalized_SSRL62(Projections_Prenormalized):
     def import_metadata(self, Uploader):
         self.metadata = load_metadata(fullpath=Uploader.import_metadata_filepath)
@@ -551,35 +562,6 @@ class Projections_Prenormalized_SSRL62(Projections_Prenormalized):
             self.flats_ind = self.metadata["flats_ind"]
         self.ds_vals = self.metadata["downsampled_values"]
         self.saved_as_tiff = self.metadata["saved_as_tiff"]
-
-    def renormalize_by_roi(self, Uploader):
-        px_range_x = Uploader.plotter.pixel_range_x
-        px_range_y = Uploader.plotter.pixel_range_y
-        exp_full = np.exp(-self.data)
-        averages = [
-            np.mean(
-                exp_full[
-                    i, px_range_y[0] : px_range_y[1], px_range_x[0] : px_range_x[1]
-                ]
-            )
-            for i in range(len(exp_full))
-        ]
-        prj = [exp_full[i] / averages[i] for i in range(len(exp_full))]
-        prj = -np.log(prj)
-        self.data = prj
-        # self.flats = None
-        # self._data = None
-        # self.flats = np.load(self.energy_filedir / "flats.npy", mmap_mode="r")
-        # self._data = np.load(self.energy_filedir / "projections.npy", mmap_mode="r")
-        # self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
-        # projs = da.from_array(
-        #     self._data, chunks=(self.scan_info["NEXPOSURES"], -1, -1)
-        # ).astype(np.float32)
-        # flats = da.from_array(
-        #     self.flats, chunks=(self.scan_info["REFNEXPOSURES"], -1, -1)
-        # ).astype(np.float32)
-        # darks = da.from_array(self.darks, chunks=(-1, -1, -1)).astype(np.float32)
-        # return projs, flats, darks
 
 
 class RawProjectionsBase(ProjectionsBase, ABC):
