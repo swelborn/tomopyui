@@ -51,7 +51,7 @@ class Center:
         self.search_step = 0.5
         self.search_range = 5
         self.cen_range = None
-        self.num_iter = 1
+        self.num_iter = int(1)
         self.algorithm = "gridrec"
         self.filter = "parzen"
         self.metadata = {}
@@ -113,7 +113,7 @@ class Center:
             style=extend_description_style,
             placeholder="Default is 1/2*y pixels",
         )
-        self.num_iter_textbox = FloatText(
+        self.num_iter_textbox = IntText(
             description="Number of iterations: ",
             disabled=False,
             style=extend_description_style,

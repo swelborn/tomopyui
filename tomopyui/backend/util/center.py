@@ -7,7 +7,7 @@ import os.path
 import numpy as np
 
 from tomopy.misc.corr import circ_mask
-from tomopy.recon.algorithm import recon
+from tomopy.recon.algorithm import recon as recon_tomo
 import tomopy.util.dtype as dtype
 
 # includes astra_cuda_recon_algorithm_kwargs, tomopy_recon_algorithm_kwargs,
@@ -51,25 +51,25 @@ def write_center(
     os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
     # Reconstruct the same slice with a range of centers.
     if algorithm == "gridrec" or algorithm == "fbp":
-        rec = recon(
+        rec = recon_tomo(
             stack,
             theta,
             center=center,
             sinogram_order=True,
             algorithm=algorithm,
             filter_name=filter_name,
-            nchunk=1,
+            # nchunk=1,
         )
     else:
-        rec = recon(
+        rec = recon_tomo(
             stack,
             theta,
             center=center,
             sinogram_order=True,
             algorithm=algorithm,
             num_iter=num_iter,
-            ncore=None,
-            nchunk=1,
+            # ncore=None,
+            # nchunk=1,
         )
 
     # Apply circular mask.

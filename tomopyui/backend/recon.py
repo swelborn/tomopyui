@@ -140,14 +140,14 @@ class TomoRecon(TomoAlign):
             (tomo_shape[1], tomo_shape[2], tomo_shape[2]), dtype=np.float32
         )
         self.Recon.log.info("Starting" + method_str)
-        self.Recon.log.info("Center of rotation:" + self.center)
+        self.Recon.log.info("Center of rotation:" + str(self.center))
         # TODO: parsing recon method could be done in an Align method
         if method_str == "SIRT_Plugin":
             self.recon = tomocupy_algorithm.recon_sirt_plugin(
                 self.prjs,
                 self.angles_rad,
                 num_iter=self.num_iter,
-                rec=self.recon,
+                # rec=self.recon,
                 center=self.center,
             )
         elif method_str == "SIRT_3D":
@@ -155,7 +155,7 @@ class TomoRecon(TomoAlign):
                 self.prjs,
                 self.angles_rad,
                 num_iter=self.num_iter,
-                rec=self.recon,
+                # rec=self.recon,
                 center=self.center,
             )
         elif method_str == "CGLS_3D":
@@ -163,7 +163,7 @@ class TomoRecon(TomoAlign):
                 self.prjs,
                 self.angles_rad,
                 num_iter=self.num_iter,
-                rec=self.recon,
+                # rec=self.recon,
                 center=self.center,
             )
         elif self.current_recon_is_cuda:
@@ -172,7 +172,7 @@ class TomoRecon(TomoAlign):
             options = {
                 "proj_type": "cuda",
                 "method": method_str,
-                "num_iter": self.num_iter,
+                "num_iter": int(self.num_iter),
                 # TODO: "extra_options": {},
             }
             kwargs["options"] = options
@@ -180,7 +180,6 @@ class TomoRecon(TomoAlign):
                 self.prjs,
                 self.angles_rad,
                 algorithm=wrappers.astra,
-                init_recon=self.recon,
                 center=self.center,
                 ncore=1,
                 **kwargs,
@@ -189,12 +188,10 @@ class TomoRecon(TomoAlign):
             # defined in run.py
             os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
             if algorithm == "gridrec" or algorithm == "fbp":
-
                 self.recon = tomopy_algorithm.recon(
                     self.prjs,
                     self.angles_rad,
                     algorithm=method_str,
-                    init_recon=self.recon,
                     center=self.center,
                 )
             else:
@@ -202,7 +199,6 @@ class TomoRecon(TomoAlign):
                     self.prjs,
                     self.angles_rad,
                     algorithm=method_str,
-                    init_recon=self.recon,
                     center=self.center,
                     num_iter=self.num_iter,
                 )
