@@ -3,19 +3,12 @@ from ipywidgets import *
 from tomopyui._sharedvars import *
 import copy
 from abc import ABC, abstractmethod
-from tomopyui.widgets.view import (
-    BqImViewer_Import_Analysis,
-    BqImViewer_Altered_Analysis,
-    BqImViewer_DataExplorer,
-)
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
 from tomopyui.backend.io import (
-    save_metadata,
     load_metadata,
     Projections_Prenormalized_General,
 )
-from tomopyui.widgets import helpers
 from tomopyui.widgets.imports import ShiftsUploader
 from tomopyui.widgets.view import BqImViewer_Prep, BqImViewer_Altered_Prep
 from tomopyui.backend.util.padding import *
@@ -61,10 +54,10 @@ class Prep(ABC):
         self.button_layout = Layout(width="45px", height="40px")
 
         # -- Viewers -------------------------------------------------------------------
-        self.imported_plotter = BqImViewer_Prep(self)
-        self.imported_plotter.create_app()
-        self.altered_plotter = BqImViewer_Altered_Prep(self.imported_plotter, self)
-        self.altered_plotter.create_app()
+        self.imported_viewer = BqImViewer_Prep(self)
+        self.imported_viewer.create_app()
+        self.altered_viewer = BqImViewer_Altered_Prep(self.imported_viewer, self)
+        self.altered_viewer.create_app()
 
         # -- Button to turn on tab ---------------------------------------------
         self.open_accordions_button = Button(
@@ -133,12 +126,12 @@ class Prep(ABC):
 
         # -- Plotting -------------------------------------------------------------
 
-        self.plotter_hbox = HBox(
+        self.viewer_hbox = HBox(
             [
                 VBox(
                     [
                         self.import_plot_header,
-                        self.imported_plotter.app,
+                        self.imported_viewer.app,
                     ],
                     layout=Layout(align_items="center"),
                 ),
@@ -153,7 +146,7 @@ class Prep(ABC):
                 VBox(
                     [
                         self.altered_plot_header,
-                        self.altered_plotter.app,
+                        self.altered_viewer.app,
                     ],
                     layout=Layout(align_items="center"),
                 ),
@@ -311,8 +304,8 @@ class Prep(ABC):
             "ROI Normalization",
             renormalize_by_roi,
             [
-                self.imported_plotter.pixel_range_x,
-                self.imported_plotter.pixel_range_y,
+                self.imported_viewer.pixel_range_x,
+                self.imported_viewer.pixel_range_y,
             ],
         )
         self.prep_list.append(method.method_tuple)
@@ -335,7 +328,7 @@ class Prep(ABC):
                 x.disabled = False
 
     def refresh_plots(self):
-        self.imported_plotter.plot()
+        self.imported_viewer.plot()
 
     def set_metadata(self):
         pass
@@ -365,7 +358,7 @@ class Prep(ABC):
             self.projections = self.Import.projections
             self.set_metadata()
             self.shifts_accordion.selected_index = 0
-            self.plotter_accordion.selected_index = 0
+            self.viewer_accordion.selected_index = 0
             self.accordions_open = True
         else:
             self.open_accordions_button.icon = "fa-lock-open"
@@ -373,7 +366,7 @@ class Prep(ABC):
             self.accordions_open = False
             self.load_metadata_button.disabled = True
             self.shifts_accordion.selected_index = None
-            self.plotter_accordion.selected_index = None
+            self.viewer_accordion.selected_index = None
 
     # -- Load metadata button ---------------------------------------------
     def _load_metadata_all_on_click(self, change):
@@ -395,12 +388,12 @@ class Prep(ABC):
     def run(self):
         self.first_method = True
         if not self.preview_only:
-            self.prepped_data = copy.deepcopy(self.imported_plotter.original_imagestack)
+            self.prepped_data = copy.deepcopy(self.imported_viewer.original_imagestack)
         for prep_method_tuple in self.prep_list:
             prep_method_tuple[1].update_method_and_run()
             self.first_method = False
         if not self.preview_only:
-            self.altered_plotter.plot()
+            self.altered_viewer.plot()
 
     def make_tab(self):
 
@@ -413,8 +406,8 @@ class Prep(ABC):
                 justify_content="flex-start",
             ),
         )
-        self.plotter_accordion = Accordion(
-            children=[self.plotter_hbox],
+        self.viewer_accordion = Accordion(
+            children=[self.viewer_hbox],
             selected_index=0,
             titles=("Plot Projection Images",),
         )
@@ -478,7 +471,7 @@ class Prep(ABC):
         self.tab = VBox(
             children=[
                 self.top_of_box_hb,
-                self.plotter_accordion,
+                self.viewer_accordion,
                 self.prep_buttons_accordion,
                 self.shifts_accordion,
             ]
@@ -496,14 +489,14 @@ class PrepMethod:
     def update_method_and_run(self):
         if self.Prep.preview_only:
             if self.Prep.first_method:
-                image_index = self.Prep.imported_plotter.image_index_slider.value
+                image_index = self.Prep.imported_viewer.image_index_slider.value
                 data = self.Prep.imported_projections[image_index]
                 data = data[np.newaxis, ...]
             else:
                 data = self.Prep.preview_image
             self.partial_func = partial(self.func, data, *self.opts)
             self.Prep.preview_image = self.partial_func()
-            self.Prep.altered_plotter.plotted_image.image = self.Prep.preview_image[0]
+            self.Prep.altered_viewer.plotted_image.image = self.Prep.preview_image[0]
         else:
             data = self.Prep.prepped_data
             self.partial_func = partial(self.func, data, *self.opts)
@@ -555,3 +548,12 @@ def renormalize_by_roi(projections, px_range_x, px_range_y):
     prj = [exp_full[i] / averages[i] for i in range(len(exp_full))]
     prj = -np.log(prj)
     return prj
+
+
+### May use?
+# def rectangle_selector_on(self, change):
+#     time.sleep(0.1)
+#     if self.plotter.rectangle_selector_on:
+#         self.renormalize_by_roi_button.disabled = False
+#     else:
+#         self.renormalize_by_roi_button.disabled = True
