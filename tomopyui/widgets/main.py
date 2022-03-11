@@ -2,6 +2,7 @@ from ipywidgets import *
 from tomopyui.widgets.helpers import import_module_set_env
 import multiprocessing
 from tomopyui.widgets.imports import Import_SSRL62
+from tomopyui.widgets.als_imports import Import_ALS832
 
 # from tomopyui.widgets.als_imports import Import_ALS832
 from tomopyui.widgets.center import Center
@@ -88,10 +89,10 @@ def create_dashboard():
     accordions = [
         file_import.raw_accordion,
         file_import.prenorm_accordion,
-        prep.plotter_accordion,
+        prep.viewer_accordion,
         center.manual_center_accordion,
-        align.plotter_accordion,
-        recon.plotter_accordion,
+        align.viewer_accordion,
+        recon.viewer_accordion,
         dataexplorer.analysis_browser_accordion,
         dataexplorer.recent_alignment_accordion,
         dataexplorer.recent_recon_accordion,
