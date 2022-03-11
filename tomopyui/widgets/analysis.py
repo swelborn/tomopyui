@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from tomopyui.widgets.view import (
     BqImViewer_Import_Analysis,
     BqImViewer_Altered_Analysis,
-    BqImViewer_DataExplorer,
+    BqImViewer_DataExplorer_AfterAnalysis,
 )
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
@@ -20,11 +20,11 @@ class AnalysisBase(ABC):
         self.Import = Import
         self.Center = Center
         self.projections = copy.deepcopy(Import.projections)
-        self.imported_plotter = BqImViewer_Import_Analysis(self)
-        self.imported_plotter.create_app()
-        self.altered_plotter = BqImViewer_Altered_Analysis(self.imported_plotter, self)
-        self.altered_plotter.create_app()
-        self.result_before_plotter = self.altered_plotter
+        self.imported_viewer = BqImViewer_Import_Analysis(self)
+        self.imported_viewer.create_app()
+        self.altered_viewer = BqImViewer_Altered_Analysis(self.imported_viewer, self)
+        self.altered_viewer.create_app()
+        self.result_before_viewer = self.altered_viewer
         self.wd = None
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
@@ -121,12 +121,12 @@ class AnalysisBase(ABC):
             layout=Layout(width="auto"),
         )
 
-        self.plotter_hbox = HBox(
+        self.viewer_hbox = HBox(
             [
                 VBox(
                     [
                         self.import_plot_header,
-                        self.imported_plotter.app,
+                        self.imported_viewer.app,
                         self.use_imported_button,
                     ],
                     layout=Layout(align_items="center"),
@@ -134,7 +134,7 @@ class AnalysisBase(ABC):
                 VBox(
                     [
                         self.altered_plot_header,
-                        self.altered_plotter.app,
+                        self.altered_viewer.app,
                         self.use_altered_button,
                     ],
                     layout=Layout(align_items="center"),
@@ -143,8 +143,8 @@ class AnalysisBase(ABC):
             layout=Layout(justify_content="center"),
         )
 
-        self.plotter_accordion = Accordion(
-            children=[self.plotter_hbox],
+        self.viewer_accordion = Accordion(
+            children=[self.viewer_hbox],
             selected_index=None,
             titles=("Plot Projection Images",),
         )
@@ -238,7 +238,7 @@ class AnalysisBase(ABC):
         )
 
     def refresh_plots(self):
-        self.imported_plotter.plot()
+        self.imported_viewer.plot()
 
     def set_metadata(self):
         self.metadata["opts"]["downsample"] = self.downsample
@@ -334,7 +334,7 @@ class AnalysisBase(ABC):
             self.save_options_accordion.selected_index = 0
             self.options_accordion.selected_index = 0
             self.methods_accordion.selected_index = 0
-            self.plotter_accordion.selected_index = 0
+            self.viewer_accordion.selected_index = 0
             self.log.info("Activated alignment.")
             self.accordions_open = True
         else:
@@ -346,7 +346,7 @@ class AnalysisBase(ABC):
             self.save_options_accordion.selected_index = None
             self.options_accordion.selected_index = None
             self.methods_accordion.selected_index = None
-            self.plotter_accordion.selected_index = None
+            self.viewer_accordion.selected_index = None
             self.log.info("Deactivated alignment.")
 
     # -- Button for using imported dataset  ---------------------------------
@@ -361,8 +361,10 @@ class AnalysisBase(ABC):
         self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
         self.pixel_range_x = self.projections.pixel_range_x
         self.pixel_range_y = self.projections.pixel_range_y
-        self.result_before_plotter = self.imported_plotter
-        self.result_after_plotter = BqImViewer_DataExplorer(self.result_before_plotter)
+        self.result_before_viewer = self.imported_viewer
+        self.result_after_viewer = BqImViewer_DataExplorer_AfterAnalysis(
+            self.result_before_viewer
+        )
         self.use_imported_button.button_style = "success"
         self.use_imported_button.description = (
             "You can now align/reconstruct your data."
@@ -376,14 +378,16 @@ class AnalysisBase(ABC):
         self.use_altered_button.button_style = "info"
         self.use_altered_button.description = "Creating analysis projections"
         self.use_altered_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections._data = self.altered_plotter.original_imagestack
-        self.projections.data = self.altered_plotter.original_imagestack
+        self.projections._data = self.altered_viewer.original_imagestack
+        self.projections.data = self.altered_viewer.original_imagestack
         self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
         self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
-        self.pixel_range_x = self.altered_plotter.pixel_range_x
-        self.pixel_range_y = self.altered_plotter.pixel_range_y
-        self.result_before_plotter = self.altered_plotter
-        self.result_after_plotter = BqImViewer_DataExplorer(self.result_before_plotter)
+        self.pixel_range_x = self.altered_viewer.pixel_range_x
+        self.pixel_range_y = self.altered_viewer.pixel_range_y
+        self.result_before_viewer = self.altered_viewer
+        self.result_after_viewer = BqImViewer_DataExplorer_AfterAnalysis(
+            self.result_before_viewer
+        )
         self.use_altered_button.button_style = "success"
         self.use_altered_button.description = "You can now align/reconstruct your data."
         self.use_altered_button.icon = "fa-check-square"
@@ -572,14 +576,14 @@ class AnalysisBase(ABC):
                     VBox(
                         [
                             self.before_analysis_plot_header,
-                            self.result_before_plotter.app,
+                            self.result_before_viewer.app,
                         ],
                         layout=Layout(align_items="center"),
                     ),
                     VBox(
                         [
                             self.after_analysis_plot_header,
-                            self.result_after_plotter.app,
+                            self.result_after_viewer.app,
                         ],
                         layout=Layout(align_items="center"),
                     ),
@@ -689,8 +693,8 @@ class Align(AnalysisBase):
 
     def run(self):
         self.analysis = TomoAlign(self)
-        self.result_after_plotter.create_app()
-        self.result_after_plotter.plot(
+        self.result_after_viewer.create_app()
+        self.result_after_viewer.plot(
             self.analysis.projections_aligned,
             self.analysis.wd,
         )
@@ -788,7 +792,7 @@ class Align(AnalysisBase):
         self.tab = VBox(
             children=[
                 top_of_box_hb,
-                self.plotter_accordion,
+                self.viewer_accordion,
                 # TODO: implement load metadata again
                 # self.load_metadata_button,
                 self.methods_accordion,
@@ -855,8 +859,8 @@ class Recon(AnalysisBase):
 
     def run(self):
         self.analysis = TomoRecon(self)
-        self.result_after_plotter.create_app()
-        self.result_after_plotter.plot(
+        self.result_after_viewer.create_app()
+        self.result_after_viewer.plot(
             self.analysis.recon,
             self.analysis.wd,
         )
@@ -942,7 +946,7 @@ class Recon(AnalysisBase):
         self.tab = VBox(
             children=[
                 top_of_box_hb,
-                self.plotter_accordion,
+                self.viewer_accordion,
                 # TODO: implement load metadata again
                 # self.load_metadata_button,
                 self.methods_accordion,

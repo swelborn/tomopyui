@@ -1,7 +1,11 @@
 # TODO: reimplement this
 from ipywidgets import *
 from abc import ABC, abstractmethod
-from tomopyui.widgets.view import BqImViewer_Import, BqImViewer_DataExplorer
+from tomopyui.widgets.view import (
+    BqImViewer_Import,
+    BqImViewer_DataExplorer_BeforeAnalysis,
+    BqImViewer_DataExplorer_AfterAnalysis,
+)
 from tomopyui.backend.io import Projections_Prenormalized_SSRL62
 from tomopyui.backend.io import load_metadata, metadata_to_DataFrame
 from tomopyui.widgets.analysis import Align, Recon
@@ -9,6 +13,7 @@ from ipyfilechooser import FileChooser
 import pathlib
 from tomopyui._sharedvars import *
 import numpy as np
+import dxchange
 
 
 class DataExplorerTab:
@@ -49,10 +54,12 @@ class DataExplorerTab:
 class DataExplorerBase(ABC):
     def __init__(self):
         self.metadata = None
-        self.plotter_initial = BqImViewer_DataExplorer()
-        self.plotter_initial.create_app()
-        self.plotter_analyzed = BqImViewer_DataExplorer(self.plotter_initial)
-        self.plotter_analyzed.create_app()
+        self.viewer_initial = BqImViewer_DataExplorer_BeforeAnalysis()
+        self.viewer_initial.create_app()
+        self.viewer_analyzed = BqImViewer_DataExplorer_AfterAnalysis(
+            self.viewer_initial
+        )
+        self.viewer_analyzed.create_app()
         self.projections = Projections_Prenormalized_SSRL62()
         self.analyzed_projections = Projections_Prenormalized_SSRL62()
 
@@ -76,23 +83,29 @@ class AnalysisExplorer(DataExplorerBase):
         self.projections.data = np.load(
             self.projections.filedir / "normalized_projections.npy"
         )
+        if ".npy" in self.filebrowser.selected_data_fullpath.name:
+            self.analyzed_projections.data = np.load(
+                self.filebrowser.selected_data_fullpath
+            )
+        elif ".tif" in self.filebrowser.selected_data_fullpath.name:
+            self.analyzed_projections.data = np.array(
+                dxchange.reader.read_tiff(
+                    self.filebrowser.selected_data_fullpath
+                ).astype(np.float32)
+            )
+        self.analyzed_projections.filedir = (
+            self.filebrowser.selected_data_fullpath.parent
+        )
         self.projections._check_downsampled_data()
-        self.plotter_initial.plot(
-            self.projections.prj_imgs,
-            self.projections.filedir,
-            io=self.projections,
-            precomputed_hists=self.projections.hists,
-        )
-        self.plotter_analyzed.plot(
-            np.load(self.filebrowser.selected_data_fullpath),
-            self.filebrowser.selected_data_fullpath.parent,
-        )
+        self.viewer_initial.plot(self.projections)
+        self.analyzed_projections._check_downsampled_data()
+        self.viewer_analyzed.plot(self.analyzed_projections)
         self.filebrowser.load_data_button.icon = "fa-check-square"
         self.filebrowser.load_data_button.button_style = "success"
 
     def create_app(self):
         plots = HBox(
-            [self.plotter_initial.app, self.plotter_analyzed.app],
+            [self.viewer_initial.app, self.viewer_analyzed.app],
             layout=Layout(justify_content="center"),
         )
         self.app = VBox([self.filebrowser.app, plots])
@@ -160,7 +173,7 @@ class RecentAnalysisExplorer(DataExplorerBase):
 
     def create_app(self):
         plots = HBox(
-            [self.plotter_initial.app, self.plotter_analyzed.app],
+            [self.viewer_initial.app, self.viewer_analyzed.app],
             layout=Layout(justify_content="center"),
         )
         self.app = VBox([self.load_run_list_button, self.run_list_selector, plots])
@@ -342,17 +355,20 @@ class Filebrowser:
                 self.selected_analysis_type = "align"
 
     def load_metadata(self):
+        self.imported_metadata = False
         self.metadata_file = [
             self.selected_method / file.name
             for file in self.file_list
-            if "metadata.json" in file.name
+            if "recon_metadata.json" in file.name or "align_metadata.json" in file.name
         ]
+
         if self.metadata_file != []:
             self.metadata = load_metadata(fullpath=self.metadata_file[0])
             self.options_table = metadata_to_DataFrame(self.metadata)
             with self.options_metadata_table_output:
                 self.options_metadata_table_output.clear_output(wait=True)
                 display(self.options_table)
+                self.imported_metadata = True
 
     def create_app(self):
         quickpath = VBox(
