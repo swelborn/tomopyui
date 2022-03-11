@@ -396,7 +396,8 @@ class RawUploader_ALS832(UploaderBase):
                     layout=Layout(justify_content="center"),
                 )
             )
-        self.plotter.plot(self.projections.prj_imgs, self.filedir)
+        self.projections._check_downsampled_data()
+        self.plotter.plot(self.projections)
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
