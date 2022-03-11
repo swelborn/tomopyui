@@ -10,8 +10,13 @@ from tomopyui.widgets.view import (
 )
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
-from tomopyui.backend.io import save_metadata, load_metadata
+from tomopyui.backend.io import (
+    save_metadata,
+    load_metadata,
+    Projections_Prenormalized_General,
+)
 from tomopyui.widgets import helpers
+import pathlib
 
 
 class AnalysisBase(ABC):
@@ -417,17 +422,6 @@ class AnalysisBase(ABC):
         change.icon = "fa-check-square"
         change.description = "Finished alignment."
 
-    # -- Sliders ----------------------------------------------------------
-    @helpers.debounce(0.2)
-    def _pixel_range_xupdate(self, change):
-        self.pixel_range_x = change.new
-        self.set_metadata()
-
-    @helpers.debounce(0.2)
-    def _pixel_range_yupdate(self, change):
-        self.pixel_range_y = change.new
-        self.set_metadata()
-
     # -- Options ----------------------------------------------------------
 
     # Number of iterations
@@ -693,11 +687,11 @@ class Align(AnalysisBase):
 
     def run(self):
         self.analysis = TomoAlign(self)
+        self.analysis_projections = Projections_Prenormalized_General()
+        self.analysis_projections.data = self.analysis.projections_aligned
+        self.analysis_projections.filedir = self.analysis.wd
         self.result_after_viewer.create_app()
-        self.result_after_viewer.plot(
-            self.analysis.projections_aligned,
-            self.analysis.wd,
-        )
+        self.result_after_viewer.plot(self.analysis_projections)
         self.plot_result()
 
     def make_tab(self):
@@ -859,11 +853,11 @@ class Recon(AnalysisBase):
 
     def run(self):
         self.analysis = TomoRecon(self)
+        self.analysis_projections = Projections_Prenormalized_General()
+        self.analysis_projections.data = self.analysis.recon
+        self.analysis_projections.filedir = pathlib.Path(self.analysis.wd)
         self.result_after_viewer.create_app()
-        self.result_after_viewer.plot(
-            self.analysis.recon,
-            self.analysis.wd,
-        )
+        self.result_after_viewer.plot(self.analysis_projections)
         self.plot_result()
 
     def make_tab(self):

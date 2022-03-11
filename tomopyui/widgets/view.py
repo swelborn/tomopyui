@@ -565,6 +565,7 @@ class BqImViewer_Import(BqImViewerBase):
         self.pxX = projections.data.shape[2]
         self.pxY = projections.data.shape[1]
         self.original_imagestack = projections.data
+        self.projections._check_downsampled_data()
         self.imagestack = np.array(self.projections.data_ds[0])
         self.downsample_factor = 0.25
         self.downsample_viewer_textbox.value = self.downsample_factor

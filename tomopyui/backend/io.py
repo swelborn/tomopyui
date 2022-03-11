@@ -44,6 +44,7 @@ class IOBase:
         self.energy = None
         self.raw = False
         self.single_file = False
+        self.hists = None
         self.metadata = {}
 
     @property
