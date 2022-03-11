@@ -140,7 +140,7 @@ class TomoRecon(TomoAlign):
             (tomo_shape[1], tomo_shape[2], tomo_shape[2]), dtype=np.float32
         )
         self.Recon.log.info("Starting" + method_str)
-
+        self.Recon.log.info("Center of rotation:" + self.center)
         # TODO: parsing recon method could be done in an Align method
         if method_str == "SIRT_Plugin":
             self.recon = tomocupy_algorithm.recon_sirt_plugin(
@@ -215,9 +215,9 @@ class TomoRecon(TomoAlign):
         """
 
         metadata_list = super().make_metadata_list()
+        super().init_prj()
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
-            super().init_prj()
             tic = time.perf_counter()
             self.reconstruct()
             self.recon = unpad_rec_with_pad(self.recon, self.pad_ds)
