@@ -520,41 +520,10 @@ class PrenormUploader(UploaderBase):
         self._tmp_disable_reset = False
         self.plotter = BqImViewer_Import()
         self.plotter.create_app()
-        self.overwrite_normalized_button = Button(
-            description="Overwrite normalized_projections.npy?",
-            button_style="info",
-            layout=Layout(width="auto", height="auto", align_items="stretch"),
-            disabled=True,
-        )
-        self.overwrite_normalized_button.on_click(self.overwrite_normalized)
         self.imported_metadata = False
         self.import_status_label = Label(layout=Layout(justify_content="center"))
         self.find_metadata_status_label = Label(layout=Layout(justify_content="center"))
-        self.plotter.rectangle_selector_button.observe(self.rectangle_selector_on)
         self.plotter.rectangle_selector_on = False
-
-    def renormalize_by_roi(self, change):
-        self.renormalize_by_roi_button.description = "Renormalizing."
-        self.renormalize_by_roi_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections.renormalize_by_roi(self)
-        self.plotter.downsample_factor = 1
-        self.plotter.plot(self.projections)
-        self.renormalize_by_roi_button.icon = "fa-check-square"
-        self.renormalize_by_roi_button.description = "Finished renormalizing."
-        self.overwrite_normalized_button.disabled = False
-
-    def overwrite_normalized(self, change):
-        np.save(
-            self.projections.filedir / "normalized_projections.npy",
-            self.projections.data,
-        )
-
-    def rectangle_selector_on(self, change):
-        time.sleep(0.1)
-        if self.plotter.rectangle_selector_on:
-            self.renormalize_by_roi_button.disabled = False
-        else:
-            self.renormalize_by_roi_button.disabled = True
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
