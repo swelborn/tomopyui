@@ -55,10 +55,10 @@ class Center:
         self.algorithm = "gridrec"
         self.filter = "parzen"
         self.metadata = {}
-        self.projection_plotter = BqImViewer_Center(self)
-        self.projection_plotter.create_app()
-        self.rec_plotter = BqImViewer_Center_Recon()
-        self.rec_plotter.create_app()
+        self.projection_viewer = BqImViewer_Center(self)
+        self.projection_viewer.create_app()
+        self.rec_viewer = BqImViewer_Center_Recon()
+        self.rec_viewer.create_app()
 
         self._init_widgets()
         self._set_observes()
@@ -161,17 +161,17 @@ class Center:
     def _center_update(self, change):
         self.current_center = change.new
         self.center_guess = change.new
-        self.projection_plotter.center_line.x = [
-            change.new / self.projection_plotter.pxX,
-            change.new / self.projection_plotter.pxX,
+        self.projection_viewer.center_line.x = [
+            change.new / self.projection_viewer.pxX,
+            change.new / self.projection_viewer.pxX,
         ]
         self.set_metadata()
 
     def _center_guess_update(self, change):
         self.center_guess = change.new
-        self.projection_plotter.center_line.x = [
-            change.new / self.projection_plotter.pxX,
-            change.new / self.projection_plotter.pxX,
+        self.projection_viewer.center_line.x = [
+            change.new / self.projection_viewer.pxX,
+            change.new / self.projection_viewer.pxX,
         ]
         self.set_metadata()
 
@@ -213,9 +213,9 @@ class Center:
     def _center_textbox_slider_update(self, change):
         self.center_textbox.value = self.cen_range[change.new]
         self.center_guess_textbox.value = self.cen_range[change.new]
-        self.projection_plotter.center_line.x = [
-            self.cen_range[change.new] / self.projection_plotter.pxX,
-            self.cen_range[change.new] / self.projection_plotter.pxX,
+        self.projection_viewer.center_line.x = [
+            self.cen_range[change.new] / self.projection_viewer.pxX,
+            self.cen_range[change.new] / self.projection_viewer.pxX,
         ]
         self.current_center = self.center_textbox.value
 
@@ -324,7 +324,7 @@ class Center:
                 "Your projections do not have associated theta values."
             )
 
-        self.rec_plotter.plot(self.rec)
+        self.rec_viewer.plot(self.rec)
         self.find_center_manual_button.button_style = "success"
         self.find_center_manual_button.icon = "fa-check-square"
         self.find_center_manual_button.description = "Finished reconstruction."
@@ -343,12 +343,12 @@ class Center:
         self.find_center_vo_button.on_click(self.find_center_vo_on_click)
         self.find_center_manual_button.on_click(self.find_center_manual_on_click)
         # Callback for index going to center
-        self.rec_plotter.image_index_slider.observe(
+        self.rec_viewer.image_index_slider.observe(
             self._center_textbox_slider_update, names="value"
         )
 
     def refresh_plots(self):
-        self.projection_plotter.plot()
+        self.projection_viewer.plot()
 
     def make_tab(self):
         """
@@ -381,7 +381,7 @@ class Center:
         self.manual_center_vbox = VBox(
             [
                 HBox(
-                    [self.projection_plotter.app, self.rec_plotter.app],
+                    [self.projection_viewer.app, self.rec_viewer.app],
                     layout=Layout(justify_content="center"),
                 ),
                 HBox(
