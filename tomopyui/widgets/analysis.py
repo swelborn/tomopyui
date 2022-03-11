@@ -428,7 +428,7 @@ class AnalysisBase(ABC):
 
     # Number of iterations
     def update_num_iter(self, change):
-        self.num_iter = change.new
+        self.num_iter = int(change.new)
         self.progress_total.max = change.new
         self.set_metadata()
 
