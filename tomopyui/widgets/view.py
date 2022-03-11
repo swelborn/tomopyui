@@ -574,7 +574,7 @@ class BqImViewer_Import(BqImViewerBase):
         self.plotted_image.image = self.imagestack[0]
         self.vmin = np.min(self.imagestack)
         self.vmax = np.max(self.imagestack)
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.max = self.original_imagestack.shape[0] - 1
         self.image_index_slider.value = 0
         self.hist.preflatten_imagestack(self.imagestack)
         self.rm_high_low_int(None)
@@ -805,10 +805,10 @@ class BqImViewer_Center_Recon(BqImViewer_Import):
 
 
 class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
-    def __init__(self, plotter_parent, Analysis):
+    def __init__(self, viewer_parent, Analysis):
         self.Analysis = Analysis
         super().__init__(Analysis)
-        self.plotter_parent = plotter_parent
+        self.viewer_parent = viewer_parent
 
         # Copy from plotter
         self.copy_button = Button(
@@ -879,11 +879,11 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
 
     # Image plot
     def plot(self):
-        self.original_imagestack = copy.copy(self.plotter_parent.original_imagestack)
+        self.original_imagestack = copy.copy(self.viewer_parent.original_imagestack)
         self.pxX = self.original_imagestack.shape[2]
         self.pxY = self.original_imagestack.shape[1]
         self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = copy.copy(self.plotter_parent.imagestack)
+        self.imagestack = copy.copy(self.viewer_parent.imagestack)
         self.pixel_range_x = [0, self.pxX - 1]
         self.pixel_range_y = [0, self.pxY - 1]
         self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
@@ -892,8 +892,8 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.plotted_image.image = self.imagestack[0]
-        self.vmin = self.plotter_parent.vmin
-        self.vmax = self.plotter_parent.vmax
+        self.vmin = self.viewer_parent.vmin
+        self.vmax = self.viewer_parent.vmax
         self.image_scale["image"].min = self.vmin
         self.image_scale["image"].max = self.vmax
         self.image_index_slider.max = self.imagestack.shape[0] - 1
@@ -902,10 +902,10 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
     def copy_parent_projections(self, *args):
         self.copying = True
         self.plot()
-        self.hist.hists = copy.copy(self.plotter_parent.hist.hists)
+        self.hist.hists = copy.copy(self.viewer_parent.hist.hists)
         self.hist.selector = bq.interacts.BrushIntervalSelector(
             orientation="vertical",
-            scale=self.plotter_parent.hist.x_sc,
+            scale=self.viewer_parent.hist.x_sc,
         )
         self.hist.selector.observe(self.hist.update_crange_selector, "selected")
         self.hist.fig.interaction = self.hist.selector
@@ -919,7 +919,7 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         if not self.plots_linked:
             self.plots_linked = True
             self.plot_link = jsdlink(
-                (self.plotter_parent.image_index_slider, "value"),
+                (self.viewer_parent.image_index_slider, "value"),
                 (self.image_index_slider, "value"),
             )
             self.link_plotted_projections_button.button_style = "success"
@@ -932,42 +932,42 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
 
     def range_from_parent(self, *args):
         if (
-            self.plotter_parent.rectangle_selector_button.button_style == "success"
-            and self.plotter_parent.rectangle_selector.selected is not None
+            self.viewer_parent.rectangle_selector_button.button_style == "success"
+            and self.viewer_parent.rectangle_selector.selected is not None
         ):
-            imtemp = self.plotter_parent.imagestack
+            imtemp = self.viewer_parent.imagestack
             lowerY = int(
-                self.plotter_parent.pixel_range_y[0]
-                * self.plotter_parent.downsample_factor
+                self.viewer_parent.pixel_range_y[0]
+                * self.viewer_parent.downsample_factor
             )
             upperY = int(
-                self.plotter_parent.pixel_range_y[1]
-                * self.plotter_parent.downsample_factor
+                self.viewer_parent.pixel_range_y[1]
+                * self.viewer_parent.downsample_factor
             )
             lowerX = int(
-                self.plotter_parent.pixel_range_x[0]
-                * self.plotter_parent.downsample_factor
+                self.viewer_parent.pixel_range_x[0]
+                * self.viewer_parent.downsample_factor
             )
             upperX = int(
-                self.plotter_parent.pixel_range_x[1]
-                * self.plotter_parent.downsample_factor
+                self.viewer_parent.pixel_range_x[1]
+                * self.viewer_parent.downsample_factor
             )
             self.imagestack = copy.deepcopy(imtemp[:, lowerY:upperY, lowerX:upperX])
             self.change_aspect_ratio()
             self.plotted_image.image = self.imagestack[
-                self.plotter_parent.current_image_ind
+                self.viewer_parent.current_image_ind
             ]
             # This is confusing - decide on better names. The actual dimensions are
             # stored in self.projections.pixel_range_x, but this will eventually set the
             # Analysis attributes for pixel_range_x, pixel_range_y to input into
             # algorithms
             self.pixel_range_x = (
-                self.plotter_parent.pixel_range_x[0],
-                self.plotter_parent.pixel_range_x[1],
+                self.viewer_parent.pixel_range_x[0],
+                self.viewer_parent.pixel_range_x[1],
             )
             self.pixel_range_y = (
-                self.plotter_parent.pixel_range_y[0],
-                self.plotter_parent.pixel_range_y[1],
+                self.viewer_parent.pixel_range_y[0],
+                self.viewer_parent.pixel_range_y[1],
             )
 
     # Rectangle selector to update projection range
@@ -1027,10 +1027,23 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         self.hist.preflatten_imagestack(self.imagestack)
 
 
-class BqImViewer_DataExplorer(BqImViewer_Import):
-    def __init__(self, plotter_parent=None):
+class BqImViewer_DataExplorer_BeforeAnalysis(BqImViewer_Import):
+    def __init__(self):
         super().__init__()
-        self.plotter_parent = plotter_parent
+
+    def create_app(self):
+        self.button_box = HBox(
+            self.all_buttons,
+            layout=self.footer_layout,
+        )
+        footer = VBox([self.footer1, self.button_box])
+        self.app = VBox([self.header, self.center, footer])
+
+
+class BqImViewer_DataExplorer_AfterAnalysis(BqImViewer_DataExplorer_BeforeAnalysis):
+    def __init__(self, viewer_parent=None):
+        super().__init__()
+        self.viewer_parent = viewer_parent
         self.link_plotted_projections_button = Button(
             icon="unlink",
             layout=self.button_layout,
@@ -1060,7 +1073,7 @@ class BqImViewer_DataExplorer(BqImViewer_Import):
     def link_plotted_projections(self, *args):
         if not self.plots_linked:
             self.plot_link = jsdlink(
-                (self.plotter_parent.image_index_slider, "value"),
+                (self.viewer_parent.image_index_slider, "value"),
                 (self.image_index_slider, "value"),
             )
             self.link_plotted_projections_button.button_style = "success"
@@ -1079,13 +1092,13 @@ class BqImViewer_DataExplorer(BqImViewer_Import):
         _ = ax2.set_axis_off()
         _ = fig.patch.set_facecolor("black")
         ims = []
-        vmin_parent = self.plotter_parent.image_scale["image"].min
-        vmax_parent = self.plotter_parent.image_scale["image"].max
+        vmin_parent = self.viewer_parent.image_scale["image"].min
+        vmax_parent = self.viewer_parent.image_scale["image"].max
         vmin = self.image_scale["image"].min
         vmax = self.image_scale["image"].max
         for i in range(len(self.original_imagestack)):
             im1 = ax1.imshow(
-                self.plotter_parent.original_imagestack[i],
+                self.viewer_parent.original_imagestack[i],
                 animated=True,
                 vmin=vmin_parent,
                 vmax=vmax_parent,
@@ -1106,10 +1119,10 @@ class BqImViewer_DataExplorer(BqImViewer_Import):
 
 
 class BqImViewer_Altered_Prep(BqImViewer_Altered_Analysis):
-    def __init__(self, plotter_parent, Prep):
-        super().__init__(plotter_parent, Prep)
+    def __init__(self, viewer_parent, Prep):
+        super().__init__(viewer_parent, Prep)
         self.Prep = Prep
-        self.plotter_parent
+        self.viewer_parent
         self.downsample_factor = 1
 
     def update_pixel_range_status_bar(self):
@@ -1119,7 +1132,7 @@ class BqImViewer_Altered_Prep(BqImViewer_Altered_Analysis):
     def plot(self):
         if self.copying:
             self.Prep.prepped_data = copy.deepcopy(
-                self.plotter_parent.original_imagestack
+                self.viewer_parent.original_imagestack
             )
         self.original_imagestack = self.Prep.prepped_data
         self.pxX = self.original_imagestack.shape[2]
@@ -1134,8 +1147,8 @@ class BqImViewer_Altered_Prep(BqImViewer_Altered_Analysis):
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.plotted_image.image = self.imagestack[0]
-        self.vmin = self.plotter_parent.vmin
-        self.vmax = self.plotter_parent.vmax
+        self.vmin = self.viewer_parent.vmin
+        self.vmax = self.viewer_parent.vmax
         self.image_scale["image"].min = self.vmin
         self.image_scale["image"].max = self.vmax
         self.image_index_slider.max = self.imagestack.shape[0] - 1
@@ -1277,7 +1290,7 @@ class ScaleBar:
         # dimensions = ("550px", "550px")
 
         # fig = Figure(
-        #     marks=[altered_plotter.plotted_image, patch, test_label],
+        #     marks=[altered_viewer.plotted_image, patch, test_label],
         #     animation_duration=1000,
         # )
         # fig.layout.height = dimensions[1]
