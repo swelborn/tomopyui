@@ -449,7 +449,9 @@ def blur_edges_cp(prj, low=0, high=0.8):
     return prj_gpu
 
 
-def shift_prj_cp(prj, sx, sy, num_batches, pad, use_corr_prj_gpu=False):
+def shift_prj_cp(
+    prj, sx, sy, num_batches, pad, use_pad_cond=True, use_corr_prj_gpu=False
+):
     # add checks for sx, sy having the same dimension as prj
     prj_cpu = np.array_split(prj, num_batches, axis=0)
     _sx = np.array_split(sx, num_batches, axis=0)
@@ -464,7 +466,11 @@ def shift_prj_cp(prj, sx, sy, num_batches, pad, use_corr_prj_gpu=False):
             if (
                 np.absolute(_sx[batch][image]) < shift_x_condition
                 and np.absolute(_sy[batch][image]) < shift_y_condition
+                and use_pad_cond
             ):
+                shift_tuple = (_sy[batch][image], _sx[batch][image])
+                _prj_gpu[image] = ndi_cp.shift(_prj_gpu[image], shift_tuple, order=5)
+            elif not use_pad_cond:
                 shift_tuple = (_sy[batch][image], _sx[batch][image])
                 _prj_gpu[image] = ndi_cp.shift(_prj_gpu[image], shift_tuple, order=5)
 
