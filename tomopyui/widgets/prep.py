@@ -1,18 +1,19 @@
 import numpy as np
-from ipywidgets import *
-from tomopyui._sharedvars import *
 import copy
+import datetime
+import pathlib
+from ipywidgets import *
 from abc import ABC, abstractmethod
+from functools import partial
+from tomopyui._sharedvars import *
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
-from tomopyui.backend.io import (
-    load_metadata,
-    Projections_Prenormalized_General,
-)
+from tomopyui.backend.io import Projections_Prenormalized
 from tomopyui.widgets.imports import ShiftsUploader
 from tomopyui.widgets.view import BqImViewer_Prep, BqImViewer_Altered_Prep
 from tomopyui.backend.util.padding import *
-from functools import partial
+from tomopyui.backend.io import Metadata_Prep
+
 
 if os.environ["cuda_enabled"] == "True":
     from ..tomocupy.prep.alignment import shift_prj_cp
@@ -32,7 +33,7 @@ class Prep(ABC):
         self.Import = Import
         self.Import.Prep = self
         self.imported_projections = Import.projections
-        self.altered_projections = Projections_Prenormalized_General()
+        self.altered_projections = Projections_Prenormalized()
         self.prep_list = []
         self.metadata = {}
         self.accordions_open = False
@@ -40,6 +41,8 @@ class Prep(ABC):
         self.tomocorr_median_filter_size = 3
         self.tomocorr_gaussian_filter_order = 0
         self.tomocorr_gaussian_filter_sigma = 3
+        self.save_on = False
+        self.metadata = Metadata_Prep()
 
     def init_widgets(self):
         """
@@ -58,13 +61,6 @@ class Prep(ABC):
         self.imported_viewer.create_app()
         self.altered_viewer = BqImViewer_Altered_Prep(self.imported_viewer, self)
         self.altered_viewer.create_app()
-
-        # -- Button to turn on tab ---------------------------------------------
-        self.open_accordions_button = Button(
-            icon="lock-open",
-            layout=self.button_layout,
-            style=self.button_font,
-        )
 
         # -- Headers for plotting -------------------------------------
         self.import_plot_header = "Imported Projections"
@@ -85,28 +81,34 @@ class Prep(ABC):
         # -- Prep List -------------------------------------
         self.prep_list_select = Select(
             options=["Method 1", "Method 2", "Method 3", "Method 4", "Method 5"],
-            rows=5,
+            rows=10,
             disabled=True,
         )
         # -- Buttons for methods list -------------------------------------
         self.up_button = Button(
+            disabled=True,
             icon="arrow-up",
+            tooltip="Move method up.",
             layout=self.button_layout,
             style=self.button_font,
         )
         self.down_button = Button(
+            disabled=True,
             icon="arrow-down",
+            tooltip="Move method down.",
             layout=self.button_layout,
             style=self.button_font,
         )
         self.remove_method_button = Button(
+            disabled=True,
             icon="fa-minus-square",
+            tooltip="Remove selected method.",
             layout=self.button_layout,
             style=self.button_font,
         )
         self.start_button = Button(
             disabled=True,
-            button_style="info",  # 'success', 'info', 'warning', 'danger' or ''
+            button_style="info",
             tooltip=(
                 "Run the list above. "
                 + "This will save a subdirectory with your processed images."
@@ -115,12 +117,41 @@ class Prep(ABC):
             layout=self.button_layout,
             style=self.button_font,
         )
-        self.methods_button_box = HBox(
+        self.preview_only_button = Button(
+            disabled=True,
+            button_style="",
+            tooltip=(
+                "Run the currently selected image through your list of methods. "
+                + "This will not run the stack or save data."
+            ),
+            icon="glasses",
+            layout=self.button_layout,
+            style=self.button_font,
+        )
+        self.save_on_button = Button(
+            disabled=True,
+            button_style="",
+            tooltip=("Turn this on to save the data when you click the run button."),
+            icon="fa-file-export",
+            layout=self.button_layout,
+            style=self.button_font,
+        )
+        self.methods_button_box = VBox(
             [
-                self.up_button,
-                self.down_button,
-                self.remove_method_button,
-                self.start_button,
+                HBox(
+                    [
+                        self.up_button,
+                        self.down_button,
+                        self.remove_method_button,
+                    ]
+                ),
+                HBox(
+                    [
+                        self.preview_only_button,
+                        self.start_button,
+                        self.save_on_button,
+                    ]
+                ),
             ]
         )
 
@@ -141,7 +172,7 @@ class Prep(ABC):
                         self.prep_list_select,
                         self.methods_button_box,
                     ],
-                    layout=Layout(align_items="center"),
+                    layout=Layout(align_items="center", align_content="center"),
                 ),
                 VBox(
                     [
@@ -151,7 +182,7 @@ class Prep(ABC):
                     layout=Layout(align_items="center"),
                 ),
             ],
-            layout=Layout(justify_content="center"),
+            layout=Layout(justify_content="center", align_items="center"),
         )
 
         # -- Shifts uploader --------------------------------------------------------
@@ -177,11 +208,14 @@ class Prep(ABC):
 
         # -- List manipulation ---------------------------------------------------------
         self.buttons_to_disable = [
+            self.prep_list_select,
             self.start_button,
             self.up_button,
             self.down_button,
             self.remove_method_button,
             self.start_button,
+            self.preview_only_button,
+            self.save_on_button,
         ]
 
         # -- Add preprocessing steps widgets -------------------------------------------
@@ -328,6 +362,7 @@ class Prep(ABC):
                 x.disabled = False
 
     def refresh_plots(self):
+        self.imported_projections = self.Import.projections
         self.imported_viewer.plot()
 
     def set_metadata(self):
@@ -347,26 +382,64 @@ class Prep(ABC):
         # tomopy.misc.corr Gaussian Filter
         self.tomocorr_gaussian_filter_button.on_click(self.add_tomocorr_gaussian_filter)
 
+        # Remove method
+        self.remove_method_button.on_click(self.remove_method)
+
+        # Move method up
+        self.up_button.on_click(self.move_method_up)
+
+        # Move method down
+        self.down_button.on_click(self.move_method_down)
+
+        # Preview
+        self.preview_only_button.on_click(self.preview_only_on_off)
+
+        # Save
+        self.save_on_button.on_click(self.save_on_off)
+
     def update_shifts_list(self):
         pass
 
-    # -- Radio to turn on tab ---------------------------------------------
-    def activate_tab(self, *args):
-        if self.accordions_open is False:
-            self.open_accordions_button.icon = "fa-lock"
-            self.open_accordions_button.button_style = "success"
-            self.projections = self.Import.projections
-            self.set_metadata()
-            self.shifts_accordion.selected_index = 0
-            self.viewer_accordion.selected_index = 0
-            self.accordions_open = True
+    def save_on_off(self, *args):
+        if self.save_on:
+            self.save_on_button.button_style = ""
+            self.save_on = False
         else:
-            self.open_accordions_button.icon = "fa-lock-open"
-            self.open_accordions_button.button_style = "info"
-            self.accordions_open = False
-            self.load_metadata_button.disabled = True
-            self.shifts_accordion.selected_index = None
-            self.viewer_accordion.selected_index = None
+            self.save_on_button.button_style = "success"
+            self.save_on = True
+
+    def preview_only_on_off(self, *args):
+        if self.preview_only:
+            self.preview_only_button.button_style = ""
+            self.preview_only = False
+        else:
+            self.preview_only_button.button_style = "success"
+            self.preview_only = True
+
+    def remove_method(self, *args):
+        ind = self.prep_list_select.index
+        self.prep_list.pop(ind)
+        self.update_prep_list()
+
+    def move_method_up(self, *args):
+        ind = self.prep_list_select.index
+        if ind != 0:
+            self.prep_list[ind], self.prep_list[ind - 1] = (
+                self.prep_list[ind - 1],
+                self.prep_list[ind],
+            )
+            self.update_prep_list()
+            self.prep_list_select.index = ind - 1
+
+    def move_method_down(self, *args):
+        ind = self.prep_list_select.index
+        if ind != len(self.prep_list) - 1:
+            self.prep_list[ind], self.prep_list[ind + 1] = (
+                self.prep_list[ind + 1],
+                self.prep_list[ind],
+            )
+            self.update_prep_list()
+            self.prep_list_select.index = ind + 1
 
     # -- Load metadata button ---------------------------------------------
     def _load_metadata_all_on_click(self, change):
@@ -386,21 +459,43 @@ class Prep(ABC):
         change.icon = "fa-check-square"
 
     def run(self):
-        self.first_method = True
-        if not self.preview_only:
+        if self.preview_only:
+            image_index = self.imported_viewer.image_index_slider.value
+            self.altered_viewer.image_index_slider.value = image_index
+            self.prepped_data = copy.deepcopy(
+                self.imported_viewer.original_imagestack[image_index]
+            )
+            self.prepped_data = self.prepped_data[np.newaxis, ...]
+            for prep_method_tuple in self.prep_list:
+                prep_method_tuple[1].update_method_and_run()
+            self.altered_viewer.plotted_image.image = self.prepped_data[0]
+        else:
             self.prepped_data = copy.deepcopy(self.imported_viewer.original_imagestack)
-        for prep_method_tuple in self.prep_list:
-            prep_method_tuple[1].update_method_and_run()
-            self.first_method = False
-        if not self.preview_only:
+            for num, prep_method_tuple in enumerate(self.prep_list):
+                prep_method_tuple[1].update_method_and_run()
+                self.prep_list_select.index = num
+            self.altered_viewer.original_imagestack = self.prepped_data
             self.altered_viewer.plot()
+            if self.save_on:
+                self.make_prep_dir()
+                self.metadata.set_metadata(self)
+                self.metadata.filedir = self.filedir
+                self.metadata.save_metadata()
+                self.altered_projections.data = self.prepped_data
+                np.save(self.filedir / "prepped_projections.npy", self.prepped_data)
+
+    def make_prep_dir(self):
+        now = datetime.datetime.now()
+        dt_string = now.strftime("%Y%m%d-%H%M%S-prep")
+        self.filedir = pathlib.Path(self.Import.projections.filedir) / dt_string
+        os.mkdir(self.filedir)
 
     def make_tab(self):
 
         # -- Box organization -------------------------------------------------
 
         self.top_of_box_hb = HBox(
-            [self.open_accordions_button, self.Import.switch_data_buttons],
+            [self.Import.switch_data_buttons],
             layout=Layout(
                 width="auto",
                 justify_content="flex-start",
@@ -487,20 +582,8 @@ class PrepMethod:
         self.method_tuple = (self.method_name, self)
 
     def update_method_and_run(self):
-        if self.Prep.preview_only:
-            if self.Prep.first_method:
-                image_index = self.Prep.imported_viewer.image_index_slider.value
-                data = self.Prep.imported_projections[image_index]
-                data = data[np.newaxis, ...]
-            else:
-                data = self.Prep.preview_image
-            self.partial_func = partial(self.func, data, *self.opts)
-            self.Prep.preview_image = self.partial_func()
-            self.Prep.altered_viewer.plotted_image.image = self.Prep.preview_image[0]
-        else:
-            data = self.Prep.prepped_data
-            self.partial_func = partial(self.func, data, *self.opts)
-            self.Prep.prepped_data = self.partial_func()
+        self.partial_func = partial(self.func, self.Prep.prepped_data, *self.opts)
+        self.Prep.prepped_data = self.partial_func()
 
 
 def shift_projections(projections, sx, sy):
@@ -553,7 +636,7 @@ def renormalize_by_roi(projections, px_range_x, px_range_y):
 ### May use?
 # def rectangle_selector_on(self, change):
 #     time.sleep(0.1)
-#     if self.plotter.rectangle_selector_on:
+#     if self.viewer.rectangle_selector_on:
 #         self.renormalize_by_roi_button.disabled = False
 #     else:
 #         self.renormalize_by_roi_button.disabled = True

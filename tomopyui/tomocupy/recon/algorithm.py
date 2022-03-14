@@ -1,7 +1,6 @@
-#!/usr/bin/env python
+import astra
 
 from tomopy.recon import algorithm as tomopy_algorithm
-import astra
 
 
 def recon_sirt_plugin(prj, angles, num_iter=1, rec=None, center=None):

@@ -1,7 +1,7 @@
+import multiprocessing
 from ipywidgets import *
 from tomopyui.widgets.helpers import import_module_set_env
-import multiprocessing
-from tomopyui.widgets.imports import Import_SSRL62
+from tomopyui.widgets.imports import Import_SSRL62C
 from tomopyui.widgets.als_imports import Import_ALS832
 
 # from tomopyui.widgets.als_imports import Import_ALS832
@@ -21,7 +21,7 @@ import_module_set_env(cuda_import_dict)
 os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
 
 
-def create_dashboard():
+def create_dashboard(institution: str):
     """
     This is the function to open the app in a jupyter notebook. In jupyter,
     run the following commands:
@@ -35,8 +35,10 @@ def create_dashboard():
         dashboard
 
     """
-
-    file_import = Import_SSRL62()
+    if institution == "ALS_832":
+        file_import = Import_ALS832()
+    if institution == "SSRL_62C":
+        file_import = Import_SSRL62C()
     prep = Prep(file_import)
     center = Center(file_import)
     align = Align(file_import, center)

@@ -1,9 +1,9 @@
-from ipywidgets import *
+import numpy as np
 
-# includes astra_cuda_recon_algorithm_kwargs, tomopy_recon_algorithm_kwargs,
+# astra_cuda_recon_algorithm_kwargs, tomopy_recon_algorithm_kwargs,
 # and tomopy_filter_names, extend_description_style
 from tomopyui._sharedvars import *
-import numpy as np
+from ipywidgets import *
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
 from tomopyui.widgets.view import BqImViewer_Center, BqImViewer_Center_Recon
 from tomopyui.backend.util.center import write_center

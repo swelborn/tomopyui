@@ -1,7 +1,9 @@
 import numpy as np
+import copy
+import pathlib
+
 from ipywidgets import *
 from tomopyui._sharedvars import *
-import copy
 from abc import ABC, abstractmethod
 from tomopyui.widgets.view import (
     BqImViewer_Import_Analysis,
@@ -11,12 +13,10 @@ from tomopyui.widgets.view import (
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
 from tomopyui.backend.io import (
-    save_metadata,
-    load_metadata,
-    Projections_Prenormalized_General,
+    Projections_Prenormalized,
+    Metadata_Align,
+    Metadata_Recon,
 )
-from tomopyui.widgets import helpers
-import pathlib
 
 
 class AnalysisBase(ABC):
@@ -30,6 +30,9 @@ class AnalysisBase(ABC):
         self.altered_viewer = BqImViewer_Altered_Analysis(self.imported_viewer, self)
         self.altered_viewer.create_app()
         self.result_before_viewer = self.altered_viewer
+        self.result_after_viewer = BqImViewer_DataExplorer_AfterAnalysis(
+            self.result_before_viewer
+        )
         self.wd = None
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
@@ -43,7 +46,6 @@ class AnalysisBase(ABC):
         self.pixel_range_y = (0, 10)
         self.paddingX = 10
         self.paddingY = 10
-        self.partial = False
         self.use_subset_correlation = False
         self.pre_alignment_iters = 1
         self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
@@ -52,8 +54,7 @@ class AnalysisBase(ABC):
         self.astra_cuda_methods_list = [
             key for key in astra_cuda_recon_algorithm_kwargs
         ]
-        self.metadata = {}
-        self.metadata["opts"] = {}
+        self.metadata = Metadata_Align()
         self.run_list = []
         self.header_font_style = {
             "font_size": "22px",
@@ -245,24 +246,6 @@ class AnalysisBase(ABC):
     def refresh_plots(self):
         self.imported_viewer.plot()
 
-    def set_metadata(self):
-        self.metadata["opts"]["downsample"] = self.downsample
-        self.metadata["opts"]["downsample_factor"] = self.downsample_factor
-        self.metadata["opts"]["num_iter"] = self.num_iter
-        self.metadata["opts"]["center"] = self.center
-        self.metadata["opts"]["num_batches"] = self.num_batches
-        self.metadata["opts"]["pad"] = (
-            self.paddingX,
-            self.paddingY,
-        )
-        self.metadata["opts"]["extra_options"] = self.extra_options
-        self.metadata["methods"] = self.methods_opts
-        self.metadata["save_opts"] = self.save_opts
-        self.metadata["pixel_range_x"] = self.pixel_range_x
-        self.metadata["pixel_range_y"] = self.pixel_range_y
-        self.metadata["partial"] = self.partial
-        self.metadata["correlation_subset"] = self.use_subset_correlation
-
     def set_observes(self):
 
         # -- Radio to turn on tab ---------------------------------------------
@@ -308,23 +291,6 @@ class AnalysisBase(ABC):
         # Start button
         self.start_button.on_click(self.set_options_and_run)
 
-    def _set_attributes_from_metadata(self):
-        self.downsample = self.metadata["opts"]["downsample"]
-        self.downsample_factor = self.metadata["opts"]["downsample_factor"]
-        self.num_iter = self.metadata["opts"]["num_iter"]
-        self.center = self.metadata["opts"]["center"]
-        self.num_batches = self.metadata["opts"]["num_batches"]
-        (self.paddingX, self.paddingY) = self.metadata["opts"]["pad"]
-        self.extra_options = self.metadata["opts"]["extra_options"]
-        self.methods_opts = self.metadata["methods"]
-        self.save_opts = self.metadata["save_opts"]
-        self.pixel_range_x = self.metadata["pixel_range_x"]
-        self.pixel_range_y = self.metadata["pixel_range_y"]
-        self.partial = self.metadata["partial"]
-
-    def _set_attributes_from_metadata_obj_specific(self):
-        self.upsample_factor = self.metadata["opts"]["upsample_factor"]
-
     # -- Radio to turn on tab ---------------------------------------------
     def activate_tab(self, *args):
         if self.accordions_open is False:
@@ -333,7 +299,7 @@ class AnalysisBase(ABC):
             self.projections = self.Import.projections
             self.center = self.Center.current_center
             self.center_textbox.value = self.Center.current_center
-            self.set_metadata()
+            self.metadata.set_metadata(self)
             self.load_metadata_button.disabled = False
             self.start_button.disabled = False
             self.save_options_accordion.selected_index = 0
@@ -403,7 +369,7 @@ class AnalysisBase(ABC):
         self.load_metadata_button.icon = "fas fa-cog fa-spin fa-lg"
         self.load_metadata_button.description = "Importing metadata."
         self.load_metadata_align()
-        self._set_attributes_from_metadata()
+        self.metadata.set_attributes_from_metadata()
         # self = _set_widgets_from_load_metadata(self)
         self.set_observes()
         self.load_metadata_button.button_style = "success"
@@ -428,12 +394,12 @@ class AnalysisBase(ABC):
     def update_num_iter(self, change):
         self.num_iter = int(change.new)
         self.progress_total.max = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # Center of rotation
     def update_center_textbox(self, change):
         self.center = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # Downsampling
     def _downsample_turn_on(self, change):
@@ -441,22 +407,22 @@ class AnalysisBase(ABC):
             self.downsample = True
             self.downsample_factor = self.downsample_factor_textbox.value
             self.downsample_factor_textbox.disabled = False
-            self.set_metadata()
+            self.metadata.set_metadata(self)
         if change.new is False:
             self.downsample = False
             self.downsample_factor = 1
             self.downsample_factor_textbox.value = 1
             self.downsample_factor_textbox.disabled = True
-            self.set_metadata()
+            self.metadata.set_metadata(self)
 
     # Phase cross correlation subset (from altered projections)
     def _use_subset_correlation(self, change):
         self.use_subset_correlation = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     def update_downsample_factor_dict(self, change):
         self.downsample_factor = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # Batch size
     def update_num_batches(self, change):
@@ -464,17 +430,17 @@ class AnalysisBase(ABC):
         self.progress_phase_cross_corr.max = change.new
         self.progress_shifting.max = change.new
         self.progress_reprj.max = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # X Padding
     def update_x_padding(self, change):
         self.paddingX = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # Y Padding
     def update_y_padding(self, change):
         self.paddingY = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # Pre-alignment iterations
     def update_pre_alignment_iters(self, *args):
@@ -483,7 +449,7 @@ class AnalysisBase(ABC):
     # Extra options
     def update_extra_options(self, change):
         self.extra_options = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # def set_widgets_from_load_metadata(self):
 
@@ -543,7 +509,7 @@ class AnalysisBase(ABC):
     def set_checkbox_bool(self, checkbox_list, dictionary):
         def create_opt_dict_on_check(change):
             dictionary[change.owner.description] = change.new
-            self.set_metadata()
+            self.metadata.set_metadata(self)
 
         for key in dictionary:
             if dictionary[key]:
@@ -608,10 +574,12 @@ class AnalysisBase(ABC):
 class Align(AnalysisBase):
     def __init__(self, Import, Center):
         super().init_attributes(Import, Center)
+        self.subset_range_x = None
+        self.subset_range_y = None
         self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", "npy"]
         self.Import.Align = self
         self.init_widgets()
-        self.set_metadata()
+        self.metadata.set_metadata(self)
         self.set_observes()
         self.make_tab()
 
@@ -645,10 +613,6 @@ class Align(AnalysisBase):
             value=self.upsample_factor,
         )
 
-    def set_metadata(self):
-        super().set_metadata()
-        self.metadata["opts"]["upsample_factor"] = self.upsample_factor
-
     def set_observes(self):
         super().set_observes()
         self.num_iterations_textbox.observe(self.update_num_iter, names="value")
@@ -659,7 +623,7 @@ class Align(AnalysisBase):
     # Upsampling
     def update_upsample_factor(self, change):
         self.upsample_factor = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # TODO: implement load metadata
     # def set_widgets_from_load_metadata(self):
@@ -678,16 +642,16 @@ class Align(AnalysisBase):
         self.progress_phase_cross_corr.max = change.new
         self.progress_shifting.max = change.new
         self.progress_reprj.max = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     def update_num_iter(self, change):
         self.num_iter = change.new
         self.progress_total.max = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     def run(self):
         self.analysis = TomoAlign(self)
-        self.analysis_projections = Projections_Prenormalized_General()
+        self.analysis_projections = Projections_Prenormalized()
         self.analysis_projections.data = self.analysis.projections_aligned
         self.analysis_projections.filedir = self.analysis.wd
         self.result_after_viewer.create_app()
@@ -804,10 +768,11 @@ class Align(AnalysisBase):
 class Recon(AnalysisBase):
     def __init__(self, Import, Center):
         super().init_attributes(Import, Center)
+        self.metadata = Metadata_Recon()
         self.save_opts_list = ["tomo_before", "recon", "tiff", "npy"]
         self.Import.Recon = self
         self.init_widgets()
-        self.set_metadata()
+        self.metadata.set_metadata(self)
         self.set_observes()
         self.make_tab()
 
@@ -838,18 +803,18 @@ class Recon(AnalysisBase):
     # def set_widgets_from_load_metadata(self):
     #     super().set_widgets_from_load_metadata()
     #     self.init_widgets()
-    #     self.set_metadata()
+    #     self.metadata.set_metadata(self)
     #     self.make_tab()
 
     # Batch size
     def update_num_batches(self, change):
         self.num_batches = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     # Number of iterations
     def update_num_iter(self, change):
         self.num_iter = change.new
-        self.set_metadata()
+        self.metadata.set_metadata(self)
 
     def run(self):
         self.analysis = TomoRecon(self)
@@ -921,7 +886,6 @@ class Recon(AnalysisBase):
                     [
                         self.num_iterations_textbox,
                         self.center_textbox,
-                        self.num_batches_textbox,
                         self.paddingX_textbox,
                         self.paddingY_textbox,
                         self.downsample_checkbox,
@@ -961,6 +925,6 @@ class MetaCheckbox:
 
         def create_opt_dict_on_check(change):
             dictionary[description] = change.new
-            obj.set_metadata()  # obj needs a set_metadata function
+            obj.metadata.set_metadata(obj)  # obj needs a Metadata instance
 
         self.checkbox.observe(create_opt_dict_on_check, names="value")

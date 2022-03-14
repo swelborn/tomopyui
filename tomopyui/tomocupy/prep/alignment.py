@@ -1,4 +1,10 @@
-#!/usr/bin/env python
+import astra
+import os
+import bqplot as bq
+import cupy as cp
+import numpy as np
+import matplotlib.pyplot as plt
+import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
 
 from tomopy.misc.corr import circ_mask
 from tomopy.recon import wrappers
@@ -11,14 +17,6 @@ from tomopy.recon import algorithm as tomopy_algorithm
 from bqplot_image_gl import ImageGL
 from ipywidgets import *
 from tomopyui.backend.util.padding import *
-
-import astra
-import os
-import bqplot as bq
-import cupy as cp
-import numpy as np
-import matplotlib.pyplot as plt
-import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
 
 
 def align_joint(TomoAlign):

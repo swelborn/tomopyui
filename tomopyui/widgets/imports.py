@@ -1,21 +1,21 @@
-from tomopyui.widgets import helpers
-from ipyfilechooser import FileChooser
-import logging
-from ipywidgets import *
-from abc import ABC, abstractmethod
-from tomopyui._sharedvars import *
 import time
-from tomopyui.widgets.view import BqImViewer_Import
-from tomopyui.backend.io import (
-    RawProjectionsXRM_SSRL62,
-    Projections_Prenormalized_SSRL62,
-)
+import logging
 import numpy as np
 import pathlib
 import functools
-from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
 import re
-from tomopyui.backend.io import load_metadata
+
+from ipyfilechooser import FileChooser
+from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
+from ipywidgets import *
+from abc import ABC, abstractmethod
+from tomopyui._sharedvars import *
+from tomopyui.widgets.view import BqImViewer_Import
+from tomopyui.backend.io import (
+    RawProjectionsXRM_SSRL62C,
+    Projections_Prenormalized,
+)
+from tomopyui.widgets import helpers
 
 
 class ImportBase(ABC):
@@ -43,7 +43,7 @@ class ImportBase(ABC):
         self.angle_start = -90.0
         self.angle_end = 90.0
         self.angles_textboxes = self.create_angles_textboxes()
-        self.prenorm_projections = Projections_Prenormalized_SSRL62()
+        self.prenorm_projections = Projections_Prenormalized()
         self.prenorm_uploader = PrenormUploader(self)
         self.wd = None
         self.alignmeta_uploader = MetadataUploader("Import Alignment Metadata:")
@@ -160,14 +160,14 @@ class ImportBase(ABC):
         ...
 
 
-class Import_SSRL62(ImportBase):
+class Import_SSRL62C(ImportBase):
     """"""
 
     def __init__(self):
         super().__init__()
         self.angles_from_filenames = True
-        self.raw_projections = RawProjectionsXRM_SSRL62()
-        self.raw_uploader = RawUploader_SSRL62(self)
+        self.raw_projections = RawProjectionsXRM_SSRL62C()
+        self.raw_uploader = RawUploader_SSRL62C(self)
         self.make_tab()
 
     def make_tab(self):
@@ -203,7 +203,7 @@ class Import_SSRL62(ImportBase):
                         ),
                     ],
                 ),
-                self.raw_uploader.plotter.app,
+                self.raw_uploader.viewer.app,
             ],
             layout=Layout(justify_content="center"),
         )
@@ -244,7 +244,7 @@ class Import_SSRL62(ImportBase):
                         HBox(self.angles_textboxes),
                     ],
                 ),
-                self.prenorm_uploader.plotter.app,
+                self.prenorm_uploader.viewer.app,
             ],
             layout=Layout(justify_content="center"),
         )
@@ -477,7 +477,7 @@ class ShiftsUploader(UploaderBase):
         self.sy = np.load(self.filedir / "sy.npy")
         self.conv = np.load(self.filedir / "conv.npy")
         self.align_metadata = load_metadata(
-            fullpath=self.filedir / "alignment_metadata.json"
+            filepath=self.filedir / "alignment_metadata.json"
         )
         if self.align_metadata["opts"]["downsample"]:
             self.sx = self.sx / self.align_metadata["opts"]["downsample_factor"]
@@ -485,7 +485,7 @@ class ShiftsUploader(UploaderBase):
 
     def import_shifts_from_metadata(self):
         self.align_metadata = load_metadata(
-            fullpath=self.filedir / "alignment_metadata.json"
+            filepath=self.filedir / "alignment_metadata.json"
         )
         self.sx = self.align_metadata["sx"]
         self.sy = self.align_metadata["sy"]
@@ -518,12 +518,12 @@ class PrenormUploader(UploaderBase):
         self.Import = Import
         self.filechooser.title = "Import prenormalized data:"
         self._tmp_disable_reset = False
-        self.plotter = BqImViewer_Import()
-        self.plotter.create_app()
+        self.viewer = BqImViewer_Import()
+        self.viewer.create_app()
         self.imported_metadata = False
         self.import_status_label = Label(layout=Layout(justify_content="center"))
         self.find_metadata_status_label = Label(layout=Layout(justify_content="center"))
-        self.plotter.rectangle_selector_on = False
+        self.viewer.rectangle_selector_on = False
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
@@ -557,10 +557,11 @@ class PrenormUploader(UploaderBase):
                 return
             else:
                 try:
-                    self.import_metadata_filepath = (
-                        self.filedir
-                        / [file for file in json_files if "import_metadata" in file][0]
-                    )
+                    self.import_metadata_filepath = [
+                        self.filedir / file
+                        for file in json_files
+                        if "import_metadata" in file
+                    ]
                     assert self.import_metadata_filepath != []
                 except AssertionError:
                     self.find_metadata_status_label.value = (
@@ -573,11 +574,12 @@ class PrenormUploader(UploaderBase):
                     return
 
                 else:
-                    self.projections.import_metadata(self)
-                    self.metadata_table = self.projections.metadata_to_DataFrame()
+                    self.import_metadata_filepath = self.import_metadata_filepath[0]
+                    self.projections.import_metadata(self.import_metadata_filepath)
+                    self.projections.metadata.metadata_to_DataFrame()
                     with self.metadata_table_output:
                         self.metadata_table_output.clear_output(wait=True)
-                        display(self.metadata_table)
+                        display(self.projections.metadata.dataframe)
                     for tb in self.Import.angles_textboxes:
                         tb.disabled = True
                     self.imported_metadata = True
@@ -599,7 +601,7 @@ class PrenormUploader(UploaderBase):
         with self.metadata_table_output:
             self.metadata_table_output.clear_output(wait=True)
             if self.imported_metadata:
-                display(self.metadata_table)
+                display(self.projections.metadata.dataframe)
             display(self.import_status_label)
         if self.filename == "" or self.filename is None:
             self.import_status_label.value = "Importing file directory."
@@ -612,7 +614,7 @@ class PrenormUploader(UploaderBase):
         self.import_status_label.value = (
             "Plotting data (downsampled for viewer to 0.25x)."
         )
-        self.plotter.plot(self.projections)
+        self.viewer.plot(self.projections)
         toc = time.perf_counter()
         self.import_button.button_style = "success"
         self.import_button.icon = "fa-check-square"
@@ -631,7 +633,7 @@ class PrenormUploader(UploaderBase):
         )
 
 
-class RawUploader_SSRL62(UploaderBase):
+class RawUploader_SSRL62C(UploaderBase):
     """"""
 
     def __init__(self, Import):
@@ -641,8 +643,8 @@ class RawUploader_SSRL62(UploaderBase):
         self.projections = Import.raw_projections
         self.Import = Import
         # self.projections.set_options_from_frontend(self.Import, self)
-        self.plotter = BqImViewer_Import()
-        self.plotter.create_app()
+        self.viewer = BqImViewer_Import()
+        self.viewer.create_app()
         self.filechooser.title = "Choose a Raw XRM File Directory"
 
     def _init_widgets(self):
@@ -730,7 +732,7 @@ class RawUploader_SSRL62(UploaderBase):
             f"Import and normalization took {toc-tic:.0f}s"
         )
         self.projections.filedir = self.projections.energy_filedir
-        self.plotter.plot(self.projections)
+        self.viewer.plot(self.projections)
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
@@ -768,10 +770,10 @@ class RawUploader_SSRL62(UploaderBase):
         else:
             self.user_overwrite_energy = False
             self.projections.import_metadata(self)
-            self.metadata_table = self.projections.metadata_to_DataFrame()
+            self.metadata_table = self.projections.metadata.metadata_to_DataFrame()
             with self.metadata_table_output:
                 self.metadata_table_output.clear_output(wait=True)
-                display(self.metadata_table)
+                display(self.projections.metadata.dataframe)
             self.import_button.button_style = "info"
             self.import_button.disabled = False
             self.already_uploaded_energies_select.disabled = True
@@ -793,10 +795,10 @@ class RawUploader_SSRL62(UploaderBase):
         self.quick_path_search.value = str(self.filedir)
         self.user_overwrite_energy = False
         self.projections.import_metadata(self)
-        self.metadata_table = self.projections.metadata_to_DataFrame()
+        self.metadata_table = self.projections.metadata.metadata_to_DataFrame()
         with self.metadata_table_output:
             self.metadata_table_output.clear_output(wait=True)
-            display(self.metadata_table)
+            display(self.projections.metadata.dataframe)
         self.import_button.button_style = "info"
         self.import_button.disabled = False
         if self.projections.energy_guessed:
