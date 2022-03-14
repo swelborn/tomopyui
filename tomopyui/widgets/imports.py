@@ -14,6 +14,7 @@ from tomopyui.widgets.view import BqImViewer_Import
 from tomopyui.backend.io import (
     RawProjectionsXRM_SSRL62C,
     Projections_Prenormalized,
+    Metadata_Align
 )
 from tomopyui.widgets import helpers
 
@@ -476,23 +477,21 @@ class ShiftsUploader(UploaderBase):
         self.sx = np.load(self.filedir / "sx.npy")
         self.sy = np.load(self.filedir / "sy.npy")
         self.conv = np.load(self.filedir / "conv.npy")
-        self.align_metadata = load_metadata(
-            filepath=self.filedir / "alignment_metadata.json"
-        )
-        if self.align_metadata["opts"]["downsample"]:
-            self.sx = self.sx / self.align_metadata["opts"]["downsample_factor"]
-            self.sy = self.sy / self.align_metadata["opts"]["downsample_factor"]
+        self.align_metadata = Metadata_Align()
+        self.align_metadata.filedir = self.filedir
+        self.align_metadata.filename = "alignment_metadata.json"
+        self.align_metadata.filepath = self.align_metadata.filedir / "alignment_metadata.json"
+        self.align_metadata.load_metadata()
 
     def import_shifts_from_metadata(self):
-        self.align_metadata = load_metadata(
-            filepath=self.filedir / "alignment_metadata.json"
-        )
-        self.sx = self.align_metadata["sx"]
-        self.sy = self.align_metadata["sy"]
-        self.conv = self.align_metadata["conv"]
-        if self.align_metadata["opts"]["downsample"]:
-            self.sx = self.sx / self.align_metadata["opts"]["downsample_factor"]
-            self.sy = self.sy / self.align_metadata["opts"]["downsample_factor"]
+        self.align_metadata = Metadata_Align()
+        self.align_metadata.filedir = self.filedir
+        self.align_metadata.filename = "alignment_metadata.json"
+        self.align_metadata.filepath = self.align_metadata.filedir / "alignment_metadata.json"
+        self.align_metadata.load_metadata()
+        self.sx = self.align_metadata.metadata["sx"]
+        self.sy = self.align_metadata.metadata["sy"]
+        self.conv = self.align_metadata.metadata["conv"]
 
     def update_shift_lists(self):
         self.Prep.shifts_sx_select.options = self.sx
