@@ -9,14 +9,20 @@ from tomopyui._sharedvars import *
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
 from tomopyui.backend.io import Projections_Prenormalized
-from tomopyui.widgets.imports import ShiftsUploader
-from tomopyui.widgets.view import BqImViewer_Prep, BqImViewer_Altered_Prep
+from tomopyui.widgets.imports import ShiftsUploader, TwoEnergyUploader
+from tomopyui.widgets.view import (
+    BqImViewer_Prep,
+    BqImViewer_Altered_Prep,
+    BqImViewer_TwoEnergy_High,
+    BqImViewer_TwoEnergy_Low,
+)
 from tomopyui.backend.util.padding import *
 from tomopyui.backend.io import Metadata_Prep
 
 
 if os.environ["cuda_enabled"] == "True":
-    from ..tomocupy.prep.alignment import shift_prj_cp
+    from ..tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
+    from ..tomocupy.prep.sampling import shrink_projections
 
 import tomopy.misc.corr as tomocorr
 
@@ -56,7 +62,7 @@ class Prep(ABC):
         self.button_font = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
 
-        # -- Viewers -------------------------------------------------------------------
+        # -- Main viewers --------------------------------------------------------------
         self.imported_viewer = BqImViewer_Prep(self)
         self.imported_viewer.create_app()
         self.altered_viewer = BqImViewer_Altered_Prep(self.imported_viewer, self)
@@ -155,7 +161,7 @@ class Prep(ABC):
             ]
         )
 
-        # -- Plotting -------------------------------------------------------------
+        # -- Main Viewers -------------------------------------------------------------
 
         self.viewer_hbox = HBox(
             [
@@ -285,6 +291,130 @@ class Prep(ABC):
             self.tomocorr_median_filter_box,
             self.tomocorr_gaussian_filter_box,
         ]
+
+        # -- Widgets for shifting other energies tool ----------------------------------
+        self.high_e_viewer = BqImViewer_TwoEnergy_High()
+        self.low_e_viewer = BqImViewer_TwoEnergy_Low(self.high_e_viewer)
+        self.high_e_uploader = TwoEnergyUploader(self.high_e_viewer)
+        self.low_e_uploader = TwoEnergyUploader(self.low_e_viewer)
+        self.high_e_header = "Shifted High Energy Projections"
+        self.high_e_header = Label(self.high_e_header, style=self.header_font_style)
+        self.low_e_header = "Moving Low Energy Projections"
+        self.low_e_header = Label(self.low_e_header, style=self.header_font_style)
+        self.low_e_viewer.scale_button.on_click(self.scale_low_e)
+        self.num_batches_textbox = IntText(description="Number of batches: ", value=5)
+        self.two_e_shift_uploaders_hbox = HBox(
+            [
+                VBox(
+                    [
+                        self.high_e_uploader.quick_path_label,
+                        HBox(
+                            [
+                                self.high_e_uploader.quick_path_search,
+                                self.high_e_uploader.import_button,
+                            ]
+                        ),
+                        self.high_e_uploader.filechooser,
+                    ],
+                ),
+                VBox(
+                    [
+                        self.low_e_uploader.quick_path_label,
+                        HBox(
+                            [
+                                self.low_e_uploader.quick_path_search,
+                                self.low_e_uploader.import_button,
+                            ]
+                        ),
+                        self.low_e_uploader.filechooser,
+                    ],
+                ),
+            ],
+            layout=Layout(justify_content="center"),
+        )
+
+        self.two_e_shift_viewer_hbox = HBox(
+            [
+                VBox(
+                    [
+                        self.high_e_header,
+                        self.high_e_viewer.app,
+                    ],
+                    layout=Layout(align_items="center"),
+                ),
+                VBox(
+                    [
+                        self.low_e_header,
+                        self.low_e_viewer.app,
+                        self.num_batches_textbox,
+                    ],
+                    layout=Layout(align_items="center"),
+                ),
+            ],
+            layout=Layout(justify_content="center", align_items="center"),
+        )
+
+        self.two_e_shift_box = VBox(
+            [self.two_e_shift_uploaders_hbox, self.two_e_shift_viewer_hbox]
+        )
+
+    # -- Functions for Energy Scaling/Shifting ----------------------------
+    def scale_low_e(self, *args):
+        low_e = self.low_e_viewer.projections.energy
+        high_e = self.high_e_viewer.projections.energy
+        num_batches = self.num_batches_textbox.value
+        high_e_prj = self.high_e_viewer.projections.data
+        self.low_e_viewer.scale_button.button_style = "info"
+        self.low_e_viewer.scale_button.icon = "fas fa-cog fa-spin fa-lg"
+        self.low_e_viewer.projections.data = shrink_and_pad_projections(
+            self.low_e_viewer.projections.data, high_e_prj, high_e, low_e, num_batches
+        )
+        self.low_e_viewer.plot(self.low_e_viewer.projections)
+        self.low_e_viewer.start_button.disabled = False
+        self.low_e_viewer.scale_button.button_style = "success"
+        self.low_e_viewer.scale_button.icon = "fa-check-square"
+
+    def register_low_e(self, *args):
+        low_range_x = self.low_e_viewer.pixel_range_x
+        low_range_y = self.low_e_viewer.pixel_range_y
+        high_range_x = self.high_e_viewer.pixel_range_x
+        high_range_x = self.high_e_viewer.pixel_range_y
+        self.low_e_viewer.start_button.button_style = "info"
+        self.low_e_viewer.start_button.icon = "fas fa-cog fa-spin fa-lg"
+        num_batches = self.num_batches_textbox.value
+        upsample_factor = 50
+        shift_cpu = []
+        low_e_data = self.low_e_viewer.projections.data[
+            :, low_range_y[0] : low_range_y[1], low_range_x[0] : low_range_x[1]
+        ]
+        high_e_data = self.high_e_viewer.projections.data[
+            :, high_range_y[0] : high_range_y[1], high_range_x[0] : high_range_x[1]
+        ]
+
+        batch_cross_correlation(
+            low_e_data,
+            high_e_data,
+            shift_cpu,
+            num_batches,
+            upsample_factor,
+            blur=False,
+            subset_correlation=False,
+            subset_x=None,
+            subset_y=None,
+            mask_sim=False,
+            pad=(0, 0),
+            progress=None,
+        )
+        shift_cpu = np.concatenate(shift_cpu, axis=1)
+        sx = shift_cpu[1]
+        sy = shift_cpu[0]
+        # TODO: send to GPU and do both calcs there.
+        self.low_e_viewer.projections.data = shift_prj_cp(
+            prj, sx, sy, num_batches, (0, 0), use_pad_cond=False, use_corr_prj_gpu=False
+        )
+        self.low_e_viewer.plot(self.low_e_viewer.projections)
+        self.low_e_viewer.start_button.button_style = "success"
+        self.low_e_viewer.start_button.icon = "fa-check-square"
 
     # -- Functions to add to list ----------------------------------------
     def add_shift(self, *args):
@@ -517,6 +647,11 @@ class Prep(ABC):
             selected_index=0,
             titles=("Add Preprocessing Methods",),
         )
+        self.two_e_shift_accordion = Accordion(
+            children=[self.two_e_shift_box],
+            selected_index=0,
+            titles=("Tool: shift projections.",),
+        )
 
         self.shifts_box = HBox(
             [
@@ -571,6 +706,7 @@ class Prep(ABC):
                 self.viewer_accordion,
                 self.prep_buttons_accordion,
                 self.shifts_accordion,
+                self.two_e_shift_accordion,
             ]
         )
 

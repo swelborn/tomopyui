@@ -1027,6 +1027,172 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         self.hist.preflatten_imagestack(self.imagestack)
 
 
+class BqImViewer_TwoEnergy_High(BqImViewer_Import_Analysis):
+    def __init__(self):
+        super().__init__(None)
+        # Rectangle selector button
+        self.rectangle_selector_button.tooltip = (
+            "Turn on the rectangular region selector. Select a region here "
+            "to do phase correlation on."
+        )
+        self.rectangle_selector_on = False
+        self.rectangle_select(None)
+        self.viewing = False
+
+    def plot(self, projections):
+        self.projections = projections
+        self.original_imagestack = projections.data
+        self.filedir = projections.filedir
+        self.pxX = self.original_imagestack.shape[2]
+        self.pxY = self.original_imagestack.shape[1]
+        self.pxZ = self.original_imagestack.shape[0]
+        self.imagestack = np.array(projections.data_ds[0])
+        self.downsample_factor = 0.25
+        self.downsample_viewer_textbox.value = self.downsample_factor
+        self.current_pixel_size = projections.current_pixel_size
+        self.precomputed_hists = projections.hists
+        # self.downsample_imagestack(self.original_imagestack)
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = self.imagestack[0]
+        self.vmin = np.min(self.imagestack)
+        self.vmax = np.max(self.imagestack)
+        self.image_scale["image"].min = float(self.vmin)
+        self.image_scale["image"].max = float(self.vmax)
+        self.pixel_range_x = [0, self.pxX - 1]
+        self.pixel_range_y = [0, self.pxY - 1]
+        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
+        # self.update_pixel_range_status_bar()
+        self.hist.selector.selected = None
+        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.value = 0
+        self.hist.preflatten_imagestack(self.imagestack)
+        self.rm_high_low_int(None)
+        self.change_downsample_button()
+        self.viewing = True
+        self.change_buttons()
+
+    def change_buttons(self):
+        if self.viewer_child.viewing and self.viewing:
+            self.viewer_child.scale_button.button_style = "info"
+            self.viewer_child.scale_button.disabled = False
+        else:
+            self.viewer_child.scale_button.button_style = ""
+            self.viewer_child.scale_button.disabled = True
+
+    # Rectangle selector to update projection range
+    def rectangle_to_pixel_range(self, *args):
+        super().rectangle_to_pixel_range()
+        self.viewer_child.match_rectangle_selector_range_parent()
+
+
+class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
+    def __init__(self, viewer_parent):
+        super().__init__()
+        self.viewer_parent = viewer_parent
+        self.viewer_parent.viewer_child = self
+        # Rectangle selector button
+        self.rectangle_selector_button.tooltip = (
+            "Turn on the rectangular region selector. Select a region here "
+            "to do phase correlation on. This will be the moving image."
+        )
+        self.diff_button = Button(
+            icon="minus",
+            layout=self.button_layout,
+            style=self.button_font,
+            tooltip="Take the difference of the high and low energies.",
+            disabled=True,
+        )
+        self.link_plotted_projections_button = Button(
+            icon="unlink",
+            tooltip="Link to the high energy slider.",
+            layout=self.button_layout,
+            style=self.button_font,
+        )
+        self.link_plotted_projections_button.on_click(self.link_plotted_projections)
+        self.plots_linked = False
+        self.scale_button = Button(
+            tooltip="Click this to scale the projections to the higher energy.",
+            icon="compress",
+            button_style="",
+            disabled=True,
+            layout=self.button_layout,
+            style=self.button_font,
+        )
+        self.start_button = Button(
+            disabled=True,
+            button_style="",
+            tooltip=("Register low energy to high energy images",),
+            icon="fa-running",
+            layout=self.button_layout,
+            style=self.button_font,
+        )
+        self.viewing = False
+
+    # Rectangle selector to update projection range
+    def rectangle_to_pixel_range(self, *args):
+        BqImViewer_Import.rectangle_to_pixel_range(self)
+        self.match_rectangle_selector_range_parent()
+
+    def link_plotted_projections(self, *args):
+        BqImViewer_DataExplorer_AfterAnalysis.link_plotted_projections(self)
+
+    def match_rectangle_selector_range_parent(self):
+        selected_x = self.rectangle_selector.selected_x
+        selected_y = self.rectangle_selector.selected_y
+        selected_x_par = self.viewer_parent.rectangle_selector.selected_x
+        selected_y_par = self.viewer_parent.rectangle_selector.selected_y
+        if selected_x is None:
+            selected_x = selected_x_par
+        if selected_y is None:
+            selected_y = selected_y_par
+        x_diff_par = selected_x_par[1] - selected_x_par[0]
+        y_diff_par = selected_y_par[1] - selected_y_par[0]
+        self.rectangle_selector.set_trait(
+            "selected_x", [selected_x[0], selected_x[0] + x_diff_par]
+        )
+        self.rectangle_selector.set_trait(
+            "selected_y", [selected_y[0], selected_y[0] + y_diff_par]
+        )
+
+    def change_buttons(self):
+        if self.viewer_parent.viewing and self.viewing:
+            self.scale_button.button_style = "info"
+            self.scale_button.disabled = False
+        else:
+            self.scale_button.button_style = ""
+            self.scale_button.disabled = True
+
+    def create_app(self):
+        self.all_buttons.insert(-2, self.diff_button)
+        self.all_buttons.insert(-2, self.link_plotted_projections_button)
+        self.all_buttons.insert(-2, self.scale_button)
+        self.all_buttons.insert(-2, self.start_button)
+        self.button_box = HBox(
+            self.all_buttons,
+            layout=self.footer_layout,
+        )
+        footer2 = VBox(
+            [
+                self.button_box,
+                HBox(
+                    [
+                        self.status_bar_xrange,
+                        self.status_bar_yrange,
+                        self.status_bar_intensity,
+                    ],
+                    layout=Layout(justify_content="center"),
+                ),
+            ]
+        )
+
+        footer = VBox([self.footer1, footer2])
+
+        self.app = VBox([self.header, self.center, footer])
+
+    # def change_to_diff(self):
+
+
 class BqImViewer_DataExplorer_BeforeAnalysis(BqImViewer_Import):
     def __init__(self):
         super().__init__()

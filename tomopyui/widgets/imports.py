@@ -14,7 +14,7 @@ from tomopyui.widgets.view import BqImViewer_Import
 from tomopyui.backend.io import (
     RawProjectionsXRM_SSRL62C,
     Projections_Prenormalized,
-    Metadata_Align
+    Metadata_Align,
 )
 from tomopyui.widgets import helpers
 
@@ -317,7 +317,6 @@ class UploaderBase(ABC):
             tooltip="Load your data into memory",
         )
         self.import_button.on_click(self.import_data)
-
         self.metadata_table_output = Output()
 
     def check_filepath_exists(self, path):
@@ -480,14 +479,18 @@ class ShiftsUploader(UploaderBase):
         self.align_metadata = Metadata_Align()
         self.align_metadata.filedir = self.filedir
         self.align_metadata.filename = "alignment_metadata.json"
-        self.align_metadata.filepath = self.align_metadata.filedir / "alignment_metadata.json"
+        self.align_metadata.filepath = (
+            self.align_metadata.filedir / "alignment_metadata.json"
+        )
         self.align_metadata.load_metadata()
 
     def import_shifts_from_metadata(self):
         self.align_metadata = Metadata_Align()
         self.align_metadata.filedir = self.filedir
         self.align_metadata.filename = "alignment_metadata.json"
-        self.align_metadata.filepath = self.align_metadata.filedir / "alignment_metadata.json"
+        self.align_metadata.filepath = (
+            self.align_metadata.filedir / "alignment_metadata.json"
+        )
         self.align_metadata.load_metadata()
         self.sx = self.align_metadata.metadata["sx"]
         self.sy = self.align_metadata.metadata["sy"]
@@ -523,6 +526,7 @@ class PrenormUploader(UploaderBase):
         self.import_status_label = Label(layout=Layout(justify_content="center"))
         self.find_metadata_status_label = Label(layout=Layout(justify_content="center"))
         self.viewer.rectangle_selector_on = False
+        self.widgets_to_enable = self.Import.angles_textboxes
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
@@ -550,8 +554,8 @@ class PrenormUploader(UploaderBase):
                     "No .json files found in this directory."
                     + " Make sure you input start/end angles correctly."
                 )
-                for tb in self.Import.angles_textboxes:
-                    tb.disabled = False
+                for widget in self.widgets_to_enable:
+                    widget.disabled = False
                 self.imported_metadata = False
                 return
             else:
@@ -565,10 +569,10 @@ class PrenormUploader(UploaderBase):
                 except AssertionError:
                     self.find_metadata_status_label.value = (
                         "This directory has .json files but not an import_metadata.json"
-                        + " file. Make sure you input start/end angles correctly."
+                        + " file. Make sure you correctly input data info."
                     )
-                    for tb in self.Import.angles_textboxes:
-                        tb.disabled = False
+                    for widget in self.widgets_to_enable:
+                        widget.disabled = False
                     self.imported_metadata = False
                     return
 
@@ -579,11 +583,11 @@ class PrenormUploader(UploaderBase):
                     with self.metadata_table_output:
                         self.metadata_table_output.clear_output(wait=True)
                         display(self.projections.metadata.dataframe)
-                    for tb in self.Import.angles_textboxes:
-                        tb.disabled = True
+                    for widget in self.widgets_to_enable:
+                        widget.disabled = False
                     self.imported_metadata = True
 
-    def update_quicksearch_from_filechooser(self):
+    def update_quicksearch_from_filechooser(self, *args):
         self.filedir = pathlib.Path(self.filechooser.selected_path)
         self.filename = self.filechooser.selected_filename
         self._tmp_disable_reset = True
@@ -630,6 +634,59 @@ class PrenormUploader(UploaderBase):
         self.import_status_label.value = (
             f"Import, downsampling (if any), and plotting complete in ~{toc-tic:.0f}s."
         )
+
+
+class TwoEnergyUploader(PrenormUploader):
+    """"""
+
+    def __init__(self, viewer):
+        UploaderBase.__init__(self)
+        self.projections = Projections_Prenormalized()
+        self.filechooser.title = "Import prenormalized data:"
+        self._tmp_disable_reset = False
+        self.viewer = viewer
+        self.viewer.create_app()
+        self.imported_metadata = False
+        self.import_status_label = Label(layout=Layout(justify_content="center"))
+        self.find_metadata_status_label = Label(layout=Layout(justify_content="center"))
+        self.viewer.rectangle_selector_on = False
+        self.energy_textbox = FloatText(
+            description="Energy: ",
+            disabled=True,
+            style=extend_description_style,
+        )
+        self.pixel_size_textbox = FloatText(
+            description="Pixel Size: ",
+            disabled=True,
+            style=extend_description_style,
+        )
+        self.widgets_to_enable = [self.energy_textbox, self.pixel_size_textbox]
+
+    def import_data(self, change):
+        tic = time.perf_counter()
+        self.import_button.button_style = "info"
+        self.import_button.icon = "fas fa-cog fa-spin fa-lg"
+        with self.metadata_table_output:
+            self.metadata_table_output.clear_output(wait=True)
+            if self.imported_metadata:
+                display(self.projections.metadata.dataframe)
+            display(self.import_status_label)
+        if self.filename == "" or self.filename is None:
+            self.import_status_label.value = "Importing file directory."
+            self.projections.import_filedir_projections(self)
+        else:
+            self.import_status_label.value = "Importing single file."
+            self.projections.import_file_projections(self)
+        self.import_status_label.value = "Checking for downsampled data."
+        self.projections._check_downsampled_data(label=self.import_status_label)
+        self.import_status_label.value = (
+            "Plotting data (downsampled for viewer to 0.25x)."
+        )
+        if not self.imported_metadata:
+            self.projections.energy = self.energy_textbox.value
+            self.projections.current_pixel_size = self.pixel_size_textbox.value
+        self.viewer.plot(self.projections)
+        toc = time.perf_counter()
 
 
 class RawUploader_SSRL62C(UploaderBase):

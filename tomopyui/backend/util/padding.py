@@ -37,3 +37,15 @@ def unpad_rec_with_pad(rec, pad):
         e = None if c[1] == 0 else -c[1]
         slices.append(slice(c[0], e))
     return rec[tuple(slices)]
+
+
+def pad_to_make_same_size(imagestack_to_pad, imagestack):
+    to_pad_shape = imagestack_to_pad.shape
+    reference_shape = imagestack.shape
+    diffshape = [y - x for x, y in zip(to_pad_shape, reference_shape)]
+    diffshape = [
+        [x / 2, x / 2] if x % 2 == 0 else [x / 2 + 0.5, x / 2 - 0.5] for x in diffshape
+    ]
+    pad = tuple([(int(x[0]), int(x[1])) for x in diffshape])
+    imagestack_padded = np.pad(imagestack_to_pad, pad)
+    return imagestack_padded
