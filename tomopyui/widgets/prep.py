@@ -293,8 +293,8 @@ class Prep(ABC):
             "Shift",
             shift_projections,
             [
-                self.shifts_uploader.sx,
-                self.shifts_uploader.sy,
+                list(self.shifts_uploader.sx),
+                list(self.shifts_uploader.sy),
             ],
         )
         self.prep_list.append(method.method_tuple)
@@ -481,6 +481,8 @@ class Prep(ABC):
                 self.metadata.set_metadata(self)
                 self.metadata.filedir = self.filedir
                 self.metadata.save_metadata()
+                self.metadata.parent_metadata = self.filedir
+                self.metadata.parent_metadata.save_metadata()
                 self.altered_projections.data = self.prepped_data
                 np.save(self.filedir / "prepped_projections.npy", self.prepped_data)
 
@@ -605,15 +607,15 @@ def shift_projections(projections, sx, sy):
 
 def shift_projections(projections, sx, sy):
     new_prj_imgs = copy.deepcopy(projections)
-    pad_x = np.max(np.abs(sx))
-    pad_y = np.max(np.abs(sy))
+    pad_x = int(np.ceil(np.max(np.abs(sx))))
+    pad_y = int(np.ceil(np.max(np.abs(sy))))
     pad = (pad_x, pad_y)
     new_prj_imgs, pad = pad_projections(new_prj_imgs, pad)
     new_prj_imgs = shift_prj_cp(
         new_prj_imgs,
         sx,
         sy,
-        5,
+        20,
         pad,
         use_corr_prj_gpu=False,
     )

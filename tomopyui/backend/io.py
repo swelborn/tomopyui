@@ -973,6 +973,9 @@ class Metadata(ABC):
         with open(filepath) as f:
             metadata = json.load(f)
 
+        if "metadata_type" not in metadata:
+            metadata["metadata_type"] = "SSRL62C_Normalized"
+
         # General Data
         if metadata["metadata_type"] == "General_Prenorm":
             metadata_instance = Metadata_General_Prenorm()
@@ -1489,11 +1492,16 @@ class Metadata_ALS_832_Prenorm(Metadata_ALS_832_Raw):
 
 class Metadata_Prep(Metadata):
     def set_metadata(self, Prep):
+        self.metadata["metadata_type"] = "Prep"
         self.filename = "prep_metadata.json"
-        self.parent_metadata = Prep.Import.projections.metadata.metadata
-        self.metadata["data_hierarchy_level"] = (
-            self.parent_metadata["data_hierarchy_level"] + 1
-        )
+        self.parent_metadata = Prep.Import.projections.metadata
+        self.metadata["parent_metadata"] = self.parent_metadata.metadata
+        if "data_hierarchy_level" in self.parent_metadata.metadata:
+            self.metadata["data_hierarchy_level"] = (
+                self.parent_metadata["data_hierarchy_level"] + 1
+            )
+        else:
+            self.metadata["data_hierarchy_level"] = 2
         self.metadata["prep_list"] = [
             (x[1].method_name, x[1].opts) for x in Prep.prep_list
         ]
