@@ -1,18 +1,17 @@
-from abc import ABC, abstractmethod
-from bqplot_image_gl import ImageGL
-from ipywidgets import *
 import bqplot as bq
 import numpy as np
 import copy
-from skimage.transform import rescale  # look for better option
-from tomopyui._sharedvars import *
 import pathlib
-from bqplot_image_gl.interacts import MouseInteraction, keyboard_events, mouse_events
-from bqplot import PanZoom
-
-# for movie saving
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+
+from abc import ABC, abstractmethod
+from bqplot_image_gl import ImageGL
+from ipywidgets import *
+from skimage.transform import rescale  # look for better option
+from tomopyui._sharedvars import *
+from bqplot_image_gl.interacts import MouseInteraction, keyboard_events, mouse_events
+from bqplot import PanZoom
 
 
 class BqImViewerBase(ABC):
@@ -1129,6 +1128,20 @@ class BqImViewer_Altered_Prep(BqImViewer_Altered_Analysis):
     def update_pixel_range_status_bar(self):
         self.status_bar_xrange.value = f"X Pixel Range: {self.printed_range_x} | "
         self.status_bar_yrange.value = f"Y Pixel Range: {self.printed_range_y}"
+
+    # Rectangle selector button
+    def rectangle_select(self, change):
+        if self.rectangle_selector_on is False:
+            self.fig.interaction = self.rectangle_selector
+            self.fig.interaction.color = "magenta"
+            self.rectangle_selector_on = True
+            self.rectangle_selector_button.button_style = "success"
+        else:
+            self.rectangle_selector_button.button_style = ""
+            self.rectangle_selector_on = False
+            self.status_bar_xrange.value = ""
+            self.status_bar_yrange.value = ""
+            self.fig.interaction = self.msg_interaction
 
     def plot(self):
         if self.copying:

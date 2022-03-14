@@ -1,19 +1,17 @@
-# TODO: reimplement this
+import pathlib
+import numpy as np
+import dxchange
+
 from ipywidgets import *
+from ipyfilechooser import FileChooser
 from abc import ABC, abstractmethod
 from tomopyui.widgets.view import (
-    BqImViewer_Import,
     BqImViewer_DataExplorer_BeforeAnalysis,
     BqImViewer_DataExplorer_AfterAnalysis,
 )
-from tomopyui.backend.io import Projections_Prenormalized_SSRL62
-from tomopyui.backend.io import load_metadata, metadata_to_DataFrame
+from tomopyui.backend.io import Projections_Prenormalized
 from tomopyui.widgets.analysis import Align, Recon
-from ipyfilechooser import FileChooser
-import pathlib
 from tomopyui._sharedvars import *
-import numpy as np
-import dxchange
 
 
 class DataExplorerTab:
@@ -60,8 +58,8 @@ class DataExplorerBase(ABC):
             self.viewer_initial
         )
         self.viewer_analyzed.create_app()
-        self.projections = Projections_Prenormalized_SSRL62()
-        self.analyzed_projections = Projections_Prenormalized_SSRL62()
+        self.projections = Projections_Prenormalized()
+        self.analyzed_projections = Projections_Prenormalized()
 
     @abstractmethod
     def create_app(self):
@@ -83,18 +81,18 @@ class AnalysisExplorer(DataExplorerBase):
         self.projections.data = np.load(
             self.projections.filedir / "normalized_projections.npy"
         )
-        if ".npy" in self.filebrowser.selected_data_fullpath.name:
+        if ".npy" in self.filebrowser.selected_data_filepath.name:
             self.analyzed_projections.data = np.load(
-                self.filebrowser.selected_data_fullpath
+                self.filebrowser.selected_data_filepath
             )
-        elif ".tif" in self.filebrowser.selected_data_fullpath.name:
+        elif ".tif" in self.filebrowser.selected_data_filepath.name:
             self.analyzed_projections.data = np.array(
                 dxchange.reader.read_tiff(
-                    self.filebrowser.selected_data_fullpath
+                    self.filebrowser.selected_data_filepath
                 ).astype(np.float32)
             )
         self.analyzed_projections.filedir = (
-            self.filebrowser.selected_data_fullpath.parent
+            self.filebrowser.selected_data_filepath.parent
         )
         self.projections._check_downsampled_data()
         self.viewer_initial.plot(self.projections)
@@ -345,7 +343,7 @@ class Filebrowser:
     def set_data_filename(self, change):
         if self.data_selector.options != tuple():
             self.selected_data_filename = change.new
-            self.selected_data_fullpath = (
+            self.selected_data_filepath = (
                 self.selected_method / self.selected_data_filename
             )
             self.selected_data_ftype = pathlib.Path(self.selected_data_filename).suffix
@@ -363,7 +361,7 @@ class Filebrowser:
         ]
 
         if self.metadata_file != []:
-            self.metadata = load_metadata(fullpath=self.metadata_file[0])
+            self.metadata = load_metadata(filepath=self.metadata_file[0])
             self.options_table = metadata_to_DataFrame(self.metadata)
             with self.options_metadata_table_output:
                 self.options_metadata_table_output.clear_output(wait=True)

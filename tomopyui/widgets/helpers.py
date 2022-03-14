@@ -1,8 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-from ipywidgets import *
-
 import os
 import glob
 import numpy as np
@@ -14,6 +9,8 @@ import logging
 import ipywidgets as widgets
 import importlib.util
 import sys
+
+from ipywidgets import *
 
 
 def import_module_set_env(import_dict):
