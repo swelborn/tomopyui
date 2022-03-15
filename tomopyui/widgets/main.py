@@ -96,8 +96,8 @@ def create_dashboard(institution: str):
         align.viewer_accordion,
         recon.viewer_accordion,
         dataexplorer.analysis_browser_accordion,
-        dataexplorer.recent_alignment_accordion,
-        dataexplorer.recent_recon_accordion,
+        # dataexplorer.recent_alignment_accordion,
+        # dataexplorer.recent_recon_accordion,
     ]
 
     [
@@ -110,4 +110,13 @@ def create_dashboard(institution: str):
     with dashboard_output:
         display(dashboard)
 
-    return (dashboard_output, file_import, prep, center, align, recon, dataexplorer)
+    return (
+        dashboard_output,
+        dashboard,
+        file_import,
+        prep,
+        center,
+        align,
+        recon,
+        dataexplorer,
+    )
