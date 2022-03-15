@@ -530,6 +530,8 @@ class PrenormUploader(UploaderBase):
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
+        self.import_button.button_style = ""
+        self.import_button.disabled = True
         try:
             self.check_filepath_exists(path)
         except InvalidFileNameError:
@@ -686,6 +688,8 @@ class TwoEnergyUploader(PrenormUploader):
             self.projections.energy = self.energy_textbox.value
             self.projections.current_pixel_size = self.pixel_size_textbox.value
         self.viewer.plot(self.projections)
+        self.import_button.button_style = "success"
+        self.import_button.icon = "fa-check-square"
         toc = time.perf_counter()
 
 
@@ -839,8 +843,9 @@ class RawUploader_SSRL62C(UploaderBase):
         folders = [pathlib.Path(f) for f in os.scandir(self.filedir) if f.is_dir()]
         reg_exp = re.compile("\d\d\d\d\d.\d\deV")
         ener_folders = map(reg_exp.findall, [str(folder) for folder in folders])
+        print(ener_folders)
         self.already_uploaded_energies = [
-            str(folder[0][:-2]) for folder in ener_folders
+            str(folder[0][:-2]) for folder in ener_folders if (len(folder) > 0)
         ]
         self.already_uploaded_energies_select.options = self.already_uploaded_energies
         self.already_uploaded_energies_select.disabled = False
@@ -864,4 +869,4 @@ class RawUploader_SSRL62C(UploaderBase):
             ]
         else:
             self.energy_overwrite_textbox.disabled = True
-            self.energy_overwrite_textbox.value = None
+            self.energy_overwrite_textbox.value = 0

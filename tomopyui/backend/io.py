@@ -272,6 +272,8 @@ class Projections_Prenormalized(ProjectionsBase, ABC):
         self.filedir = Uploader.filedir
         if Uploader.imported_metadata:
             self.filepath = Uploader.filedir / "normalized_projections.npy"
+            if not self.filepath.exists():
+                
             self._data = np.load(
                 Uploader.filedir / "normalized_projections.npy"
             ).astype(np.float32)
@@ -1498,7 +1500,7 @@ class Metadata_Prep(Metadata):
         self.metadata["parent_metadata"] = self.parent_metadata.metadata
         if "data_hierarchy_level" in self.parent_metadata.metadata:
             self.metadata["data_hierarchy_level"] = (
-                self.parent_metadata["data_hierarchy_level"] + 1
+                self.parent_metadata.metadata["data_hierarchy_level"] + 1
             )
         else:
             self.metadata["data_hierarchy_level"] = 2
@@ -1609,8 +1611,8 @@ class Metadata_Align(Metadata):
     def set_attributes_object_specific(self, Align):
         Align.upsample_factor = self.metadata["opts"]["upsample_factor"]
         Align.pre_alignment_iters = self.metadata["opts"]["pre_alignment_iters"]
-        Align.subset_range_x = self.metadata["subset_range_x"]
-        Align.subset_range_y = self.metadata["subset_range_y"]
+        Align.subset_x = self.metadata["subset_range_x"]
+        Align.subset_y = self.metadata["subset_range_y"]
         Align.use_subset_correlation = self.metadata["use_subset_correlation"]
         Align.num_batches = self.metadata["opts"]["num_batches"]
 
