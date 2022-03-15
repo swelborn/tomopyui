@@ -360,8 +360,12 @@ class Prep(ABC):
 
     # -- Functions for Energy Scaling/Shifting ----------------------------
     def scale_low_e(self, *args):
-        self.low_e_viewer.projections.metadata.set_attributes_from_metadata(self.low_e_viewer.projections)
-        self.high_e_viewer.projections.metadata.set_attributes_from_metadata(self.low_e_viewer.projections)
+        self.low_e_viewer.projections.metadata.set_attributes_from_metadata(
+            self.low_e_viewer.projections
+        )
+        self.high_e_viewer.projections.metadata.set_attributes_from_metadata(
+            self.low_e_viewer.projections
+        )
         low_e = self.low_e_viewer.projections.current_energy_float
         high_e = self.high_e_viewer.projections.current_energy_float
         num_batches = self.num_batches_textbox.value
@@ -375,7 +379,12 @@ class Prep(ABC):
         self.low_e_viewer.start_button.disabled = False
         self.low_e_viewer.scale_button.button_style = "success"
         self.low_e_viewer.scale_button.icon = "fa-check-square"
-        self.low_e_viewer.diff_imagestack = np.array([x / np.mean(x) for x in self.low_e_viewer.viewer_parent.original_imagestack]) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_imagestack])
+        self.low_e_viewer.diff_imagestack = np.array(
+            [
+                x / np.mean(x)
+                for x in self.low_e_viewer.viewer_parent.original_imagestack
+            ]
+        ) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_imagestack])
         self.low_e_viewer._original_imagestack = self.low_e_viewer.original_imagestack
         self.low_e_viewer.diff_on = False
         self.low_e_viewer._disable_diff_callback = True
@@ -420,10 +429,21 @@ class Prep(ABC):
         sy = shift_cpu[0]
         # TODO: send to GPU and do both calcs there.
         self.low_e_viewer.projections.data = shift_prj_cp(
-            self.low_e_viewer.projections.data, sx, sy, num_batches, (0, 0), use_pad_cond=False, use_corr_prj_gpu=False
+            self.low_e_viewer.projections.data,
+            sx,
+            sy,
+            num_batches,
+            (0, 0),
+            use_pad_cond=False,
+            use_corr_prj_gpu=False,
         )
         self.low_e_viewer.plot(self.low_e_viewer.projections)
-        self.low_e_viewer.diff_imagestack = np.array([x / np.mean(x) for x in self.low_e_viewer.viewer_parent.original_imagestack]) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_imagestack])
+        self.low_e_viewer.diff_imagestack = np.array(
+            [
+                x / np.mean(x)
+                for x in self.low_e_viewer.viewer_parent.original_imagestack
+            ]
+        ) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_imagestack])
         self.low_e_viewer._original_imagestack = self.low_e_viewer.original_imagestack
         self.low_e_viewer.diff_on = False
         self.low_e_viewer._disable_diff_callback = True
@@ -511,9 +531,6 @@ class Prep(ABC):
         self.imported_projections = self.Import.projections
         self.imported_viewer.plot()
 
-    def set_metadata(self):
-        pass
-
     def set_observes(self):
 
         # Start button
@@ -545,7 +562,6 @@ class Prep(ABC):
 
         # Registration
         self.low_e_viewer.start_button.on_click(self.register_low_e)
-
 
     def update_shifts_list(self):
         pass
@@ -631,10 +647,8 @@ class Prep(ABC):
                 self.metadata.set_metadata(self)
                 self.metadata.filedir = self.filedir
                 self.metadata.save_metadata()
-                self.metadata.parent_metadata.filedir = self.filedir
-                self.metadata.parent_metadata.save_metadata()
                 self.altered_projections.data = self.prepped_data
-                np.save(self.filedir / "prepped_projections.npy", self.prepped_data)
+                np.save(self.filedir / "normalized_projections.npy", self.prepped_data)
 
     def make_prep_dir(self):
         now = datetime.datetime.now()
@@ -655,7 +669,7 @@ class Prep(ABC):
         )
         self.viewer_accordion = Accordion(
             children=[self.viewer_hbox],
-            selected_index=0,
+            selected_index=None,
             titles=("Plot Projection Images",),
         )
         self.prep_buttons_hbox = VBox(
@@ -664,12 +678,12 @@ class Prep(ABC):
         )
         self.prep_buttons_accordion = Accordion(
             children=[self.prep_buttons_hbox],
-            selected_index=0,
+            selected_index=None,
             titles=("Add Preprocessing Methods",),
         )
         self.two_e_shift_accordion = Accordion(
             children=[self.two_e_shift_box],
-            selected_index=0,
+            selected_index=None,
             titles=("Tool: shift projections.",),
         )
 

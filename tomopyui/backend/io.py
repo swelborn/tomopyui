@@ -272,12 +272,10 @@ class Projections_Prenormalized(ProjectionsBase, ABC):
         self.filedir = Uploader.filedir
         if Uploader.imported_metadata:
             self.filepath = Uploader.filedir / "normalized_projections.npy"
-            if not self.filepath.exists():
-                
             self._data = np.load(
                 Uploader.filedir / "normalized_projections.npy"
             ).astype(np.float32)
-            self.metadata.set_attributes_from_metadata()
+            self.metadata.set_attributes_from_metadata(self)
         else:
             self.angle_start = Uploader.angle_start
             self.angle_end = Uploader.angle_end
@@ -581,6 +579,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         self.metadata = Metadata_SSRL62C_Raw()
 
     def import_metadata(self, Uploader):
+        self.metadata = Metadata_SSRL62C_Raw()
         self.data_hierarchy_level = 0
         filetypes = [".txt"]
         textfiles = self._file_finder(Uploader.filedir, filetypes)
@@ -809,6 +808,15 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
     def import_from_run_script(self, Uploader):
         all_collections = [[]]
         energies = [[self.selected_energies[0]]]
+        parent_metadata = self.metadata.metadata.copy()
+        if "data_hierarchy_level" not in parent_metadata:
+            try:
+                with open(self.filepath) as f:
+                    parent_metadata = json.load(
+                        self.run_script_path.parent / "raw_metadata.json"
+                    )
+            except Exception:
+                pass
         with open(self.run_script_path, "r") as f:
             for line in f.readlines():
                 if line.startswith("sete "):
@@ -828,6 +836,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 continue
             else:
                 self.metadata = Metadata_SSRL62C_Prenorm()
+                self.metadata.set_parent_metadata(parent_metadata)
                 Uploader.upload_progress.value = 0
                 self.current_energy_str = energy
                 self.current_energy_float = float(energy)
@@ -963,23 +972,25 @@ class Metadata(ABC):
         with open(self.filepath) as f:
             self.metadata = json.load(f)
 
-    @abstractmethod
-    def set_metadata(self):
-        ...
+        return self.metadata
 
-    @abstractmethod
-    def metadata_to_DataFrame(self):
-        ...
+    def set_parent_metadata(self, parent_metadata):
+        self.metadata["parent_metadata"] = parent_metadata
+        self.metadata["data_hierarchy_level"] = (
+            parent_metadata["data_hierarchy_level"] + 1
+        )
 
-    def parse_metadata_type(filepath: pathlib.Path):
-        with open(filepath) as f:
-            metadata = json.load(f)
+    @staticmethod
+    def parse_metadata_type(filepath: pathlib.Path = None, metadata=None):
+        if filepath is not None:
+            with open(filepath) as f:
+                metadata = json.load(f)
 
         if "metadata_type" not in metadata:
             metadata["metadata_type"] = "SSRL62C_Normalized"
 
         # General Data
-        if metadata["metadata_type"] == "General_Prenorm":
+        if metadata["metadata_type"] == "General_Normalized":
             metadata_instance = Metadata_General_Prenorm()
 
         # SSRL Beamlines
@@ -989,10 +1000,10 @@ class Metadata(ABC):
             metadata_instance = Metadata_SSRL62C_Raw()
 
         # ALS Beamlines
-        if metadata["metadata_type"] == "ALS832_Raw":
-            metadata_instance = Metadata_ALS_832_Raw()
         if metadata["metadata_type"] == "ALS832_Normalized":
             metadata_instance = Metadata_ALS_832_Prenorm()
+        if metadata["metadata_type"] == "ALS832_Raw":
+            metadata_instance = Metadata_ALS_832_Raw()
 
         # Metadata through rest of processing pipeline
         if metadata["metadata_type"] == "Prep":
@@ -1002,11 +1013,39 @@ class Metadata(ABC):
         if metadata["metadata_type"] == "Recon":
             metadata_instance = Metadata_Recon()
 
-        metadata_instance.filedir = filepath.parent
-        metadata_instance.filename = filepath.name
-        metadata_instance.filepath = filepath
+        if filepath is not None:
+            metadata_instance.filedir = filepath.parent
+            metadata_instance.filename = filepath.name
+            metadata_instance.filepath = filepath
 
         return metadata_instance
+
+    @staticmethod
+    def get_metadata_hierarchy(filepath):
+        with open(filepath) as f:
+            metadata = json.load(f)
+        num_levels = metadata["data_hierarchy_level"]
+        metadata_insts = []
+        for i in range(num_levels + 1):
+            metadata_insts.append(
+                Metadata.parse_metadata_type(metadata=metadata.copy())
+            )
+            metadata_insts[i].metadata = metadata.copy()
+            if "parent_metadata" in metadata:
+                metadata = metadata["parent_metadata"].copy()
+        return metadata_insts
+
+    @abstractmethod
+    def set_tomopyui_parameters(self):
+        ...
+
+    @abstractmethod
+    def set_metadata(self):
+        ...
+
+    @abstractmethod
+    def metadata_to_DataFrame(self):
+        ...
 
 
 class Metadata_General_Prenorm(Metadata):
@@ -1017,9 +1056,14 @@ class Metadata_General_Prenorm(Metadata):
     def metadata_to_DataFrame(self):
         pass
 
+    def set_tomopyui_parameters(self, projections):
+        pass
+
 
 class Metadata_SSRL62C_Raw(Metadata):
     def set_metadata(self, projections):
+        self.data_hierarchy_level = 0
+        self.metadata["data_hierarchy_level"] = 0
         self.metadata["metadata_type"] = "SSRL62C_Raw"
         self.metadata["scan_info"] = copy.deepcopy(projections.scan_info)
         self.metadata["scan_info"]["FILES"] = [
@@ -1188,6 +1232,9 @@ class Metadata_SSRL62C_Raw(Metadata):
         )
 
         self.dataframe = s
+
+    def set_tomopyui_parameters(self, projections):
+        pass
 
 
 class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
@@ -1358,6 +1405,9 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         projections.ds_vals = self.metadata["downsampled_values"]
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
 
+    def set_tomopyui_parameters(self, projections):
+        pass
+
 
 class Metadata_ALS_832_Raw(Metadata):
     def set_metadata(self, projections):
@@ -1377,6 +1427,63 @@ class Metadata_ALS_832_Raw(Metadata):
         if projections.angles_deg is not None:
             self.metadata["angles_deg"] = list(projections.angles_deg)
             self.metadata["angles_rad"] = list(projections.angles_rad)
+
+    def set_attributes_from_metadata(self, projections):
+        projections.pxY = self.metadata["numslices"]
+        projections.pxX = self.metadata["numrays"]
+        projections.pxZ = self.metadata["num_angles"]
+        projections.px_size = self.metadata["pxsize"]
+        projections.px_size_units = self.metadata["px_size_units"]
+        projections.propagation_dist = self.metadata["propagation_dist"]
+        projections.propagation_dist_units = "mm"
+        projections.angular_range = self.metadata["angularrange"]
+        projections.energy = self.metadata["kev"]
+        projections.units = self.metadata["energy_units"]
+
+    def load_metadata_h5(self, h5_filepath):
+        self.filedir = h5_filepath.parent
+        self.filepath = h5_filepath
+        self.metadata["pxY"] = int(
+            dxchange.read_hdf5(
+                h5_filepath, "/measurement/instrument/detector/dimension_y"
+            )[0]
+        )
+        self.metadata["numslices"] = self.metadata["pxY"]
+        self.metadata["pxX"] = int(
+            dxchange.read_hdf5(
+                h5_filepath, "/measurement/instrument/detector/dimension_x"
+            )[0]
+        )
+        self.metadata["numrays"] = self.metadata["pxX"]
+        self.metadata["pxZ"] = int(
+            dxchange.read_hdf5(h5_filepath, "/process/acquisition/rotation/num_angles")[
+                0
+            ]
+        )
+        self.metadata["num_angles"] = self.metadata["pxZ"]
+        self.metadata["pxsize"] = (
+            dxchange.read_hdf5(
+                h5_filepath, "/measurement/instrument/detector/pixel_size"
+            )[0]
+            / 10.0
+        )  # /10 to convert units from mm to cm
+        self.metadata["px_size_units"] = "cm"
+        self.metadata["propagation_dist"] = dxchange.read_hdf5(
+            h5_filepath,
+            "/measurement/instrument/camera_motor_stack/setup/camera_distance",
+        )[1]
+        self.metadata["energy_float"] = (
+            dxchange.read_hdf5(
+                h5_filepath, "/measurement/instrument/monochromator/energy"
+            )[0]
+            / 1000
+        )
+        self.metadata["kev"] = self.metadata["energy_float"]
+        self.metadata["energy_str"] = str(self.metadata["energy_float"])
+        self.metadata["energy_units"] = "keV"
+        self.metadata["angularrange"] = dxchange.read_hdf5(
+            h5_filepath, "/process/acquisition/rotation/range"
+        )[0]
 
     def metadata_to_DataFrame(self):
 
@@ -1473,23 +1580,38 @@ class Metadata_ALS_832_Raw(Metadata):
             "".join(c for c in s if c.isdigit() or None),
         )
 
+    def set_tomopyui_parameters(self, projections):
+        pass
+
 
 class Metadata_ALS_832_Prenorm(Metadata_ALS_832_Raw):
     def set_attributes_from_metadata(self, projections):
-        self.metadata_type = self.metadata["metadata_type"]
+        super().set_attributes_from_metadata(projections)
+        self.metadata_type = "ALS832_Normalized"
         self.data_hierarchy_level = self.metadata["data_hierarchy_level"]
+        self.filename = "import_metadata.json"
+
+    def set_metadata(self, projections):
+        super().set_metadata(projections)
+        self.filename = "import_metadata.json"
+        self.metadata["metadata_type"] = "ALS832_Normalized"
+        self.metadata["data_hierarchy_level"] = 1
+
+    def set_tomopyui_parameters(self, projections):
         projections.pxY = self.metadata["numslices"]
         projections.pxX = self.metadata["numrays"]
         projections.pxZ = self.metadata["num_angles"]
         projections.px_size = self.metadata["pxsize"]
         projections.px_size_units = self.metadata["px_size_units"]
-        projections.propagation_dist = self.metadata["propagation_dist"]
-        projections.propagation_dist_units = "mm"
-        projections.angular_range = self.metadata["angularrange"]
-        projections.energy = self.metadata["kev"]
-        projections.units = self.metadata["energy_units"]
+        projections.energy = self.metadata["kev"] / 1000
+        projections.units = "eV"
         projections.angles_deg = self.metadata["angles_deg"]
         projections.angles_rad = self.metadata["angles_rad"]
+        projections.angle_start = projections.angles_rad[0]
+        projections.angle_end = projections.angles_rad[-1]
+
+    def metadata_to_DataFrame(self):
+        self.dataframe = None
 
 
 class Metadata_Prep(Metadata):
@@ -1509,6 +1631,9 @@ class Metadata_Prep(Metadata):
         ]
 
     def metadata_to_DataFrame(self):
+        self.dataframe = None
+
+    def set_tomopyui_parameters(self, Prep):
         pass
 
 
@@ -1616,6 +1741,9 @@ class Metadata_Align(Metadata):
         Align.use_subset_correlation = self.metadata["use_subset_correlation"]
         Align.num_batches = self.metadata["opts"]["num_batches"]
 
+    def set_tomopyui_parameters(self, Align):
+        pass
+
 
 class Metadata_Recon(Metadata_Align):
     def set_metadata(self, Recon):
@@ -1632,6 +1760,9 @@ class Metadata_Recon(Metadata_Align):
         super().set_attributes_from_metadata(Recon)
 
     def set_attributes_from_metadata_object_specific(self, Recon):
+        pass
+
+    def set_tomopyui_parameters(self, Recon):
         pass
 
 
@@ -1658,8 +1789,6 @@ def parse_printed_time(timedict):
 
 
 def rescale_parallel(i, images=None, ds_factor_list=None):
-    print(i)
-    print(ds_factor_list)
     return rescale(images[i], (ds_factor_list[1], ds_factor_list[2]))
 
 

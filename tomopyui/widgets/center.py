@@ -412,7 +412,7 @@ class Center:
         self.manual_center_accordion = Accordion(
             children=[self.manual_center_vbox],
             selected_index=0,
-            titles=("Find center through plotting",),
+            titles=("Find center manually",),
         )
 
         self.tab = VBox(

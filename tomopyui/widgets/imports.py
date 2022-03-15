@@ -15,6 +15,7 @@ from tomopyui.backend.io import (
     RawProjectionsXRM_SSRL62C,
     Projections_Prenormalized,
     Metadata_Align,
+    Metadata,
 )
 from tomopyui.widgets import helpers
 
@@ -284,7 +285,7 @@ class Import_SSRL62C(ImportBase):
                 # self.switch_data_buttons,
                 self.raw_accordion,
                 self.prenorm_accordion,
-                self.meta_accordion,
+                # self.meta_accordion,
             ]
         )
 
@@ -527,11 +528,21 @@ class PrenormUploader(UploaderBase):
         self.find_metadata_status_label = Label(layout=Layout(justify_content="center"))
         self.viewer.rectangle_selector_on = False
         self.widgets_to_enable = self.Import.angles_textboxes
+        self.required_parameters = [
+            "angle_start",
+            "angle_end",
+            "angles",
+            "px_size",
+            "energy",
+            "energy_units",
+            "px_size_units",
+        ]
 
     def update_filechooser_from_quicksearch(self, change):
         path = pathlib.Path(change.new)
         self.import_button.button_style = ""
         self.import_button.disabled = True
+        self.imported_metadata = False
         try:
             self.check_filepath_exists(path)
         except InvalidFileNameError:
@@ -562,12 +573,12 @@ class PrenormUploader(UploaderBase):
                 return
             else:
                 try:
-                    self.import_metadata_filepath = [
+                    self.metadata_filepath = [
                         self.filedir / file
                         for file in json_files
-                        if "import_metadata" in file
+                        if "_metadata" in file
                     ]
-                    assert self.import_metadata_filepath != []
+                    assert self.metadata_filepath != []
                 except AssertionError:
                     self.find_metadata_status_label.value = (
                         "This directory has .json files but not an import_metadata.json"
@@ -579,15 +590,36 @@ class PrenormUploader(UploaderBase):
                     return
 
                 else:
-                    self.import_metadata_filepath = self.import_metadata_filepath[0]
-                    self.projections.import_metadata(self.import_metadata_filepath)
-                    self.projections.metadata.metadata_to_DataFrame()
-                    with self.metadata_table_output:
-                        self.metadata_table_output.clear_output(wait=True)
-                        display(self.projections.metadata.dataframe)
-                    for widget in self.widgets_to_enable:
-                        widget.disabled = False
-                    self.imported_metadata = True
+                    self.metadata_filepath = self.metadata_filepath[0]
+                    self.projections.metadatas = Metadata.get_metadata_hierarchy(
+                        self.metadata_filepath
+                    )
+                    if self.projections.metadatas != []:
+                        [
+                            metadata.set_tomopyui_parameters(self.projections)
+                            for metadata in self.projections.metadatas
+                        ]
+                        # [
+                        #     metadata.set_metadata(self.projections)
+                        #     for metadata in self.projections.metadatas
+                        # ]
+                        [
+                            metadata.metadata_to_DataFrame()
+                            for metadata in self.projections.metadatas
+                        ]
+                        self.dataframes = [
+                            x.dataframe for x in self.projections.metadatas
+                        ]
+                        self.metadata_table_output.clear_output()
+                        with self.metadata_table_output:
+                            [display(m) for m in self.dataframes]
+                        for widget in self.widgets_to_enable:
+                            widget.disabled = True
+                        self.imported_metadata = True
+                        if len(self.projections.metadatas) > 1:
+                            self.projections.metadata = self.projections.metadatas[-2]
+                        else:
+                            self.projections.metadata = self.projections.metadatas[0]
 
     def update_quicksearch_from_filechooser(self, *args):
         self.filedir = pathlib.Path(self.filechooser.selected_path)
@@ -606,7 +638,7 @@ class PrenormUploader(UploaderBase):
         with self.metadata_table_output:
             self.metadata_table_output.clear_output(wait=True)
             if self.imported_metadata:
-                display(self.projections.metadata.dataframe)
+                [display(m) for m in self.dataframes if m is not None]
             display(self.import_status_label)
         if self.filename == "" or self.filename is None:
             self.import_status_label.value = "Importing file directory."
