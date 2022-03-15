@@ -332,6 +332,8 @@ class BqImViewerBase(ABC):
         self.image_index_slider.value = 0
         if self.downsample_factor == 1:
             self.plotted_image.image = self.original_imagestack[0]
+            self.imagestack = self.original_imagestack
+            self.change_aspect_ratio()
             return
         else:
             self.imagestack = rescale(
@@ -340,6 +342,7 @@ class BqImViewerBase(ABC):
                 anti_aliasing=False,
             )
             self.plotted_image.image = self.imagestack[0]
+
 
     # Reset
     def reset(self, *args):
@@ -1046,8 +1049,8 @@ class BqImViewer_TwoEnergy_High(BqImViewer_Import_Analysis):
         self.pxX = self.original_imagestack.shape[2]
         self.pxY = self.original_imagestack.shape[1]
         self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = np.array(projections.data_ds[0])
-        self.downsample_factor = 0.25
+        self.imagestack = copy.deepcopy(self.original_imagestack)
+        self.downsample_factor = 1
         self.downsample_viewer_textbox.value = self.downsample_factor
         self.current_pixel_size = projections.current_pixel_size
         self.precomputed_hists = projections.hists
@@ -1082,7 +1085,7 @@ class BqImViewer_TwoEnergy_High(BqImViewer_Import_Analysis):
 
     # Rectangle selector to update projection range
     def rectangle_to_pixel_range(self, *args):
-        super().rectangle_to_pixel_range()
+        BqImViewer_Import.rectangle_to_pixel_range(self)
         self.viewer_child.match_rectangle_selector_range_parent()
 
 
@@ -1122,12 +1125,16 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
         self.start_button = Button(
             disabled=True,
             button_style="",
-            tooltip=("Register low energy to high energy images",),
+            tooltip="Register low energy to high energy images",
             icon="fa-running",
             layout=self.button_layout,
             style=self.button_font,
         )
+
+        self.diff_button.on_click(self.switch_to_diff)
+        self._disable_diff_callback = True
         self.viewing = False
+        self.diff_on = False
 
     # Rectangle selector to update projection range
     def rectangle_to_pixel_range(self, *args):
@@ -1190,7 +1197,21 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
 
         self.app = VBox([self.header, self.center, footer])
 
-    # def change_to_diff(self):
+    def switch_to_diff(self, *args):
+        if not self.diff_on and not self._disable_diff_callback:
+            self.imagestack = self.diff_imagestack
+            self.plotted_image.image = self.imagestack[self.image_index_slider.value]
+            self.diff_on = True
+            self._disable_diff_callback = True
+            self.diff_button.button_style = "success"
+            self._disable_diff_callback = False
+        elif not self._disable_diff_callback:
+            self.imagestack = self.original_imagestack
+            self.plotted_image.image = self.imagestack[self.image_index_slider.value]
+            self.diff_on = False
+            self._disable_diff_callback = True
+            self.diff_button.button_style = ""
+            self._disable_diff_callback = False
 
 
 class BqImViewer_DataExplorer_BeforeAnalysis(BqImViewer_Import):

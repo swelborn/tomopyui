@@ -220,7 +220,7 @@ class TomoAlign:
                 and not self.metadata.metadata["save_opts"]["npy"]
             ):
                 tf.imwrite(savedir / "last_recon.tif", self.recon)
-        self.Align.run_list.append({savedir_str: self.metadata})
+        self.Align.run_list.append({str(savedir.stem): self.metadata})
 
     def _shift_prjs_after_alignment(self):
         new_prj_imgs = self.data_before_align

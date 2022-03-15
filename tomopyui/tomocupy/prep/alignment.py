@@ -19,6 +19,7 @@ from ipywidgets import *
 from tomopyui.backend.util.padding import *
 
 
+
 def align_joint(TomoAlign):
 
     # ensure it only runs on 1 thread for CUDA
@@ -30,7 +31,7 @@ def align_joint(TomoAlign):
     downsample = TomoAlign.downsample
     pad = TomoAlign.pad
     pad_ds = TomoAlign.pad_ds
-    method_str = list(TomoAlign.metadata["methods"].keys())[0]
+    method_str = list(TomoAlign.metadata.metadata["methods"].keys())[0]
     if method_str == "MLEM_CUDA":
         method_str = "EM_CUDA"
     upsample_factor = TomoAlign.upsample_factor
@@ -215,15 +216,25 @@ def align_joint(TomoAlign):
                 "extra_options": {"MinConstraint": 0},
             }
             kwargs["options"] = options
-            TomoAlign.recon = tomopy_algorithm.recon(
-                TomoAlign.prjs,
-                TomoAlign.angles_rad,
-                algorithm=wrappers.astra,
-                init_recon=_rec,
-                center=center,
-                ncore=1,
-                **kwargs,
-            )
+            if n == 0:
+                TomoAlign.recon = tomopy_algorithm.recon(
+                    TomoAlign.prjs,
+                    TomoAlign.angles_rad,
+                    algorithm=wrappers.astra,
+                    center=center,
+                    ncore=1,
+                    **kwargs,
+                )
+            else:
+                TomoAlign.recon = tomopy_algorithm.recon(
+                    TomoAlign.prjs,
+                    TomoAlign.angles_rad,
+                    algorithm=wrappers.astra,
+                    init_recon=_rec,
+                    center=center,
+                    ncore=1,
+                    **kwargs,
+                )
 
         TomoAlign.recon[np.isnan(TomoAlign.recon)] = 0
         TomoAlign.Align.progress_total.value = n + 1
@@ -362,6 +373,7 @@ def batch_cross_correlation(
     mask_sim=True,
     pad=(0, 0),
     progress=None,
+    median_filter=True,
 ):
     # TODO: the sign convention for shifting is bad here.
     # To fix this, change to
@@ -390,6 +402,9 @@ def batch_cross_correlation(
             _prj_gpu = cp.array(_prj[batch], dtype=cp.float32)
             _sim_gpu = cp.array(_sim[batch], dtype=cp.float32)
 
+        if median_filter:
+            _prj_gpu = ndi_cp.median_filter(_prj_gpu, size=(1,5,5))
+            _sim_gpu = ndi_cp.median_filter(_sim_gpu, size=(1,5,5))
         if mask_sim:
             _sim_gpu = cp.where(_prj_gpu < 1e-7, 0, _sim_gpu)
 

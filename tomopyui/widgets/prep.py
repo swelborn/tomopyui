@@ -22,7 +22,7 @@ from tomopyui.backend.io import Metadata_Prep
 
 if os.environ["cuda_enabled"] == "True":
     from ..tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
-    from ..tomocupy.prep.sampling import shrink_projections
+    from ..tomocupy.prep.sampling import shrink_and_pad_projections
 
 import tomopy.misc.corr as tomocorr
 
@@ -360,8 +360,10 @@ class Prep(ABC):
 
     # -- Functions for Energy Scaling/Shifting ----------------------------
     def scale_low_e(self, *args):
-        low_e = self.low_e_viewer.projections.energy
-        high_e = self.high_e_viewer.projections.energy
+        self.low_e_viewer.projections.metadata.set_attributes_from_metadata(self.low_e_viewer.projections)
+        self.high_e_viewer.projections.metadata.set_attributes_from_metadata(self.low_e_viewer.projections)
+        low_e = self.low_e_viewer.projections.current_energy_float
+        high_e = self.high_e_viewer.projections.current_energy_float
         num_batches = self.num_batches_textbox.value
         high_e_prj = self.high_e_viewer.projections.data
         self.low_e_viewer.scale_button.button_style = "info"
@@ -373,12 +375,20 @@ class Prep(ABC):
         self.low_e_viewer.start_button.disabled = False
         self.low_e_viewer.scale_button.button_style = "success"
         self.low_e_viewer.scale_button.icon = "fa-check-square"
+        self.low_e_viewer.diff_imagestack = np.array([x / np.mean(x) for x in self.low_e_viewer.viewer_parent.original_imagestack]) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_imagestack])
+        self.low_e_viewer._original_imagestack = self.low_e_viewer.original_imagestack
+        self.low_e_viewer.diff_on = False
+        self.low_e_viewer._disable_diff_callback = True
+        self.low_e_viewer.diff_button.disabled = False
+        self.low_e_viewer._disable_diff_callback = False
 
     def register_low_e(self, *args):
+        high_range_x = self.high_e_viewer.pixel_range_x
+        high_range_y = self.high_e_viewer.pixel_range_y
         low_range_x = self.low_e_viewer.pixel_range_x
         low_range_y = self.low_e_viewer.pixel_range_y
-        high_range_x = self.high_e_viewer.pixel_range_x
-        high_range_x = self.high_e_viewer.pixel_range_y
+        low_range_x[1] = int(low_range_x[0] + (high_range_x[1] - high_range_x[0]))
+        low_range_y[1] = int(low_range_y[0] + (high_range_y[1] - high_range_y[0]))
         self.low_e_viewer.start_button.button_style = "info"
         self.low_e_viewer.start_button.icon = "fas fa-cog fa-spin fa-lg"
         num_batches = self.num_batches_textbox.value
@@ -410,11 +420,17 @@ class Prep(ABC):
         sy = shift_cpu[0]
         # TODO: send to GPU and do both calcs there.
         self.low_e_viewer.projections.data = shift_prj_cp(
-            prj, sx, sy, num_batches, (0, 0), use_pad_cond=False, use_corr_prj_gpu=False
+            self.low_e_viewer.projections.data, sx, sy, num_batches, (0, 0), use_pad_cond=False, use_corr_prj_gpu=False
         )
         self.low_e_viewer.plot(self.low_e_viewer.projections)
+        self.low_e_viewer.diff_imagestack = np.array([x / np.mean(x) for x in self.low_e_viewer.viewer_parent.original_imagestack]) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_imagestack])
+        self.low_e_viewer._original_imagestack = self.low_e_viewer.original_imagestack
+        self.low_e_viewer.diff_on = False
+        self.low_e_viewer._disable_diff_callback = True
+        self.low_e_viewer.diff_button.disabled = False
         self.low_e_viewer.start_button.button_style = "success"
         self.low_e_viewer.start_button.icon = "fa-check-square"
+        self.low_e_viewer._disable_diff_callback = False
 
     # -- Functions to add to list ----------------------------------------
     def add_shift(self, *args):
@@ -527,6 +543,10 @@ class Prep(ABC):
         # Save
         self.save_on_button.on_click(self.save_on_off)
 
+        # Registration
+        self.low_e_viewer.start_button.on_click(self.register_low_e)
+
+
     def update_shifts_list(self):
         pass
 
@@ -611,7 +631,7 @@ class Prep(ABC):
                 self.metadata.set_metadata(self)
                 self.metadata.filedir = self.filedir
                 self.metadata.save_metadata()
-                self.metadata.parent_metadata = self.filedir
+                self.metadata.parent_metadata.filedir = self.filedir
                 self.metadata.parent_metadata.save_metadata()
                 self.altered_projections.data = self.prepped_data
                 np.save(self.filedir / "prepped_projections.npy", self.prepped_data)
