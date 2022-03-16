@@ -11,6 +11,7 @@ dependencies:
   - matplotlib
   - ffmpeg
   - dask
+  - olefile
   - git
   - pip
   - tomopy
