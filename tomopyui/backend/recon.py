@@ -44,6 +44,9 @@ class TomoRecon(TomoAlign):
         self.import_metadata = self.Recon.projections.metadata
         self.projections = Recon.projections
         self.wd_parent = self.metadata.metadata["parent_filedir"]
+        self.metadata.metadata["parent_filedir"] = str(
+            self.metadata.metadata["parent_filedir"]
+        )
         self.angles_rad = Recon.projections.angles_rad
         self.plot_output1 = Recon.plot_output1
         self.plot_output2 = Recon.plot_output2
@@ -134,7 +137,7 @@ class TomoRecon(TomoAlign):
         else:
             # defined in run.py
             os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
-            if algorithm == "gridrec" or algorithm == "fbp":
+            if method_str == "gridrec" or method_str == "fbp":
                 self.recon = tomopy_algorithm.recon(
                     self.prjs,
                     self.angles_rad,
