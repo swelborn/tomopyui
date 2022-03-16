@@ -1,10 +1,7 @@
 import multiprocessing
 from ipywidgets import *
 from tomopyui.widgets.helpers import import_module_set_env
-from tomopyui.widgets.imports import Import_SSRL62C
-from tomopyui.widgets.als_imports import Import_ALS832
-
-# from tomopyui.widgets.als_imports import Import_ALS832
+from tomopyui.widgets.imports import Import_SSRL62C, Import_ALS832
 from tomopyui.widgets.center import Center
 from tomopyui.widgets.analysis import Align, Recon
 from tomopyui.widgets.dataexplorer import DataExplorerTab
@@ -31,7 +28,18 @@ def create_dashboard(institution: str):
         %matplotlib ipympl
         import tomopyui.widgets.main as main
 
-        dashboard, file_import, center, prep, align, recon = main.create_dashboard()
+        (
+            dashboard_output,
+            dashboard,
+            file_import,
+            prep,
+            center,
+            align,
+            recon,
+            dataexplorer,
+        ) = main.create_dashboard(
+            "ALS_832"
+        )  # can be "SSRL_62C", "ALS_832"
         dashboard
 
     """

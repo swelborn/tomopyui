@@ -957,6 +957,83 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         )
 
 
+class RawProjectionsHDF5_ALS832(RawProjectionsBase):
+    def __init__(self):
+        super().__init__()
+        self.allowed_extensions = self.allowed_extensions + [".h5"]
+        self.angles_from_filenames = True
+        self.metadata = Metadata_ALS_832_Raw()
+
+    def import_filedir_all(self, filedir):
+        pass
+
+    def import_filedir_projections(self, filedir):
+        pass
+
+    def import_filedir_flats(self, filedir):
+        pass
+
+    def import_filedir_darks(self, filedir):
+        pass
+
+    def import_file_all(self, filepath):
+        self.filedir = self.filedir
+        self.filename = self.filename
+        self.filepath = self.filedir / self.filename
+        self.import_metadata()
+        self.metadata.set_attributes_from_metadata(self)
+        (
+            self._data,
+            self.flats,
+            self.darks,
+            self.angles_rad,
+        ) = dxchange.exchange.read_aps_tomoscan_hdf5(filepath)
+        self.norm_filedir = self.filedir / str(filepath.stem)
+        if os.path.exists(self.norm_filedir):
+            pass
+        else:
+            os.makedirs(self.norm_filedir)
+        self.data = self._data
+        self.angles_deg = (180 / np.pi) * self.angles_rad
+        self.imported = True
+        self.metadata.set_metadata(self)
+        self.metadata.save_metadata()
+
+    def import_metadata(self, filepath=None):
+        if filepath is not None:
+            self.filepath = filepath
+        self.metadata.load_metadata_h5(self.filepath)
+        self.metadata.set_attributes_from_metadata(self)
+
+    def import_file_projections(self, filepath):
+        tomo_grp = "/".join([exchange_base, "data"])
+        tomo = dxreader.read_hdf5(fname, tomo_grp, slc=(proj, sino), dtype=dtype)
+
+    def import_file_flats(self, filepath):
+        flat_grp = "/".join([exchange_base, "data_white"])
+        flat = dxreader.read_hdf5(fname, flat_grp, slc=(None, sino), dtype=dtype)
+
+    def import_file_darks(self, filepath):
+        dark_grp = "/".join([exchange_base, "data_dark"])
+        dark = dxreader.read_hdf5(fname, dark_grp, slc=(None, sino), dtype=dtype)
+
+    def import_file_angles(self, filepath):
+        theta_grp = "/".join([exchange_base, "theta"])
+        theta = dxreader.read_hdf5(fname, theta_grp, slc=None)
+
+    def save_normalized_metadata(self, import_time=None, parent_metadata=None):
+        metadata = Metadata_ALS_832_Prenorm()
+        metadata.filedir = self.filedir
+        metadata.metadata = parent_metadata.copy()
+        if parent_metadata is not None:
+            metadata.metadata["parent_metadata"] = parent_metadata.copy()
+        if import_time is not None:
+            metadata.metadata["import_time"] = import_time
+        metadata.set_metadata(self)
+        print(metadata.metadata)
+        metadata.save_metadata()
+
+
 class Metadata(ABC):
     def __init__(self):
         self.metadata = {}
@@ -1665,6 +1742,8 @@ class Metadata_Align(Metadata):
         self.metadata["pixel_range_y"] = Align.pixel_range_y
         self.metadata["parent_filedir"] = Align.projections.filedir
         self.metadata["parent_filename"] = Align.projections.filename
+        self.metadata["angle_start"] = Align.projections.angles_deg[0]
+        self.metadata["angle_end"] = Align.projections.angles_deg[-1]
         self.set_metadata_obj_specific(Align)
 
     def set_metadata_obj_specific(self, Align):
@@ -1748,7 +1827,7 @@ class Metadata_Align(Metadata):
 class Metadata_Recon(Metadata_Align):
     def set_metadata(self, Recon):
         super().set_metadata(Recon)
-        self.metadata["metadata_type"] = "Align"
+        self.metadata["metadata_type"] = "Recon"
 
     def set_metadata_obj_specific(self, Recon):
         pass

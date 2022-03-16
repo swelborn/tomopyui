@@ -54,7 +54,6 @@ class AnalysisBase(ABC):
         self.astra_cuda_methods_list = [
             key for key in astra_cuda_recon_algorithm_kwargs
         ]
-        self.metadata = Metadata_Align()
         self.run_list = []
         self.header_font_style = {
             "font_size": "22px",
@@ -574,12 +573,12 @@ class AnalysisBase(ABC):
 class Align(AnalysisBase):
     def __init__(self, Import, Center):
         super().init_attributes(Import, Center)
+        self.metadata = Metadata_Align()
         self.subset_range_x = None
         self.subset_range_y = None
         self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", "npy"]
         self.Import.Align = self
         self.init_widgets()
-        self.metadata.set_metadata(self)
         self.set_observes()
         self.make_tab()
 
@@ -772,7 +771,6 @@ class Recon(AnalysisBase):
         self.save_opts_list = ["tomo_before", "recon", "tiff", "npy"]
         self.Import.Recon = self
         self.init_widgets()
-        self.metadata.set_metadata(self)
         self.set_observes()
         self.make_tab()
 
