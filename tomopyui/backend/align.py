@@ -61,6 +61,10 @@ class TomoAlign:
             os.mkdir(self.wd_parent / dt_str)
         self.metadata.filedir = pathlib.Path(self.wd_parent / dt_str)
         self.metadata.filename = "overall_" + suffix + "_metadata.json"
+        if suffix == "alignment":
+            self.metadata.metadata["parent_metadata"] = self.Align.Import.projections.metadata.metadata.copy()
+        else:
+            self.metadata.metadata["parent_metadata"] = self.Recon.Import.projections.metadata.metadata.copy()
         self.metadata.save_metadata()
         # !!!!!!!!!! make option for tiff file save
         if self.metadata.metadata["save_opts"]["tomo_before"]:
@@ -183,12 +187,12 @@ class TomoAlign:
         self.import_metadata.filedir = savedir
         self.save_data_after_obj_specific(savedir)
         self.metadata.save_metadata()
-        self.import_metadata.save_metadata()
+        # self.import_metadata.save_metadata()
 
     def save_data_after_obj_specific(self, savedir):
-        self.metadata.metadata["sx"] = self.sx
-        self.metadata.metadata["sy"] = self.sy
-        self.metadata.metadata["convergence"] = self.conv
+        self.metadata.metadata["sx"] = list(self.sx)
+        self.metadata.metadata["sy"] = list(self.sy)
+        self.metadata.metadata["convergence"] = list(self.conv)
         self.metadata.filename = "alignment_metadata.json"
         if self.metadata.metadata["save_opts"]["tomo_after"]:
             if self.metadata.metadata["save_opts"]["npy"]:
