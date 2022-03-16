@@ -707,9 +707,10 @@ class BqImViewer_Center(BqImViewer_Import_Analysis):
             tooltip=("Turn on center of rotation line"),
         )
         self.center_line_button.on_click(self.center_line_on_update)
+        self.all_buttons.insert(-2, self.center_line_button)
 
     def create_app(self):
-        self.all_buttons.insert(-2, self.center_line_button)
+        
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,
@@ -849,11 +850,12 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
 
         # Rectangle selector
         self.rectangle_selector.observe(self.rectangle_to_pixel_range, "selected")
-
-    def create_app(self):
         self.all_buttons.insert(-2, self.copy_button)
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
         self.all_buttons.insert(-2, self.range_from_parent_button)
+
+    def create_app(self):
+        
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,
@@ -1131,6 +1133,11 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             style=self.button_font,
         )
 
+        self.all_buttons.insert(-2, self.diff_button)
+        self.all_buttons.insert(-2, self.link_plotted_projections_button)
+        self.all_buttons.insert(-2, self.scale_button)
+        self.all_buttons.insert(-2, self.start_button)
+
         self.diff_button.on_click(self.switch_to_diff)
         self._disable_diff_callback = True
         self.viewing = False
@@ -1171,10 +1178,7 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             self.scale_button.disabled = True
 
     def create_app(self):
-        self.all_buttons.insert(-2, self.diff_button)
-        self.all_buttons.insert(-2, self.link_plotted_projections_button)
-        self.all_buttons.insert(-2, self.scale_button)
-        self.all_buttons.insert(-2, self.start_button)
+        
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,
@@ -1239,10 +1243,11 @@ class BqImViewer_DataExplorer_AfterAnalysis(BqImViewer_DataExplorer_BeforeAnalys
         self.link_plotted_projections_button.on_click(self.link_plotted_projections)
         self.plots_linked = False
         self.downsample_factor = 0.5
-
-    def create_app(self):
         self.all_buttons = self.init_buttons
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
+
+    def create_app(self):
+        
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,

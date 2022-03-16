@@ -818,7 +818,7 @@ class Recon(AnalysisBase):
 
     def run(self):
         self.analysis = TomoRecon(self)
-        self.analysis_projections = Projections_Prenormalized_General()
+        self.analysis_projections = Projections_Prenormalized()
         self.analysis_projections.data = self.analysis.recon
         self.analysis_projections.filedir = pathlib.Path(self.analysis.wd)
         self.result_after_viewer.create_app()

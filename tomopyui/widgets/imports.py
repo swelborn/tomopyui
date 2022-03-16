@@ -452,7 +452,7 @@ class ShiftsUploader(UploaderBase):
                             self.filedir
                             / [
                                 file
-                                for file in json_files
+                                for file in shifts_files
                                 if "alignment_metadata" in file
                             ][0]
                         )
@@ -495,7 +495,7 @@ class ShiftsUploader(UploaderBase):
         self.align_metadata.load_metadata()
         self.sx = self.align_metadata.metadata["sx"]
         self.sy = self.align_metadata.metadata["sy"]
-        self.conv = self.align_metadata.metadata["conv"]
+        self.conv = self.align_metadata.metadata["convergence"]
 
     def update_shift_lists(self):
         self.Prep.shifts_sx_select.options = self.sx

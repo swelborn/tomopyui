@@ -172,4 +172,4 @@ class TomoRecon(TomoAlign):
                 "minutes": (toc - tic) / 60,
                 "hours": (toc - tic) / 3600,
             }
-            self.save_data_after(alignment=False)
+            self.save_data_after()

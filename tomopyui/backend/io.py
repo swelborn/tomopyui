@@ -1759,7 +1759,7 @@ class Metadata_Recon(Metadata_Align):
     def set_attributes_from_metadata(self, Recon):
         super().set_attributes_from_metadata(Recon)
 
-    def set_attributes_from_metadata_object_specific(self, Recon):
+    def set_attributes_object_specific(self, Recon):
         pass
 
     def set_tomopyui_parameters(self, Recon):
