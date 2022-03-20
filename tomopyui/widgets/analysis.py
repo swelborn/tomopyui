@@ -24,7 +24,7 @@ class AnalysisBase(ABC):
 
         self.Import = Import
         self.Center = Center
-        self.projections = copy.deepcopy(Import.projections)
+        self.projections = Import.projections
         self.imported_viewer = BqImViewer_Import_Analysis(self)
         self.imported_viewer.create_app()
         self.altered_viewer = BqImViewer_Altered_Analysis(self.imported_viewer, self)

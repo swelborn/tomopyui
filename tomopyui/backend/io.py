@@ -14,6 +14,8 @@ import shutil
 import copy
 import multiprocessing as mp
 import pandas as pd
+import time
+import datetime
 
 from abc import ABC, abstractmethod
 from tomopy.sim.project import angles as angle_maker
@@ -25,6 +27,16 @@ from functools import partial
 
 
 class IOBase:
+    """
+    Base class for all data imported. Contains some setter/getter attributes that also
+    set other attributes, such setting number of pixels for a numpy array.
+
+    Also has methods such as _check_downsampled_data, which checks for previously
+    uploaded downsampled data, and writes it in a subfolder if not already there.
+
+    _file_finder is under this class, but logically it does not belong here. TODO.
+    """
+
     def __init__(self):
 
         self._data = np.random.rand(10, 100, 100)
@@ -73,7 +85,7 @@ class IOBase:
         self.extension = value.suffix
         self._filepath = value
 
-    def _check_downsampled_data(self, energy=None, label=None):
+    def _check_downsampled_data(self, label=None):
         """
         Checks to see if there is downsampled data in a directory. If it doesn't it
         will write new downsampled data.
@@ -85,10 +97,7 @@ class IOBase:
         label : widgets.Label, optional
             This is a label that will update in the frontend.
         """
-        if energy is not None:
-            filedir = self.energy_filedir
-        else:
-            filedir = self.filedir
+        filedir = self.filedir
         try:
             self.filedir_ds = pathlib.Path(filedir / "downsampled").mkdir(parents=True)
             self.filedir_ds = pathlib.Path(filedir / "downsampled")
@@ -187,6 +196,23 @@ class IOBase:
         ]
         return files_with_ext
 
+    def _file_finder_fullpath(self, filedir, filetypes: list):
+        """
+        Used to find files of a given filetype in a directory. TODO: can go elsewhere.
+
+        Parameters
+        ----------
+        filedir : pathlike, relative or absolute
+            Folder in which to search for files.
+        filetypes : list of str
+            Filetypes list. e.g. [".txt", ".npy"]
+        """
+        files = [pathlib.Path(f) for f in os.scandir(filedir) if not f.is_dir()]
+        fullpaths_of_files_with_ext = [
+            file for file in files if any(x in file.name for x in filetypes)
+        ]
+        return fullpaths_of_files_with_ext
+
 
 class ProjectionsBase(IOBase, ABC):
 
@@ -197,7 +223,8 @@ class ProjectionsBase(IOBase, ABC):
 
     """
 
-    # https://stackoverflow.com/questions/4017572/how-can-i-make-an-alias-to-a-non-function-member-attribute-in-a-python-class
+    # https://stackoverflow.com/questions/4017572/
+    # how-can-i-make-an-alias-to-a-non-function-member-attribute-in-a-python-class
     aliases = {
         "prj_imgs": "data",
         "num_angles": "pxZ",
@@ -214,6 +241,8 @@ class ProjectionsBase(IOBase, ABC):
         self.current_pixel_size = 1
         self.angles_rad = None
         self.angles_deg = None
+        self.saved_as_tiff = False
+        self.tiff_folder = False
 
     def __setattr__(self, name, value):
         name = self.aliases.get(name, name)
@@ -225,20 +254,19 @@ class ProjectionsBase(IOBase, ABC):
         name = self.aliases.get(name, name)
         return object.__getattribute__(self, name)
 
-    def save_normalized_as_npy(self, energy=None):
-        if energy is not None:
-            np.save(self.energy_filedir / str("normalized_projections.npy"), self.data)
-        else:
-            np.save(self.filedir / str("normalized_projections.npy"), self.data)
+    def save_normalized_as_npy(self):
+        """
+        Saves current self.data under the current self.filedir as
+        "normalized_projections.npy"
+        """
+        np.save(self.filedir / str("normalized_projections.npy"), self.data)
 
-    def save_normalized_as_tiff(self, energy=None):
-        if energy is not None:
-            tf.imwrite(
-                self.energy_filedir / str("normalized_projections.tif"),
-                self.data,
-            )
-        else:
-            tf.imwrite(self.filedir / str("normalized_projections.tif"), self.data)
+    def save_normalized_as_tiff(self):
+        """
+        Saves current self.data under the current self.filedir as
+        "normalized_projections.tif"
+        """
+        tf.imwrite(self.filedir / str("normalized_projections.tif"), self.data)
 
     @abstractmethod
     def import_metadata(self, filedir):
@@ -253,7 +281,7 @@ class ProjectionsBase(IOBase, ABC):
         ...
 
 
-class Projections_Prenormalized(ProjectionsBase, ABC):
+class Projections_Prenormalized(ProjectionsBase):
     """
     Prenormalized projections base class. This allows one to bring in data from a file
     directory or from a single tiff or npy, or multiple tiffs in a tiffstack. If the
@@ -261,92 +289,100 @@ class Projections_Prenormalized(ProjectionsBase, ABC):
     folder will assume that "normalized_projections.npy" is in the folder, given that
     there is an import_metadata.json in that folder.
 
-    If the user does not have an import_metadata.json file, the parameters required for
-    input are the start and end angles of the data.
-
     Each method uses a parent Uploader instance for callbacks.
 
     """
 
     def import_filedir_projections(self, Uploader):
+        """
+        Similar process to import_file_projections. This one will be triggered if the
+        tiff folder checkbox is selected on the frontend.
+        """
+        self.tic = time.perf_counter()
+        Uploader.import_status_label.value = "Importing file directory."
         self.filedir = Uploader.filedir
-        if Uploader.imported_metadata:
-            self.filepath = Uploader.filedir / "normalized_projections.npy"
-            self._data = np.load(
-                Uploader.filedir / "normalized_projections.npy"
-            ).astype(np.float32)
-            self.metadata.set_attributes_from_metadata(self)
-        else:
-            self.angle_start = Uploader.angle_start
-            self.angle_end = Uploader.angle_end
-            cwd = os.getcwd()
-            os.chdir(Uploader.filedir)
-            image_sequence = tf.TiffSequence()
-            self._data = image_sequence.asarray().astype(np.float32)
-            self.data = self._data
-            image_sequence.close()
-            self.make_angles()
-            os.chdir(cwd)
+        if not Uploader.imported_metadata:
+            self.set_import_savedir(str(self.metadata.metadata["energy_str"] + "eV"))
+            self.metadata.set_attributes_from_metadata_before_import(self)
+        cwd = os.getcwd()
+        os.chdir(Uploader.filedir)
+        image_sequence = tf.TiffSequence()
+        self._data = image_sequence.asarray().astype(np.float32)
+        self.data = self._data
+        image_sequence.close()
+        self.metadata.set_metadata_from_attributes_after_import(self)
+        self._check_downsampled_data(self.energy)
+        os.chdir(cwd)
 
     def import_file_projections(self, Uploader):
+        """
+        Will import a file selected on the frontend. Goes through several steps:
+
+        1. Set file directories/filenames/filepaths.
+        2. Sets save directory
+        3. Set projections attributes from the metadata supplied by frontend, if any.
+        4. Determine what kind of file it is
+        5. Upload
+        6. Sets metadata from data info after upload
+        7. Saves in the import directory.
+        """
+        self.tic = time.perf_counter()
+        Uploader.import_status_label.value = "Importing single file."
         self.imported = False
         self.filedir = Uploader.filedir
-        self._filepath = Uploader.filedir / Uploader.filename
+        self.filename = Uploader.filename
+        self._filepath = self.filedir / self.filename
         self.filepath = self._filepath
+        if not Uploader.imported_metadata:
+            self.set_import_savedir(str(self.metadata.metadata["energy_str"] + "eV"))
+            self.metadata.set_attributes_from_metadata_before_import(self)
+
+        # if import metadata is found in the directory, "normalized_projections.npy"
+        # will be uploaded. This behavior is probably OK if we stick to this file
+        # structure
         if Uploader.imported_metadata:
             Uploader.import_status_label.value = (
-                "Detected import_metadata.json in this directory,"
+                "Detected metadata.json in this directory,"
                 + " uploading normalized_projections.npy."
             )
-            self._data = np.load(
-                Uploader.filedir / "normalized_projections.npy"
-            ).astype(np.float32)
             self.metadata.set_attributes_from_metadata(self)
+            self._data = np.load(self.filedir / "normalized_projections.npy").astype(
+                np.float32
+            )
+            self._check_downsampled_data()
+            if Uploader.save_tiff_on_import_checkbox.value:
+                Uploader.import_status_label.value = "Saving projections as .tiff."
+                self.saved_as_tiff = True
+                self.save_normalized_as_tiff()
+                self.metadata.metadata["saved_as_tiff"] = True
             self.imported = True
 
-        elif ".tif" in str(self.filepath):
-            # if there is a file name, checks to see if there are many more
-            # tiffs in the filedir. If there are, will upload all of them.
-            filetypes = [".tif", ".tiff"]
-            tifffiles = self._file_finder(self.filepath.parent, filetypes)
-            if len(tifffiles) > 50:
-                Uploader.import_status_label.value = (
-                    "Detected tiff stack in this directory, uploading all of them. "
-                    + "Using angles from textboxes below."
-                )
+        elif any([x in self.filename for x in [".tif", ".tiff"]]):
+            if self.tiff_folder:
                 self.import_filedir_projections(self.filepath.parent)
                 return
-            (
-                "Did not detect imported metadata, uploading single .tif file from this"
-                + " folder. Using angles from textboxes below."
-            )
             self._data = np.array(
                 dxchange.reader.read_tiff(self.filepath).astype(np.float32)
             )
             self._data = np.where(np.isfinite(self._data), self._data, 0)
             self.data = self._data
-            self.angle_start = Uploader.angle_start
-            self.angle_end = Uploader.angle_end
-            self.make_angles()
+            self.metadata.set_metadata_from_attributes_after_import(self)
+            self.save_data_and_metadata(Uploader)
             self.imported = True
 
-        elif ".npy" in str(self.filepath):
-            Uploader.import_status_label.value = (
-                "Did not detect imported metadata. Uploading .npy. "
-                + "Using angles from textboxes below."
-            )
+        elif ".npy" in self.filename:
             self._data = np.load(self.filepath).astype(np.float32)
-            self._filepath = self.filepath
-            self.filepath = self._filepath
             self._data = np.where(np.isfinite(self._data), self._data, 0)
             self.data = self._data
-            self.angle_start = Uploader.angle_start
-            self.angle_end = Uploader.angle_end
-            self.make_angles()
-            self._check_downsampled_data(self.energy)
+            self.metadata.set_metadata_from_attributes_after_import(self)
+            self.save_data_and_metadata(Uploader)
+            self._check_downsampled_data()
             self.imported = True
 
-    def get_img_shape(self):
+    def get_img_shape(self, extension=None):
+        """
+        Gets the image shape of a tiff or npy with lazy loading.
+        """
 
         if self.extension == ".tif" or self.extension == ".tiff":
             allowed_extensions = [".tiff", ".tif"]
@@ -382,6 +418,11 @@ class Projections_Prenormalized(ProjectionsBase, ABC):
         return (sizeZ, sizeY, sizeX)
 
     def make_angles(self):
+        """
+        Makes angles based on self.angle_start, self.angle_end, and self.pxZ.
+
+        Also converts to degrees.
+        """
         self.angles_rad = angle_maker(
             self.pxZ,
             ang1=self.angle_start,
@@ -393,8 +434,52 @@ class Projections_Prenormalized(ProjectionsBase, ABC):
         self.metadata = Metadata.parse_metadata_type(filepath)
         self.metadata.load_metadata()
 
+    def set_import_savedir(self, folder_name):
+        """
+        Creates a save directory to put projections into.
+        """
+        self.import_savedir = pathlib.Path(self.filedir / folder_name)
+        if self.import_savedir.exists():
+            now = datetime.datetime.now()
+            dt_str = now.strftime("%Y%m%d-%H%M-")
+            save_name = dt_str + folder_name
+            self.import_savedir = pathlib.Path(self.filedir / save_name)
+            if self.import_savedir.exists():
+                dt_str = now.strftime("%Y%m%d-%H%M%S-")
+                save_name = dt_str + folder_name
+                self.import_savedir = pathlib.Path(self.filedir / save_name)
+        self.import_savedir.mkdir()
+        self.filedir_ds = self.import_savedir / "downsampled"
+
+    def save_data_and_metadata(self, Uploader):
+        """
+        Saves current data and metadata in import_savedir.
+        """
+        self.filedir = self.import_savedir
+        np.save(self.import_savedir / "normalized_projections.npy", self.data)
+        self.saved_as_tiff = False
+        if Uploader.save_tiff_on_import_checkbox.value:
+            Uploader.import_status_label.value = "Saving projections as .tiff."
+            self.saved_as_tiff = True
+            self.save_normalized_as_tiff()
+            self.metadata.metadata["saved_as_tiff"] = True
+        self.metadata.filedir = self.filedir
+        self.toc = time.perf_counter()
+        self.metadata.metadata["import_time"] = self.toc - self.tic
+        self.metadata.save_metadata()
+        Uploader.import_status_label.value = "Checking for downsampled data."
+        self._check_downsampled_data(label=Uploader.import_status_label)
+
 
 class RawProjectionsBase(ProjectionsBase, ABC):
+    """
+    Base class for raw projections. Contains methods for normalization, and abstract
+    methods that are required in any subclass of this class for data import. Some
+    methods currently are not used by tomopyui (e.g. import_filedir_flats), but could
+    be used in the future. If you don't want to use some of these methods, just
+    write "def method(self):pass" to enable subclass instantiation.
+    """
+
     def __init__(self):
         super().__init__()
         self.flats = None
@@ -403,6 +488,9 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         self.normalized = False
 
     def normalize_nf(self):
+        """
+        Wrapper for tomopy's normalize_nf
+        """
         self._data = tomopy_normalize.normalize_nf(
             self._data, self.flats, self.darks, self.flats_ind
         )
@@ -413,6 +501,9 @@ class RawProjectionsBase(ProjectionsBase, ABC):
 
     # for Tomopy-based normalization
     def normalize(self):
+        """
+        Wrapper for tomopy's normalize.
+        """
         self._data = tomopy_normalize.normalize(self._data, self.flats, self.darks)
         self._data = tomopy_normalize.minus_log(self._data)
         self.data = self._data
@@ -421,6 +512,25 @@ class RawProjectionsBase(ProjectionsBase, ABC):
 
     # For dask-based normalization (should be faster)
     def average_chunks(chunked_da):
+        """
+        Method required for averaging within the normalize_and_average method. Takes
+        all chunks of a dask array
+
+        Parameters
+        ----------
+        chunked_da: dask array
+            Dask array with chunks to average over axis=0.
+            For ex. if you have an initial numpy array with shape (50, 100, 100),
+            and you chunk this along the 0th dimension into 5x (10, 100,100).
+            The output of this function will be of dimension (5, 100, 100).
+
+        Returns
+        -------
+        arr: dask array
+            Dask array that has been averaged along axis=0 with respect to how many
+            chunks it initially had.
+        """
+
         @dask.delayed
         def mean_on_chunks(a):
             return np.mean(a, axis=0)[np.newaxis, ...]
@@ -483,9 +593,18 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         nearest flat
         6. Average the projections in their initial chunks
 
+        Parameters
+        ----------
+        TODO
+
+        Returns
+        -------
+        TODO
+
         """
         if status_label is not None:
             status_label.value = "Averaging flatfields."
+
         # Averaging flats
         flats_reduced = RawProjectionsBase.average_chunks(flats)
         dark = np.median(dark, axis=0)
@@ -510,7 +629,7 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         if status_label is not None:
             status_label.value = f"Dividing by flatfields and taking -log."
 
-        # Don't know if putting @classmethod above a decorator will mess it up, so this
+        # Don't know if putting @staticmethod above a decorator will mess it up, so this
         # fct is inside. This is kind of funky. TODO.
 
         @dask.delayed
@@ -536,42 +655,78 @@ class RawProjectionsBase(ProjectionsBase, ABC):
 
     @abstractmethod
     def import_metadata(self, filedir):
+        """
+        After creating Metadata classes and subclasses, this logically belongs to those
+        classes. TODO.
+        """
         ...
 
     @abstractmethod
     def import_filedir_all(self, filedir):
+        """
+        Imports a directory of files containing raw projections, flats, and darks rather
+        than a single file.
+        """
         ...
 
     @abstractmethod
     def import_filedir_projections(self, filedir):
+        """
+        Imports a directory of just the raw projections.
+        """
         ...
 
     @abstractmethod
     def import_filedir_flats(self, filedir):
+        """
+        Imports a directory of just the raw flats.
+        """
         ...
 
     @abstractmethod
     def import_filedir_darks(self, filedir):
+        """
+        Imports a directory of just the raw darks.
+        """
         ...
 
     @abstractmethod
     def import_file_all(self, filepath):
+        """
+        Imports a file containing all raw projections, flats, and darks.
+        """
         ...
 
     @abstractmethod
     def import_file_projections(self, filepath):
+        """
+        Imports a file containing all raw projections.
+        """
         ...
 
     @abstractmethod
     def import_file_flats(self, filepath):
+        """
+        Imports a file containing all raw flats.
+        """
         ...
 
     @abstractmethod
     def import_file_darks(self, filepath):
+        """
+        Imports a file containing all raw darks.
+        """
         ...
 
 
 class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
+
+    """
+    Raw data import functions associated with SSRL 6-2c. If you specify a folder filled
+    with raw XRMS, a ScanInfo file, and a run script, this will automatically import
+    your data and save it in a subfolder corresponding to the energy.
+    """
+
     def __init__(self):
         super().__init__()
         self.allowed_extensions = self.allowed_extensions + [".xrm"]
@@ -732,17 +887,37 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             Uploader.energy_overwrite_textbox.disabled = True
 
     def calculate_px_size(self, energy, binning):
-        # From Johanna's calibration doc
+        """
+        Calculates the pixel size based on the energy and binning.
+        From Johanna's calibration.
+        """
         pixel_size = 0.002039449 * energy - 0.792164997
         pixel_size = pixel_size * binning
         return pixel_size
 
     def est_en_from_px_size(self, pixel_size, binning):
+        """
+        Estimates the energy based on the pixel size. This is for plain TOMO data where
+        the energy is not available. You should be able to overwrite
+        this in the frontend if energy cannot be found.
+        Inverse of calculate_px_size.
+        """
         # From Johanna's calibration doc
         energy = (pixel_size / binning + 0.792164997) / 0.002039449
         return energy
 
     def get_all_data_filenames(self):
+        """
+        Grabs the flats and projections filenames from scan info.
+
+        Returns
+        -------
+        flats: list of pathlib.Path
+            All flat file names in self.scan_info["FILES"]
+        projs: list of pathlib.Path
+            All projection file names in self.scan_info["FILES"]
+        """
+
         flats = [
             file.parent / file.name
             for file in self.scan_info["FILES"]
@@ -756,6 +931,9 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         return flats, projs
 
     def get_angles_from_filenames(self):
+        """
+        Grabs the angles from the file names in scan_info.
+        """
         reg_exp = re.compile("_[+-]\d\d\d.\d\d")
         self.angles_deg = map(
             reg_exp.findall, [str(file) for file in self.data_filenames]
@@ -771,6 +949,9 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         self.angles_rad = [x * np.pi / 180 for x in self.angles_deg]
 
     def get_angles_from_metadata(self):
+        """
+        Gets the angles from the raw image metadata.
+        """
         self.angles_rad = [
             filemetadata["thetas"][0]
             for filemetadata in self.scan_info["PROJECTION_METADATA"]
@@ -785,6 +966,18 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         self.angles_deg = [x * 180 / np.pi for x in self.angles_rad]
 
     def read_xrms_metadata(self, xrm_list):
+        """
+        Reads XRM files and snags the metadata from them.
+
+        Parameters
+        ----------
+        xrm_list: list(pathlib.Path)
+            list of XRMs to grab metadata from
+        Returns
+        -------
+        metadatas: list(dict)
+            List of metadata dicts for files in xrm_list
+        """
         metadatas = []
         for i, filename in enumerate(xrm_list):
             ole = olefile.OleFileIO(str(filename))
@@ -793,6 +986,23 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         return metadatas
 
     def load_xrms(self, xrm_list, Uploader):
+        """
+        Loads XRM data from a file list in order, concatenates them to produce a stack
+        of data (npy).
+
+        Parameters
+        ----------
+        xrm_list: list(pathlib.Path)
+            list of XRMs to upload
+        Uploader: `Uploader`
+            Should have an upload_progress attribute. This is the progress bar.
+        Returns
+        -------
+        data_stack: np.ndarray()
+            Data grabbed from xrms in xrm_list
+        metadatas: list(dict)
+            List of metadata dicts for files in xrm_list
+        """
         data_stack = None
         metadatas = []
         for i, filename in enumerate(xrm_list):
@@ -806,6 +1016,21 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         return data_stack, metadatas
 
     def import_from_run_script(self, Uploader):
+        """
+        Script to upload selected data from a run script.
+
+        If an energy is selected on the frontend, it will be added to the queue to
+        upload and normalize.
+
+        This reads the run script in the folder. Each time "set e" is in the run script,
+        this means that the energy is changing and signifies a new tomography.
+
+        Parameters
+        ----------
+        Uploader: `Uploader`
+            Should have an upload_progress, status_label, and progress_output attribute.
+            This is for the progress bar and information during the upload progression.
+        """
         all_collections = [[]]
         energies = [[self.selected_energies[0]]]
         parent_metadata = self.metadata.metadata.copy()
@@ -878,14 +1103,23 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                     self.data_filenames, Uploader
                 )
                 self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
-                self.energy_filedir = self.filedir / str(energy + "eV")
-                if os.path.exists(self.energy_filedir):
-                    shutil.rmtree(self.energy_filedir)
-                os.makedirs(self.energy_filedir)
+                energy_filedir_name = str(energy + "eV")
+                self.import_savedir = self.filedir / energy_filedir_name
+                if self.import_savedir.exists():
+                    now = datetime.datetime.now()
+                    dt_str = now.strftime("%Y%m%d-%H%M-")
+                    save_name = dt_str + energy_filedir_name
+                    self.import_savedir = pathlib.Path(self.filedir / save_name)
+                    if self.import_savedir.exists():
+                        dt_str = now.strftime("%Y%m%d-%H%M%S-")
+                        save_name = dt_str + energy_filedir_name
+                        self.import_savedir = pathlib.Path(self.filedir / save_name)
+
+                self.import_savedir.mkdir()
                 self.status_label.value = "Saving flats."
-                np.save(self.energy_filedir / "flats", self.flats)
+                np.save(self.import_savedir / "flats", self.flats)
                 self.status_label.value = "Saving projections."
-                np.save(self.energy_filedir / "projections", self._data)
+                np.save(self.import_savedir / "projections", self._data)
                 projs, flats, darks = self.setup_normalize()
                 self.status_label.value = "Calculating flat positions."
                 self.flats_ind_from_collect(collect)
@@ -899,27 +1133,43 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                     status_label=self.status_label,
                 )
                 self.data = self._data
+                _tmp_filedir = copy.deepcopy(self.filedir)
+                self.filedir = self.import_savedir
                 self.status_label.value = "Saving projections as .npy for faster IO."
-                self.save_normalized_as_npy(energy)
+                self.save_normalized_as_npy()
                 self.saved_as_tiff = False
                 if Uploader.save_tiff_on_import_checkbox.value:
                     self.status_label.value = "Saving projections as .tiff."
                     self.saved_as_tiff = True
-                    self.save_normalized_as_tiff(energy)
+                    self.save_normalized_as_tiff()
                 self.status_label.value = "Downsampling data for faster viewing."
-                self._check_downsampled_data(energy)
+                self._check_downsampled_data()
                 self.status_label.value = "Saving metadata."
                 self.data_hierarchy_level = 1
                 self.metadata.set_metadata(self)
-                self.metadata.filedir = self.energy_filedir
+                self.metadata.filedir = self.import_savedir
                 self.metadata.filename = "import_metadata.json"
                 self.metadata.save_metadata()
+                self.filedir = _tmp_filedir
 
     def setup_normalize(self):
+        """
+        Function to lazy load flats and projections as npy, convert to chunked dask
+        arrays for normalization.
+
+        Returns
+        -------
+        projs: dask array
+            Projections chunked by scan_info["NEXPOSURES"]
+        flats: dask array
+            References chunked by scan_info["REFNEXPOSURES"]
+        darks: dask array
+            Zeros array with the same image dimensions as flats
+        """
         self.flats = None
         self._data = None
-        self.flats = np.load(self.energy_filedir / "flats.npy", mmap_mode="r")
-        self._data = np.load(self.energy_filedir / "projections.npy", mmap_mode="r")
+        self.flats = np.load(self.import_savedir / "flats.npy", mmap_mode="r")
+        self._data = np.load(self.import_savedir / "projections.npy", mmap_mode="r")
         self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
         projs = da.from_array(
             self._data, chunks=(self.scan_info["NEXPOSURES"], -1, -1)
@@ -931,6 +1181,12 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         return projs, flats, darks
 
     def flats_ind_from_collect(self, collect):
+        """
+        Calculates where the flats indexes are based on the current "collect", which
+        is a collection under each "set e" from the run script importer.
+
+        This will set self.flats_ind for normalization.
+        """
         copy_collect = collect.copy()
         i = 0
         for pos, file in enumerate(copy_collect):
@@ -951,6 +1207,9 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         self.flats_ind = ref_ind
 
     def string_num_totuple(self, s):
+        """
+        Helper function for import_metadata. I forget what it does. :)
+        """
         return (
             "".join(c for c in s if c.isalpha()) or None,
             "".join(c for c in s if c.isdigit() or None),
@@ -958,10 +1217,20 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
 
 
 class RawProjectionsHDF5_ALS832(RawProjectionsBase):
+    """
+    This class holds your projections data, metadata, and functions associated with
+    importing that data and metadata.
+
+    For SSRL62C, this is a very complicated class. Because of your h5 data storage,
+    it is relatively more straightforward to import and normalize.
+
+    You can overload the functions in subclasses if you have more complicated
+    import and normalization protocols for your data.
+    """
+
     def __init__(self):
         super().__init__()
-        self.allowed_extensions = self.allowed_extensions + [".h5"]
-        self.angles_from_filenames = True
+        self.allowed_extensions = [".h5"]
         self.metadata = Metadata_ALS_832_Raw()
 
     def import_filedir_all(self, filedir):
@@ -976,33 +1245,55 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
     def import_filedir_darks(self, filedir):
         pass
 
-    def import_file_all(self, filepath):
-        self.filedir = self.filedir
-        self.filename = self.filename
+    def import_file_all(self, Uploader):
+        self.import_status_label = Uploader.import_status_label
+        self.tic = time.perf_counter()
+        self.filedir = Uploader.filedir
+        self.filename = Uploader.filename
         self.filepath = self.filedir / self.filename
-        self.import_metadata()
+        self.metadata = Uploader.reset_metadata_to()
+        self.metadata.load_metadata_h5(self.filepath)
+        self.metadata.set_attributes_from_metadata(self)
+        self.import_status_label.value = "Importing"
         self.metadata.set_attributes_from_metadata(self)
         (
             self._data,
             self.flats,
             self.darks,
             self.angles_rad,
-        ) = dxchange.exchange.read_aps_tomoscan_hdf5(filepath)
-        self.norm_filedir = self.filedir / str(filepath.stem)
-        if os.path.exists(self.norm_filedir):
-            pass
-        else:
-            os.makedirs(self.norm_filedir)
+        ) = dxchange.exchange.read_aps_tomoscan_hdf5(self.filepath)
         self.data = self._data
         self.angles_deg = (180 / np.pi) * self.angles_rad
-        self.imported = True
         self.metadata.set_metadata(self)
         self.metadata.save_metadata()
+        self.imported = True
+        self.import_savedir = self.filedir / str(self.filepath.stem)
+        # if the save directory already exists (you have previously uploaded this
+        # raw data), then it will create a datestamped folder.
+        if self.import_savedir.exists():
+            now = datetime.datetime.now()
+            dt_str = now.strftime("%Y%m%d-%H%M-")
+            save_name = dt_str + str(self.filepath.stem)
+            self.import_savedir = pathlib.Path(self.filedir / save_name)
+            if self.import_savedir.exists():
+                dt_str = now.strftime("%Y%m%d-%H%M%S-")
+                save_name = dt_str + str(self.filepath.stem)
+                self.import_savedir = pathlib.Path(self.filedir / save_name)
+        self.import_savedir.mkdir()
+        self.import_status_label.value = "Normalizing"
+        self.normalize()
+        _metadata = self.metadata.metadata.copy()
+        self.import_status_label.value = "Saving projections as npy for faster IO"
+        self.filedir = self.import_savedir
+        self.save_normalized_as_npy()
+        self._check_downsampled_data()
+        self.toc = time.perf_counter()
+        self.metadata = self.save_normalized_metadata(self.toc - self.tic, _metadata)
 
     def import_metadata(self, filepath=None):
-        if filepath is not None:
-            self.filepath = filepath
-        self.metadata.load_metadata_h5(self.filepath)
+        if filepath is None:
+            filepath = self.filepath
+        self.metadata.load_metadata_h5(filepath)
         self.metadata.set_attributes_from_metadata(self)
 
     def import_file_projections(self, filepath):
@@ -1030,12 +1321,45 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         if import_time is not None:
             metadata.metadata["import_time"] = import_time
         metadata.set_metadata(self)
-        print(metadata.metadata)
         metadata.save_metadata()
+        return metadata
+
+
+class RawProjectionsHDF5_APS(RawProjectionsHDF5_ALS832):
+    """
+    See RawProjectionsHDF5_ALS832 superclass description.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.metadata = Metadata_APS_Raw()
+
+    def save_normalized_metadata(self, import_time=None, parent_metadata=None):
+        metadata = Metadata_APS_Prenorm()
+        metadata.filedir = self.filedir
+        metadata.metadata = parent_metadata.copy()
+        if parent_metadata is not None:
+            metadata.metadata["parent_metadata"] = parent_metadata.copy()
+        if import_time is not None:
+            metadata.metadata["import_time"] = import_time
+        metadata.set_metadata(self)
+        metadata.save_metadata()
+        return metadata
 
 
 class Metadata(ABC):
+    """
+    Base class for all metadatas.
+    """
+
     def __init__(self):
+        self.header_font_style = {
+            "font_size": "22px",
+            "font_weight": "bold",
+            "font_variant": "small-caps",
+            # "text_color": "#0F52BA",
+        }
+        self.table_label = Label(style=self.header_font_style)
         self.metadata = {}
         self.filedir = None
         self.filename = None
@@ -1057,8 +1381,41 @@ class Metadata(ABC):
             parent_metadata["data_hierarchy_level"] + 1
         )
 
+    def create_metadata_box(self):
+        """
+        Creates the box to be displayed on the frontend when importing data. Has both
+        a label and the metadata dataframe (stored in table_output).
+
+        """
+        self.metadata_to_DataFrame()
+        self.table_output = Output()
+        if self.dataframe is not None:
+            with self.table_output:
+                display(self.dataframe)
+        self.metadata_vbox = VBox(
+            [self.table_label, self.table_output], layout=Layout(align_items="center")
+        )
+
     @staticmethod
     def parse_metadata_type(filepath: pathlib.Path = None, metadata=None):
+        """
+        Determines the type of metadata by looking at the "metadata_type" key in the
+        loaded dictionary.
+
+        Parameters
+        ----------
+        filepath: pathlib.Path
+            Filepath for the metadata. If this is not specified, metadata should be
+            specified
+        metadata: dict
+            A metadata dictionary with the "metadata_type" key. If this is not
+            specified, a filepath should be specified.
+
+        Returns
+        -------
+        A metadata instance with the metadata.
+
+        """
         if filepath is not None:
             with open(filepath) as f:
                 metadata = json.load(f)
@@ -1099,6 +1456,20 @@ class Metadata(ABC):
 
     @staticmethod
     def get_metadata_hierarchy(filepath):
+        """
+        Reads in a metadata file from filepath and determines its hierarchy. Generates
+        a list of `Metadata` instances, found by Metadata.parse_metadata_type.
+
+        Parameters
+        ----------
+        filepath: pathlike
+            Metadata file path.
+
+        Returns
+        -------
+        metadata_insts: list(`Metadata`)
+            List of metadata instances associated with the metadata file.
+        """
         with open(filepath) as f:
             metadata = json.load(f)
         num_levels = metadata["data_hierarchy_level"]
@@ -1113,35 +1484,222 @@ class Metadata(ABC):
         return metadata_insts
 
     @abstractmethod
-    def set_tomopyui_parameters(self):
-        ...
-
-    @abstractmethod
-    def set_metadata(self):
+    def set_metadata(self, projections):
+        """
+        Sets metadata from projections attributes.
+        """
         ...
 
     @abstractmethod
     def metadata_to_DataFrame(self):
+        """
+        This will take the metadata that you have and turn it into a table for display
+        on the frontend. It is a little complicated, but I don't know pandas very well.
+        You will have "top_headers" which are the headers at the top of the table like
+        "Image Information". The subheaders are called "middle_headers": things like
+        the X Pixels, Y Pixels, and the number of angles. Then below each of the middle
+        headers, you have the data. The dimensions of each should match up properly
+
+        This creates a dataframe and then s.set_table_styles() styles it. This styling
+        function is based on CSS, which I know very little about. You can make the
+        table as fancy as you want, but for now I just have a blue background header
+        and white lines dividing the major table sections.
+        """
         ...
 
 
 class Metadata_General_Prenorm(Metadata):
-    def set_metadata(self, projections):
-        self.metadata["metadata_type"] = "General_Prenorm"
+    """
+    General prenormalized metadata. This will be created if you are importing a tiff
+    or tiff stack, or npy file that was not previously imported using TomoPyUI.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.filename = "import_metadata.json"
+        self.metadata["metadata_type"] = "General_Normalized"
         self.metadata["data_hierarchy_level"] = 0
+        self.data_hierarchy_level = 0
+        self.imported = False
+        self.table_label.value = "User Metadata"
+
+    def set_metadata(self, projections):
+        pass
 
     def metadata_to_DataFrame(self):
-        pass
+        # create headers and data for table
+        self.metadata["energy_str"] = f"{self.metadata['energy_float']:0.2f}"
+        px_size = self.metadata["pixel_size"]
+        px_units = self.metadata["pixel_units"]
+        en_units = self.metadata["energy_units"]
+        start_angle = self.metadata["start_angle"]
+        end_angle = self.metadata["end_angle"]
+        ang_res = self.metadata["angular_resolution"]
+        self.metadata["num_angles"] = int((end_angle - start_angle) / ang_res)
 
-    def set_tomopyui_parameters(self, projections):
-        pass
+        self.metadata_list_for_table = [
+            {
+                f"Energy ({en_units})": self.metadata["energy_str"],
+                "Start θ (°)": f"{start_angle:0.1f}",
+                "End θ (°)": f"{end_angle:0.1f}",
+                "Angular Resolution (°)": f"{ang_res:0.2f}",
+            },
+            {
+                f"Pixel Size ({px_units})": f"{px_size:0.2f}",
+                "Binning": self.metadata["binning"],
+                "Num. θ (est)": self.metadata["num_angles"],
+            },
+        ]
+        if "pxX" in self.metadata:
+            self.metadata_list_for_table[1]["X Pixels"] = self.metadata["pxX"]
+            self.metadata_list_for_table[1]["Y Pixels"] = self.metadata["pxY"]
+            self.metadata_list_for_table[1]["Num. θ"] = self.metadata["pxZ"]
+            self.make_angles_from_metadata()
+
+        middle_headers = [[]]
+        data = [[]]
+        for i in range(len(self.metadata_list_for_table)):
+            middle_headers.append([key for key in self.metadata_list_for_table[i]])
+            data.append(
+                [
+                    self.metadata_list_for_table[i][key]
+                    for key in self.metadata_list_for_table[i]
+                ]
+            )
+        data.pop(0)
+        middle_headers.pop(0)
+        top_headers = [["Acquisition Information"]]
+        top_headers.append(["Image Information"])
+
+        # create dataframe with the above settings
+        df = pd.DataFrame(
+            [data[0]],
+            columns=pd.MultiIndex.from_product([top_headers[0], middle_headers[0]]),
+        )
+        for i in range(len(middle_headers)):
+            if i == 0:
+                continue
+            else:
+                newdf = pd.DataFrame(
+                    [data[i]],
+                    columns=pd.MultiIndex.from_product(
+                        [top_headers[i], middle_headers[i]]
+                    ),
+                )
+                df = df.join(newdf)
+
+        # set datatable styles
+        s = df.style.hide(axis="index")
+        s.set_table_styles(
+            {
+                # ("Acquisition Information", middle_headers[0][0]): [
+                #     {"selector": "td", "props": "border-left: 1px solid white"},
+                #     {"selector": "th", "props": "border-left: 1px solid white"},
+                # ],
+                ("Image Information", middle_headers[1][0]): [
+                    {"selector": "td", "props": "border-left: 1px solid white"},
+                    {"selector": "th", "props": "border-left: 1px solid white"},
+                ],
+            },
+            overwrite=False,
+        )
+        s.set_table_styles(
+            [
+                {"selector": "th.col_heading", "props": "text-align: center;"},
+                {"selector": "th.col_heading.level0", "props": "font-size: 1.2em;"},
+                {"selector": "td", "props": "text-align: center;" "font-size: 1.2em;"},
+                {
+                    "selector": "th:not(.index_name)",
+                    "props": "background-color: #0F52BA; color: white;",
+                },
+            ],
+            overwrite=False,
+        )
+
+        self.dataframe = s
+
+    def set_attributes_from_metadata_before_import(self, projections):
+        projections.pxX = self.metadata["pxX"]
+        projections.pxY = self.metadata["pxY"]
+        projections.pxZ = self.metadata["pxZ"]
+        projections.angles_rad = self.metadata["angles_rad"]
+        projections.angles_deg = self.metadata["angles_deg"]
+        projections.start_angle = self.metadata["start_angle"]
+        projections.end_angle = self.metadata["end_angle"]
+        projections.binning = self.metadata["binning"]
+        projections.current_energy_str = self.metadata["energy_str"]
+        projections.current_energy_float = self.metadata["energy_float"]
+        projections.energy = projections.current_energy_float
+        projections.energy_units = self.metadata["energy_units"]
+        projections.current_pixel_size = self.metadata["pixel_size"]
+        projections.pixel_units = self.metadata["pixel_units"]
+
+    def set_metadata_from_attributes_after_import(self, projections):
+        self.metadata["normalized_projections_size_gb"] = projections.size_gb
+        self.metadata["normalized_projections_directory"] = str(
+            projections.import_savedir
+        )
+        self.metadata["downsampled_projections_directory"] = str(projections.filedir_ds)
+        self.metadata["downsampled_values"] = projections.ds_vals
+        self.metadata["saved_as_tiff"] = projections.saved_as_tiff
+        self.metadata["num_angles"] = projections.data.shape[0]
+        self.metadata["pxX"] = projections.data.shape[2]
+        self.metadata["pxY"] = projections.data.shape[1]
+        self.metadata["pxZ"] = projections.data.shape[0]
+
+    def set_attributes_from_metadata(self, projections):
+        projections.pxX = self.metadata["pxX"]
+        projections.pxY = self.metadata["pxY"]
+        projections.pxZ = self.metadata["pxZ"]
+        projections.start_angle = self.metadata["start_angle"]
+        projections.end_angle = self.metadata["end_angle"]
+        projections.binning = self.metadata["binning"]
+        projections.current_energy_str = self.metadata["energy_str"]
+        projections.current_energy_float = self.metadata["energy_float"]
+        projections.energy = projections.current_energy_float
+        projections.energy_units = self.metadata["energy_units"]
+        projections.current_pixel_size = self.metadata["pixel_size"]
+        projections.pixel_units = self.metadata["pixel_units"]
+        projections.size_gb = self.metadata["normalized_projections_size_gb"]
+        projections.import_savedir = pathlib.Path(
+            self.metadata["normalized_projections_directory"]
+        )
+        projections.filedir_ds = pathlib.Path(
+            self.metadata["downsampled_projections_directory"]
+        )
+        projections.ds_vals = self.metadata["downsampled_values"]
+        projections.saved_as_tiff = self.metadata["saved_as_tiff"]
+
+    def make_angles_from_metadata(self):
+        self.metadata["angles_rad"] = angle_maker(
+            self.metadata["pxZ"],
+            ang1=self.metadata["start_angle"],
+            ang2=self.metadata["end_angle"],
+        )
+        self.metadata["angles_rad"] = list(self.metadata["angles_rad"])
+        self.metadata["angles_deg"] = [
+            x * 180 / np.pi for x in self.metadata["angles_rad"]
+        ]
 
 
 class Metadata_SSRL62C_Raw(Metadata):
-    def set_metadata(self, projections):
-        self.data_hierarchy_level = 0
-        self.metadata["data_hierarchy_level"] = 0
+    """
+    Raw metadata from SSRL 6-2C. Will be created if you import a folder filled with
+    raw XRMs.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.filename = "raw_metadata.json"
         self.metadata["metadata_type"] = "SSRL62C_Raw"
+        self.metadata["data_hierarchy_level"] = 0
+        self.data_hierarchy_level = 0
+        self.table_label.value = "SSRL 6-2C Raw Metadata"
+
+    def set_attributes_from_metadata(self, projections):
+        pass
+
+    def set_metadata(self, projections):
         self.metadata["scan_info"] = copy.deepcopy(projections.scan_info)
         self.metadata["scan_info"]["FILES"] = [
             str(file) for file in projections.scan_info["FILES"]
@@ -1310,15 +1868,39 @@ class Metadata_SSRL62C_Raw(Metadata):
 
         self.dataframe = s
 
-    def set_tomopyui_parameters(self, projections):
-        pass
-
 
 class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
+    """
+    Metadata class for data from SSRL 6-2C that was normalized using TomoPyUI.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.filename = "import_metadata.json"
+        self.metadata["metadata_type"] = "SSRL62C_Normalized"
+        self.metadata["data_hierarchy_level"] = 1
+        self.table_label.value = "SSRL 6-2C TomoPyUI-Imported Metadata"
+
     def set_metadata(self, projections):
         super().set_metadata(projections)
-        self.metadata["metadata_type"] = "SSRL62C_Normalized"
-        self.metadata["data_hierarchy_level"] = projections.data_hierarchy_level
+        metadata_to_remove = [
+            "scan_info_path",
+            "run_script_path",
+            "scan_info",
+            "scan_type",
+            "scan_order",
+            "all_raw_energies_float",
+            "all_raw_energies_str",
+            "all_raw_pixel_sizes",
+            "pixel_size_from_scan_info",
+            "raw_projections_dtype",
+        ]
+        # removing unneeded things from parent raw
+        [
+            self.metadata.pop(name)
+            for name in metadata_to_remove
+            if name in self.metadata
+        ]
         self.metadata["flats_ind"] = projections.flats_ind
         self.metadata["user_overwrite_energy"] = projections.user_overwrite_energy
         self.metadata["energy_str"] = projections.current_energy_str
@@ -1327,7 +1909,7 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         self.metadata["normalized_projections_dtype"] = str(np.dtype(np.float32))
         self.metadata["normalized_projections_size_gb"] = projections.size_gb
         self.metadata["normalized_projections_directory"] = str(
-            projections.energy_filedir
+            projections.import_savedir
         )
         self.metadata["normalized_projections_filename"] = "normalized_projections.npy"
         self.metadata["normalization_function"] = "dask"
@@ -1346,13 +1928,21 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         exp_time_ref = f"{self.metadata['references_exposure_time']:0.2f}"
         ds_vals = self.metadata["downsampled_values"]
         ds_vals = [x[2] for x in ds_vals]
+        if self.metadata["user_overwrite_energy"]:
+            user_overwrite = "Yes"
+        else:
+            user_overwrite = "No"
+        if self.metadata["saved_as_tiff"]:
+            save_as_tiff = "Yes"
+        else:
+            save_as_tiff = "No"
         self.metadata_list_for_table = [
             {
                 f"Energy ({en_units})": self.metadata["energy_str"],
                 f"Pixel Size ({px_units})": f"{px_size:0.2f}",
                 "Start θ (°)": f"{start_angle:0.1f}",
                 "End θ (°)": f"{end_angle:0.1f}",
-                "Scan Type": self.metadata["scan_type"],
+                # "Scan Type": self.metadata["scan_type"],
                 "Ref. Exp. Time": exp_time_ref,
                 "Proj. Exp. Time": exp_time_proj,
             },
@@ -1363,8 +1953,8 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
                 "Binning": self.metadata["binning"],
             },
             {
-                "Energy Overwritten": self.metadata["user_overwrite_energy"],
-                ".tif Saved": self.metadata["saved_as_tiff"],
+                "Energy Overwritten": user_overwrite,
+                ".tif Saved": save_as_tiff,
                 "Downsample Values": ds_vals,
             },
         ]
@@ -1405,10 +1995,6 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         s = df.style.hide(axis="index")
         s.set_table_styles(
             {
-                ("Acquisition Information", middle_headers[0][0]): [
-                    {"selector": "td", "props": "border-left: 1px solid white"},
-                    {"selector": "th", "props": "border-left: 1px solid white"},
-                ],
                 ("Image Information", middle_headers[1][0]): [
                     {"selector": "td", "props": "border-left: 1px solid white"},
                     {"selector": "th", "props": "border-left: 1px solid white"},
@@ -1436,20 +2022,20 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         self.dataframe = s
 
     def set_attributes_from_metadata(self, projections):
-        projections.scan_info = copy.deepcopy(self.metadata["scan_info"])
-        projections.scan_info["FILES"] = [
-            pathlib.Path(file) for file in self.metadata["scan_info"]["FILES"]
-        ]
-        projections.scan_info_path = self.metadata["scan_info_path"]
-        projections.run_script_path = pathlib.Path(self.metadata["run_script_path"])
+        # projections.scan_info = copy.deepcopy(self.metadata["scan_info"])
+        # projections.scan_info["FILES"] = [
+        #     pathlib.Path(file) for file in self.metadata["scan_info"]["FILES"]
+        # ]
+        # projections.scan_info_path = self.metadata["scan_info_path"]
+        # projections.run_script_path = pathlib.Path(self.metadata["run_script_path"])
         projections.flats_filenames = [
             pathlib.Path(file) for file in self.metadata["flats_filenames"]
         ]
         projections.data_filenames = [
             pathlib.Path(file) for file in self.metadata["projections_filenames"]
         ]
-        projections.scan_type = self.metadata["scan_type"]
-        projections.scan_order = self.metadata["scan_order"]
+        # projections.scan_type = self.metadata["scan_type"]
+        # projections.scan_order = self.metadata["scan_order"]
         projections.pxX = self.metadata["pxX"]
         projections.pxY = self.metadata["pxY"]
         projections.pxZ = self.metadata["pxZ"]
@@ -1458,20 +2044,20 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         projections.start_angle = self.metadata["start_angle"]
         projections.end_angle = self.metadata["end_angle"]
         projections.binning = self.metadata["binning"]
-        projections.energies_list_float = self.metadata["all_raw_energies_float"]
-        projections.energies_list_str = self.metadata["all_raw_energies_str"]
+        # projections.energies_list_float = self.metadata["all_raw_energies_float"]
+        # projections.energies_list_str = self.metadata["all_raw_energies_str"]
         projections.user_overwrite_energy = self.metadata["user_overwrite_energy"]
         projections.current_energy_str = self.metadata["energy_str"]
         projections.current_energy_float = self.metadata["energy_float"]
         projections.energy_units = self.metadata["energy_units"]
-        projections.raw_pixel_sizes = self.metadata["all_raw_pixel_sizes"]
-        projections.pixel_size_from_metadata = self.metadata[
-            "pixel_size_from_scan_info"
-        ]
+        # projections.raw_pixel_sizes = self.metadata["all_raw_pixel_sizes"]
+        # projections.pixel_size_from_metadata = self.metadata[
+        #     "pixel_size_from_scan_info"
+        # ]
         projections.current_pixel_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
-        projections.size_gb = self.metadata["normalized_projections_size_gb"]
-        projections.energy_filedir = pathlib.Path(
+        # projections.size_gb = self.metadata["normalized_projections_size_gb"]
+        projections.import_savedir = pathlib.Path(
             self.metadata["normalized_projections_directory"]
         )
         projections.filedir_ds = pathlib.Path(
@@ -1482,15 +2068,17 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         projections.ds_vals = self.metadata["downsampled_values"]
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
 
-    def set_tomopyui_parameters(self, projections):
-        pass
-
 
 class Metadata_ALS_832_Raw(Metadata):
-    def set_metadata(self, projections):
+    def __init__(self):
+        super().__init__()
         self.filename = "raw_metadata.json"
         self.metadata["metadata_type"] = "ALS832_Raw"
         self.metadata["data_hierarchy_level"] = 0
+        self.table_label.value = "ALS 8.3.2 Metadata"
+
+    def set_metadata(self, projections):
+
         self.metadata["numslices"] = projections.pxY
         self.metadata["numrays"] = projections.pxX
         self.metadata["num_angles"] = projections.pxZ
@@ -1612,23 +2200,7 @@ class Metadata_ALS_832_Raw(Metadata):
         s = df.style.hide(axis="index")
         s.set_table_styles(
             {
-                ("Acquisition Information", "Repeat Scan"): [
-                    {"selector": "td", "props": "border-left: 1px solid white"},
-                    {"selector": "th", "props": "border-left: 1px solid white"},
-                ],
-                ("Image Information", "X Pixels"): [
-                    {"selector": "td", "props": "border-left: 1px solid white"},
-                    {"selector": "th", "props": "border-left: 1px solid white"},
-                ],
-                ("Reference Information", "Num. Ref Exposures"): [
-                    {"selector": "td", "props": "border-left: 1px solid white"},
-                    {"selector": "th", "props": "border-left: 1px solid white"},
-                ],
-                ("Reference Information", "Num. Ref Exposures"): [
-                    {"selector": "td", "props": "border-left: 1px solid white"},
-                    {"selector": "th", "props": "border-left: 1px solid white"},
-                ],
-                ("Mosaic Information", "Up"): [
+                ("Experiment Settings", "Energy (keV)"): [
                     {"selector": "td", "props": "border-left: 1px solid white"},
                     {"selector": "th", "props": "border-left: 1px solid white"},
                 ],
@@ -1651,22 +2223,15 @@ class Metadata_ALS_832_Raw(Metadata):
 
         self.dataframe = s
 
-    def string_num_totuple(self, s):
-        return (
-            "".join(c for c in s if c.isalpha()) or None,
-            "".join(c for c in s if c.isdigit() or None),
-        )
-
-    def set_tomopyui_parameters(self, projections):
-        pass
-
 
 class Metadata_ALS_832_Prenorm(Metadata_ALS_832_Raw):
-    def set_attributes_from_metadata(self, projections):
-        super().set_attributes_from_metadata(projections)
-        self.metadata_type = "ALS832_Normalized"
-        self.data_hierarchy_level = self.metadata["data_hierarchy_level"]
+    def __init__(self):
+        super().__init__()
         self.filename = "import_metadata.json"
+        self.metadata["metadata_type"] = "ALS832_Normalized"
+        self.metadata["data_hierarchy_level"] = 1
+        self.data_hierarchy_level = self.metadata["data_hierarchy_level"]
+        self.table_label.value = ""
 
     def set_metadata(self, projections):
         super().set_metadata(projections)
@@ -1674,7 +2239,7 @@ class Metadata_ALS_832_Prenorm(Metadata_ALS_832_Raw):
         self.metadata["metadata_type"] = "ALS832_Normalized"
         self.metadata["data_hierarchy_level"] = 1
 
-    def set_tomopyui_parameters(self, projections):
+    def set_attributes_from_metadata(self, projections):
         projections.pxY = self.metadata["numslices"]
         projections.pxX = self.metadata["numrays"]
         projections.pxZ = self.metadata["num_angles"]
@@ -1690,8 +2255,247 @@ class Metadata_ALS_832_Prenorm(Metadata_ALS_832_Raw):
     def metadata_to_DataFrame(self):
         self.dataframe = None
 
+    def create_metadata_box(self):
+        """
+        Method overloaded because the metadata table is the same as the superclass.
+        This avoids a space between tables during display.
+        """
+        self.metadata_vbox = Output()
+
+
+class Metadata_APS_Raw(Metadata):
+    def __init__(self):
+        super().__init__()
+        self.filename = "raw_metadata.json"
+        self.metadata["metadata_type"] = "APS_Raw"
+        self.metadata["data_hierarchy_level"] = 0
+        self.table_label.value = "APS Metadata"
+
+    def set_metadata(self, projections):
+        """
+        Sets metadata from the APS h5 filetype
+        """
+        self.metadata["numslices"] = projections.pxY
+        self.metadata["numrays"] = projections.pxX
+        self.metadata["num_angles"] = projections.pxZ
+        self.metadata["pxsize"] = projections.px_size
+        self.metadata["px_size_units"] = "cm"
+        self.metadata["propagation_dist"] = projections.propagation_dist
+        self.metadata["propagation_dist_units"] = "mm"
+        self.metadata["angularrange"] = projections.angular_range
+        self.metadata["kev"] = projections.energy
+        self.metadata["energy_units"] = "keV"
+        if projections.angles_deg is not None:
+            self.metadata["angles_deg"] = list(projections.angles_deg)
+            self.metadata["angles_rad"] = list(projections.angles_rad)
+
+    def set_attributes_from_metadata(self, projections):
+        projections.pxY = self.metadata["numslices"]
+        projections.pxX = self.metadata["numrays"]
+        projections.pxZ = self.metadata["num_angles"]
+        projections.px_size = self.metadata["pxsize"]
+        projections.px_size_units = self.metadata["px_size_units"]
+        projections.propagation_dist = self.metadata["propagation_dist"]
+        projections.propagation_dist_units = "mm"
+        projections.angular_range = self.metadata["angularrange"]
+        projections.energy = self.metadata["kev"]
+        projections.units = self.metadata["energy_units"]
+
+    def load_metadata_h5(self, h5_filepath):
+        """
+        Loads in metadata from h5 file. You can probably use your dxchange function
+        to read all the metadata in at once. Not sure how it works for you.
+
+        The keys in the self.metadata dictionary can be whatever you want, as long as
+        your set_attributes_from_metadata function above sets the values correctly.
+        """
+        # set metadata filepath to the filepath above
+        self.filedir = h5_filepath.parent
+        self.filepath = h5_filepath
+
+        # Here you will set your metadata. I have left these here from the ALS metadata
+        # class for reference. Some things are not inside the metadata (i.e.
+        # "energy_units") that I set manually.
+        self.metadata["pxY"] = int(
+            dxchange.read_hdf5(
+                h5_filepath, "/measurement/instrument/detector/dimension_y"
+            )[0]
+        )
+        self.metadata["numslices"] = self.metadata["pxY"]
+        self.metadata["pxX"] = int(
+            dxchange.read_hdf5(
+                h5_filepath, "/measurement/instrument/detector/dimension_x"
+            )[0]
+        )
+        self.metadata["numrays"] = self.metadata["pxX"]
+        self.metadata["pxZ"] = int(
+            dxchange.read_hdf5(h5_filepath, "/process/acquisition/rotation/num_angles")[
+                0
+            ]
+        )
+        self.metadata["num_angles"] = self.metadata["pxZ"]
+        self.metadata["pxsize"] = (
+            dxchange.read_hdf5(
+                h5_filepath, "/measurement/instrument/detector/pixel_size"
+            )[0]
+            / 10.0
+        )  # /10 to convert units from mm to cm
+        self.metadata["px_size_units"] = "cm"
+        self.metadata["propagation_dist"] = dxchange.read_hdf5(
+            h5_filepath,
+            "/measurement/instrument/camera_motor_stack/setup/camera_distance",
+        )[1]
+        self.metadata["energy_float"] = (
+            dxchange.read_hdf5(
+                h5_filepath, "/measurement/instrument/monochromator/energy"
+            )[0]
+            / 1000
+        )
+        self.metadata["kev"] = self.metadata["energy_float"]
+        self.metadata["energy_str"] = str(self.metadata["energy_float"])
+        self.metadata["energy_units"] = "keV"
+        self.metadata["angularrange"] = dxchange.read_hdf5(
+            h5_filepath, "/process/acquisition/rotation/range"
+        )[0]
+
+    def metadata_to_DataFrame(self):
+
+        # create headers and data for table
+        top_headers = []
+        middle_headers = []
+        data = []
+        # Image information
+        top_headers.append(["Image Information"])
+        middle_headers.append(["X Pixels", "Y Pixels", "Num. θ"])
+        data.append(
+            [
+                self.metadata["numrays"],
+                self.metadata["numslices"],
+                self.metadata["num_angles"],
+            ]
+        )
+
+        top_headers.append(["Experiment Settings"])
+        middle_headers.append(
+            ["Energy (keV)", "Propagation Distance (mm)", "Angular range (deg)"]
+        )
+        data.append(
+            [
+                self.metadata["kev"],
+                self.metadata["propagation_dist"],
+                self.metadata["angularrange"],
+            ]
+        )
+
+        # create dataframe with the above settings
+        df = pd.DataFrame(
+            [data[0]],
+            columns=pd.MultiIndex.from_product([top_headers[0], middle_headers[0]]),
+        )
+        for i in range(len(middle_headers)):
+            if i == 0:
+                continue
+            else:
+                newdf = pd.DataFrame(
+                    [data[i]],
+                    columns=pd.MultiIndex.from_product(
+                        [top_headers[i], middle_headers[i]]
+                    ),
+                )
+                df = df.join(newdf)
+
+        # set datatable styles
+        s = df.style.hide(axis="index")
+        s.set_table_styles(
+            {
+                ("Experiment Settings", "Energy (keV)"): [
+                    {"selector": "td", "props": "border-left: 1px solid white"},
+                    {"selector": "th", "props": "border-left: 1px solid white"},
+                ],
+            },
+            overwrite=False,
+        )
+
+        s.set_table_styles(
+            [
+                {"selector": "th.col_heading", "props": "text-align: center;"},
+                {"selector": "th.col_heading.level0", "props": "font-size: 1.2em;"},
+                {"selector": "td", "props": "text-align: center;" "font-size: 1.2em;"},
+                {
+                    "selector": "th:not(.index_name)",
+                    "props": "background-color: #0F52BA; color: white;",
+                },
+            ],
+            overwrite=False,
+        )
+
+        self.dataframe = s
+
+
+class Metadata_APS_Prenorm(Metadata_APS_Raw):
+    """
+    Prenormalized metadata class. The table produced by this function may look nearly
+    the same for you. For the SSRL version, it looks very different because there is a
+    lot of excess information that I store in the SSRL raw metadata file.
+
+    It is important to have this because "import_metadata.json" will be stored in a
+    subfolder of the parent, raw data.
+
+    Because the APS prenormalized metadata table looks identical to the raw metadata
+    table, I overloaded the create_metadata_box() function to be just an Output widget.
+
+    You can get as fancy as you want with this.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.filename = "import_metadata.json"
+        self.metadata["metadata_type"] = "APS_Normalized"
+        self.metadata["data_hierarchy_level"] = 1
+        self.data_hierarchy_level = self.metadata["data_hierarchy_level"]
+        self.table_label.value = ""
+
+    def set_metadata(self, projections):
+        super().set_metadata(projections)
+        self.filename = "import_metadata.json"
+        self.metadata["metadata_type"] = "ALS832_Normalized"
+        self.metadata["data_hierarchy_level"] = 1
+
+    def set_attributes_from_metadata(self, projections):
+        projections.pxY = self.metadata["numslices"]
+        projections.pxX = self.metadata["numrays"]
+        projections.pxZ = self.metadata["num_angles"]
+        projections.px_size = self.metadata["pxsize"]
+        projections.px_size_units = self.metadata["px_size_units"]
+        projections.energy = self.metadata["kev"] / 1000
+        projections.units = "eV"
+        projections.angles_deg = self.metadata["angles_deg"]
+        projections.angles_rad = self.metadata["angles_rad"]
+        projections.angle_start = projections.angles_rad[0]
+        projections.angle_end = projections.angles_rad[-1]
+
+    def metadata_to_DataFrame(self):
+        self.dataframe = None
+
+    def create_metadata_box(self):
+        """
+        Method overloaded because the metadata table is the same as the superclass.
+        This avoids a space between tables during display.
+        """
+        self.metadata_vbox = Output()
+
 
 class Metadata_Prep(Metadata):
+    def __init__(self):
+        super().__init__()
+        self.table_label.value = "Preprocessing Methods"
+        self.prep_list_label_style = {
+            "font_size": "16px",
+            "font_weight": "bold",
+            "font_variant": "small-caps",
+            # "text_color": "#0F52BA",
+        }
+
     def set_metadata(self, Prep):
         self.metadata["metadata_type"] = "Prep"
         self.filename = "prep_metadata.json"
@@ -1706,11 +2510,22 @@ class Metadata_Prep(Metadata):
         self.metadata["prep_list"] = [
             (x[1].method_name, x[1].opts) for x in Prep.prep_list
         ]
+        self.table_label.value = "Preprocessing Metadata"
 
     def metadata_to_DataFrame(self):
         self.dataframe = None
 
-    def set_tomopyui_parameters(self, Prep):
+    def create_metadata_box(self):
+        display_str = [x[0] + " → " for x in self.metadata["prep_list"][:-1]]
+        display_str = "".join(display_str + [self.metadata["prep_list"][-1][0]])
+
+        self.prep_list_label = Label(display_str, style=self.prep_list_label_style)
+        self.metadata_vbox = VBox(
+            [self.table_label, self.prep_list_label],
+            layout=Layout(align_items="center"),
+        )
+
+    def set_attributes_from_metadata(self, projections):
         pass
 
 
@@ -1724,6 +2539,7 @@ class Metadata_Align(Metadata):
         self.metadata["opts"] = {}
         self.metadata["methods"] = {}
         self.metadata["save_opts"] = {}
+        self.table_label.value = "Alignment Metadata"
 
     def set_metadata(self, Align):
         self.metadata["metadata_type"] = "Align"
@@ -1793,9 +2609,14 @@ class Metadata_Align(Metadata):
                 {"selector": "th.col_heading", "props": "text-align: center;"},
                 {"selector": "th.col_heading.level0", "props": "font-size: 1.2em;"},
                 {"selector": "td", "props": "text-align: center;" "font-size: 1.2em; "},
+                {
+                    "selector": "th:not(.index_name)",
+                    "props": "background-color: #0F52BA; color: white;",
+                },
             ],
             overwrite=False,
         )
+
         self.dataframe = s
 
     def set_attributes_from_metadata(self, Align):
@@ -1820,20 +2641,15 @@ class Metadata_Align(Metadata):
         Align.use_subset_correlation = self.metadata["use_subset_correlation"]
         Align.num_batches = self.metadata["opts"]["num_batches"]
 
-    def set_tomopyui_parameters(self, Align):
-        pass
-
 
 class Metadata_Recon(Metadata_Align):
     def set_metadata(self, Recon):
         super().set_metadata(Recon)
         self.metadata["metadata_type"] = "Recon"
+        self.table_label.value = "Reconstruction Metadata"
 
     def set_metadata_obj_specific(self, Recon):
         pass
-
-    def metadata_to_DataFrame(self):
-        super().metadata_to_DataFrame()
 
     def set_attributes_from_metadata(self, Recon):
         super().set_attributes_from_metadata(Recon)
@@ -1841,11 +2657,9 @@ class Metadata_Recon(Metadata_Align):
     def set_attributes_object_specific(self, Recon):
         pass
 
-    def set_tomopyui_parameters(self, Recon):
-        pass
 
-
-# https://stackoverflow.com/questions/51674222/how-to-make-json-dumps-in-python-ignore-a-non-serializable-field
+# https://stackoverflow.com/questions/
+# 51674222/how-to-make-json-dumps-in-python-ignore-a-non-serializable-field
 def safe_serialize(obj, f):
     default = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
     return json.dump(obj, f, default=default, indent=4)

@@ -45,7 +45,7 @@ class Center:
 
         self.Import = Import
         self.Import.Center = self
-        self.current_center = self.Import.prenorm_projections.pxX / 2
+        self.current_center = self.Import.prenorm_uploader.projections.pxX / 2
         self.center_guess = None
         self.index_to_try = None
         self.search_step = 0.5

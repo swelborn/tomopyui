@@ -311,7 +311,7 @@ class Prep(ABC):
                         HBox(
                             [
                                 self.high_e_uploader.quick_path_search,
-                                self.high_e_uploader.import_button,
+                                self.high_e_uploader.import_button.button,
                             ]
                         ),
                         self.high_e_uploader.filechooser,
@@ -323,7 +323,7 @@ class Prep(ABC):
                         HBox(
                             [
                                 self.low_e_uploader.quick_path_search,
-                                self.low_e_uploader.import_button,
+                                self.low_e_uploader.import_button.button,
                             ]
                         ),
                         self.low_e_uploader.filechooser,
@@ -536,8 +536,7 @@ class Prep(ABC):
         # Start button
         self.start_button.on_click(self.run_prep_list)
 
-        # Shifts
-        self.shifts_uploader.import_button.on_click(self.add_shift)
+        # Shifts - find upload callback in Imports
 
         # tomopy.misc.corr Median Filter
         self.tomocorr_median_filter_button.on_click(self.add_tomocorr_median_filter)
@@ -713,7 +712,7 @@ class Prep(ABC):
                         self.shifts_sy_select,
                     ],
                 ),
-                self.shifts_uploader.import_button,
+                self.shifts_uploader.import_button.button,
             ],
             layout=Layout(justify_content="center"),
         )
