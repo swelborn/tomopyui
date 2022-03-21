@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-You will have to have the following set of hardware/software to run all of the features of tomopyui:
+You will have to have the following set of hardware/software to run all of the features of TomoPyUI:
 
 - anaconda (to create a python environment)
 - NVIDIA graphics card capable of CUDA 10.2+
@@ -36,7 +36,7 @@ This installation can be very confusing, and I hope to not confuse you further w
 
 :::{note}
 
-I have only tested this on Windows machines. If someone would like to write up a "for Dummys" install instructions for Linux or Mac, be my guest.
+I have only tested this on Windows machines. If someone would like to write up install instructions for Linux or Mac, be my guest.
 
 :::
 
@@ -95,9 +95,9 @@ Retry:
 
 to see if your computer can recognize the nvcc command. 
 
-## Installing tomopyui
+## Installing TomoPyUI
 
-First, navigate to where you want to install tomopyui:
+First, navigate to where you want to install TomoPyUI:
 
 ```
 cd your-install-directory-name
@@ -109,7 +109,7 @@ Clone the github repository:
 git clone https://github.com/samwelborn/tomopyui.git
 ```
 
-Navigate on into the tomopyui directory:
+Navigate on into the TomoPyUI directory:
 
 ```
 cd tomopyui
@@ -121,19 +121,19 @@ Run the following command:
 conda env create -f environment.yml
 ```
 
-This will install a new environment called tomopyui. To activate this environment:
+This will install a new environment called TomoPyUI. To activate this environment:
 
 ```
 conda activate tomopyui
 ```
 
-Once you do that, you should see (tomopyui) instead of (base) in your anaconda prompt. Your last step is to install tomopyui. From the main directory (the one that has setup.py in it), run:
+Once you do that, you should see (tomopyui) instead of (base) in your anaconda prompt. Your last step is to install TomoPyUI. From the main directory (the one that has setup.py in it), run:
 
 ```
 pip install .
 ```
 
-## Installing tomopyui without CUDA
+## Installing TomoPyUI without CUDA
 
 If you don't have CUDA and just want to check out the ipywidgets, you can still do that using the environment.yml in the docs folder:
 
@@ -148,9 +148,9 @@ Then, activate the environment:
 conda activate tomopyui-nocuda
 ```
 
-## Installing tomopyui for development
+## Installing TomoPyUI for development
 
-First create your own fork of <https://github.com/samwelborn/tomopyui>. If you are familiar with command-line git, you can do it that way. Otherwise, download [GitHub Desktop](https://desktop.github.com/) and download the tomopyui repository from there. Follow the install instructions above, then run:
+First create your own fork of <https://github.com/samwelborn/tomopyui>. If you are familiar with command-line git, you can do it that way. Otherwise, download [GitHub Desktop](https://desktop.github.com/) and download the TomoPyUI repository from there. Follow the install instructions above, then run:
 
 ```
 pip install -e .

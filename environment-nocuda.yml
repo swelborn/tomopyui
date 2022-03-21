@@ -25,6 +25,7 @@ dependencies:
   - ca-certificates
   - certifi
   - openssl
+  - astra-toolbox
   - joblib
   - ipympl [--no-deps]
   - bqplot
