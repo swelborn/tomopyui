@@ -21,8 +21,8 @@ If you are working in a Jupyter Notebook, then in order to see your code changes
   %matplotlib ipympl
   import tomopyui.widgets.main as main
 
-  dashboard, file_import, center, prep, align, recon = main.create_dashboard()
-  dashboard
+  dashboard_output, dashboard, file_import, prep, center, align, recon, dataexplorer = main.create_dashboard("APS") # can be "SSRL_62C", "ALS_832", "APS"
+  dashboard_output
   ```
 
 ### Working with Git

@@ -64,7 +64,6 @@ class IOBase:
         return self._data
 
     @data.setter
-    # set data info whenever setting data
     def data(self, value):
         (self.pxZ, self.pxY, self.pxX) = self._data.shape
         self.rangeX = (0, self.pxX - 1)
