@@ -29,11 +29,10 @@ This application was developed at the Stanford Synchrotron Radiation Lightsource
 Open up [JupyterLab](https://jupyterlab.readthedocs.io/en/stable/getting_started/overview.html) after [installing](#install), and run the following in the first cell:
 
 ```{jupyter-execute}
-%matplotlib ipympl
 import tomopyui.widgets.main as main
 
-dashboard, file_import, center, prep, align, recon = main.create_dashboard()
-dashboard
+dashboard_output, dashboard, file_import, prep, center, align, recon, dataexplorer = main.create_dashboard("APS") # can be "SSRL_62C", "ALS_832", "APS"
+dashboard_output
 ```
 
 You can click through the tabs that you will see on the dashboard to check out the options available. Most of the features cannot be used on this webpage, but it gives you a flavor of what comes with the app.

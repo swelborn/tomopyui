@@ -16,6 +16,7 @@ import os
 import shutil
 import subprocess
 import sys
+# import tomopyui
 
 try:
     from tomopyui import __version__ as release
@@ -26,10 +27,14 @@ except ImportError:
 # -- Project information -----------------------------------------------------
 
 project = "tomopyui"
-copyright = "2021, Samuel Scott Welborn"
+copyright = "2022, Samuel Scott Welborn"
 author = "Samuel Scott Welborn"
 
-
+sys.path.insert(0, os.path.abspath("../tomopyui"))
+sys.path.insert(0, os.path.abspath("../tomopyui/widgets/"))
+sys.path.insert(0, os.path.abspath("../tomopyui/backend/"))
+sys.path.insert(0, os.path.abspath("../tomopyui/tomocupy/"))
+sys.path.insert(0, os.path.abspath("."))
 # -- Generate API ------------------------------------------------------------
 api_folder_name = "api"
 shutil.rmtree(api_folder_name, ignore_errors=True)  # in case of new or renamed modules
@@ -42,8 +47,19 @@ subprocess.call(
             "--no-toc",
             "--templatedir _templates",
             "--separate",
+            "--implicit-namespaces",
             "../tomopyui/",
             # excluded modules
+            "../tomopyui/*/main.py",
+            "../*/main.py",
+            "../tomopyui/*backend*",
+            "../tomopyui/*tomocupy*"
+            # "../*/fft_cucim.py"
+            # "../*/backend/"
+            # "../*/ipyplot.py",
+            # "../*/mpl_kwargs.py",
+            # "../*/xarray_helpers.py",
+            # "../*/tests",
         ]
     ),
     shell=True,
@@ -77,7 +93,7 @@ autodoc_default_options = {
     "show-inheritance": True,
     "undoc-members": True,
 }
-autodoc_mock_imports = ["cupyx", "cupy", "tqdm"]
+autodoc_mock_imports = ["tqdm"]
 add_module_names = False
 napoleon_google_docstring = False
 napoleon_include_private_with_doc = False
