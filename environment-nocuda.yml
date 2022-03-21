@@ -11,16 +11,12 @@ dependencies:
   - matplotlib
   - ffmpeg
   - dask
+  - olefile
   - git
   - pip
   - tomopy
   - dxchange
   - jupyterlab
-  - ipykernel
-  - jsonschema
-  - jupyter_server
-  - nbclient
-  - notebook
   - astropy
   - ipyfilechooser
   - ipywidgets=8
@@ -43,5 +39,4 @@ dependencies:
   - sphinx-gallery
   - myst-nb [--no-deps]
   - pip:
-    - mpl-interactions
     - bqplot-image-gl

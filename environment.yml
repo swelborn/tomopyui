@@ -42,5 +42,4 @@ dependencies:
   - sphinx-gallery
   - myst-nb [--no-deps]
   - pip:
-    - mpl-interactions
     - bqplot-image-gl
