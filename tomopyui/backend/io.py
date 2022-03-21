@@ -304,13 +304,15 @@ class Projections_Prenormalized(ProjectionsBase):
             self.set_import_savedir(str(self.metadata.metadata["energy_str"] + "eV"))
             self.metadata.set_attributes_from_metadata_before_import(self)
         cwd = os.getcwd()
-        os.chdir(Uploader.filedir)
+        os.chdir(self.filedir)
         image_sequence = tf.TiffSequence()
         self._data = image_sequence.asarray().astype(np.float32)
         self.data = self._data
         image_sequence.close()
         self.metadata.set_metadata_from_attributes_after_import(self)
-        self._check_downsampled_data(self.energy)
+        self.filedir = self.import_savedir
+        self.save_data_and_metadata(Uploader)
+        self._check_downsampled_data()
         os.chdir(cwd)
 
     def import_file_projections(self, Uploader):
@@ -358,7 +360,7 @@ class Projections_Prenormalized(ProjectionsBase):
 
         elif any([x in self.filename for x in [".tif", ".tiff"]]):
             if self.tiff_folder:
-                self.import_filedir_projections(self.filepath.parent)
+                self.import_filedir_projections(Uploader)
                 return
             self._data = np.array(
                 dxchange.reader.read_tiff(self.filepath).astype(np.float32)
@@ -1668,6 +1670,9 @@ class Metadata_General_Prenorm(Metadata):
         )
         projections.ds_vals = self.metadata["downsampled_values"]
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
+        if "angles_rad" in self.metadata:
+            projections.angles_rad = self.metadata["angles_rad"]
+            projections.angles_deg = self.metadata["angles_deg"]
 
     def make_angles_from_metadata(self):
         self.metadata["angles_rad"] = angle_maker(
