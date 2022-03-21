@@ -16,6 +16,7 @@ import os
 import shutil
 import subprocess
 import sys
+
 # import tomopyui
 
 try:
@@ -93,7 +94,7 @@ autodoc_default_options = {
     "show-inheritance": True,
     "undoc-members": True,
 }
-autodoc_mock_imports = ["tqdm"]
+autodoc_mock_imports = ["tqdm", "cupy", "cupyx"]
 add_module_names = False
 napoleon_google_docstring = False
 napoleon_include_private_with_doc = False
