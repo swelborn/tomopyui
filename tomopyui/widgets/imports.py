@@ -667,7 +667,6 @@ class PrenormUploader(UploaderBase):
                         sizeY = size[1]
                         sizeX = size[2]
 
-
             elif image.suffix == ".npy":
                 size = np.load(image, mmap_mode="r").shape
                 sizeZ = size[0]
@@ -1244,6 +1243,7 @@ class RawUploader_APS(RawUploader_ALS832):
     See descriptions in RawUploader_ALS832 superclass. You shouldn't have to do much
     here other than changing self.projections and self.reset_metadata_to if you change
     those names.
+    # Francesco: edit here, if needed.
     """
 
     def __init__(self, Import):

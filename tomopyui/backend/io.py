@@ -1329,6 +1329,7 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
 class RawProjectionsHDF5_APS(RawProjectionsHDF5_ALS832):
     """
     See RawProjectionsHDF5_ALS832 superclass description.
+    # Francesco: you may need to edit here.
     """
 
     def __init__(self):
@@ -2268,6 +2269,7 @@ class Metadata_ALS_832_Prenorm(Metadata_ALS_832_Raw):
 
 
 class Metadata_APS_Raw(Metadata):
+    # Francesco: you will need to edit here.
     def __init__(self):
         super().__init__()
         self.filename = "raw_metadata.json"
@@ -2449,6 +2451,8 @@ class Metadata_APS_Prenorm(Metadata_APS_Raw):
     table, I overloaded the create_metadata_box() function to be just an Output widget.
 
     You can get as fancy as you want with this.
+
+    # Francesco: you will need to edit here.
     """
 
     def __init__(self):
