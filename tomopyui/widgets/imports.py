@@ -565,6 +565,8 @@ class PrenormUploader(UploaderBase):
             self.projections.tiff_folder = True
             self.tiff_folder = True
             self.projections.metadata.metadata["pxZ"] = self.tiff_count_in_folder
+            self.projections.metadata.metadata["pxX"] = self.image_size_list[0][2]
+            self.projections.metadata.metadata["pxY"] = self.image_size_list[0][1]
             self.import_button.enable()
             self.images_in_dir_select.disabled = True
             self.create_and_display_metadata_tables()
@@ -577,7 +579,7 @@ class PrenormUploader(UploaderBase):
             self.projections.metadata.metadata["tiff_folder"] = False
             self.projections.tiff_folder = False
             self.tiff_folder = False
-            self.image_in_dir_callback(None, from_select=False)
+            self.images_in_dir_callback(None, from_select=False)
 
     def images_in_dir_callback(self, change, from_select=True):
         """
@@ -647,17 +649,24 @@ class PrenormUploader(UploaderBase):
                 with tf.TiffFile(image) as tif:
                     # if you select a file instead of a file path, it will try to
                     # bring in the full filedir
-                    if self.tiff_count_in_folder > 10:
+                    if self.tiff_count_in_folder > 1:
                         self.tiff_folder_checkbox.disabled = False
                         self.tiff_folder_checkbox.disabled = False
                     else:
                         self.tiff_folder_checkbox.disabled = True
                         self.tiff_folder_checkbox.value = False
-                    imagesize = tif.pages[0].tags["ImageDescription"]
-                    size = json.loads(imagesize.value)["shape"]
-                    sizeZ = size[0]
-                    sizeY = size[1]
-                    sizeX = size[2]
+                    try:
+                        imagesize = tif.pages[0].tags["ImageDescription"]
+                        size = json.loads(imagesize.value)["shape"]
+                    except Exception:
+                        sizeZ = self.tiff_count_in_folder
+                        sizeY = tif.pages[0].tags["ImageLength"].value
+                        sizeX = tif.pages[0].tags["ImageWidth"].value
+                    else:
+                        sizeZ = size[0]
+                        sizeY = size[1]
+                        sizeX = size[2]
+
 
             elif image.suffix == ".npy":
                 size = np.load(image, mmap_mode="r").shape
@@ -922,6 +931,7 @@ class ShiftsUploader(UploaderBase):
         self.files_not_found_str = ""
 
     def update_filechooser_from_quicksearch(self, shifts_files):
+        self.import_button.disable()
         self.shifts_from_json = False
         self.shifts_from_npy = False
         if "sx.npy" in shifts_files:  # TODO: eventually deprecate
@@ -968,6 +978,7 @@ class ShiftsUploader(UploaderBase):
     def update_shift_lists(self):
         self.Prep.shifts_sx_select.options = self.sx
         self.Prep.shifts_sy_select.options = self.sy
+        self.import_button.enable()
 
     def import_data(self, change):
         pass
