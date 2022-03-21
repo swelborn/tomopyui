@@ -41,3 +41,4 @@ dependencies:
   - myst-nb [--no-deps]
   - pip:
     - bqplot-image-gl
+    - tomopyui

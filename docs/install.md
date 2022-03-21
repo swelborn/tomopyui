@@ -108,6 +108,11 @@ Clone the github repository:
 ```
 git clone https://github.com/samwelborn/tomopyui.git
 ```
+:::{note}
+
+If you don't want to download the entire repository, you can just download the environment.yml file [here](https://github.com/samwelborn/tomopyui/blob/main/environment.yml) for CUDA or [here](https://github.com/samwelborn/tomopyui/blob/main/environment-nocuda.yml) for non-CUDA. Along with setting up your environment, this should install the latest stable release of tomopyui from [PyPI](https://pypi.org/project/tomopyui/).
+
+:::
 
 Navigate on into the TomoPyUI directory:
 
@@ -121,21 +126,23 @@ Run the following command:
 conda env create -f environment.yml
 ```
 
-This will install a new environment called TomoPyUI. To activate this environment:
+This will install a new environment called tomopyui. To activate this environment:
 
 ```
 conda activate tomopyui
 ```
 
-Once you do that, you should see (tomopyui) instead of (base) in your anaconda prompt. Your last step is to install TomoPyUI. From the main directory (the one that has setup.py in it), run:
+Once you do that, you should see (tomopyui) instead of (base) in your anaconda prompt. This should have installed the latest release of tomopyui from PyPI. If you want to install the latest version from the master branch, you can run:
 
 ```
 pip install .
 ```
 
+in the tomopyui directory (the one with setup.py).
+
 ## Installing TomoPyUI without CUDA
 
-If you don't have CUDA and just want to check out the ipywidgets, you can still do that using the environment.yml in the docs folder:
+If you don't have CUDA and just want to check out the ipywidgets, you can still do that using the [environment-nocuda.yml](https://github.com/samwelborn/tomopyui/blob/main/environment-nocuda.yml) file:
 
 ```
 cd tomopyui
