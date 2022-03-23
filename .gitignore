@@ -121,3 +121,15 @@ dmypy.json
 
 # Data folder
 data/
+
+# OS generated files 
+core
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.spyderworkspace
+*~
