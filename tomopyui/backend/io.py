@@ -1215,6 +1215,114 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             "".join(c for c in s if c.isalpha()) or None,
             "".join(c for c in s if c.isdigit() or None),
         )
+########
+class RawProjectionsHDF5_APS(RawProjectionsBase):
+    """
+    This class holds your projections data, metadata, and functions associated with
+    importing that data and metadata.
+
+    For SSRL62C, this is a very complicated class. Because of your h5 data storage,
+    it is relatively more straightforward to import and normalize.
+
+    You can overload the functions in subclasses if you have more complicated
+    import and normalization protocols for your data.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.allowed_extensions = [".h5"]
+        self.metadata = Metadata_APS_Raw()
+
+    def import_filedir_all(self, filedir):
+        pass
+
+    def import_filedir_projections(self, filedir):
+        pass
+
+    def import_filedir_flats(self, filedir):
+        pass
+
+    def import_filedir_darks(self, filedir):
+        pass
+
+    def import_file_all(self, Uploader):
+        self.import_status_label = Uploader.import_status_label
+        self.tic = time.perf_counter()
+        self.filedir = Uploader.filedir
+        self.filename = Uploader.filename
+        self.filepath = self.filedir / self.filename
+        self.metadata = Uploader.reset_metadata_to()
+        self.metadata.load_metadata_h5(self.filepath)
+        self.metadata.set_attributes_from_metadata(self)
+        self.import_status_label.value = "Importing"
+        self.metadata.set_attributes_from_metadata(self)
+        (
+            self._data,
+            self.flats,
+            self.darks,
+            self.angles_rad,
+        ) = dxchange.exchange.read_aps_tomoscan_hdf5(self.filepath)
+        self.data = self._data
+        self.angles_deg = (180 / np.pi) * self.angles_rad
+        self.metadata.set_metadata(self)
+        self.metadata.save_metadata()
+        self.imported = True
+        self.import_savedir = self.filedir / str(self.filepath.stem)
+        # if the save directory already exists (you have previously uploaded this
+        # raw data), then it will create a datestamped folder.
+        if self.import_savedir.exists():
+            now = datetime.datetime.now()
+            dt_str = now.strftime("%Y%m%d-%H%M-")
+            save_name = dt_str + str(self.filepath.stem)
+            self.import_savedir = pathlib.Path(self.filedir / save_name)
+            if self.import_savedir.exists():
+                dt_str = now.strftime("%Y%m%d-%H%M%S-")
+                save_name = dt_str + str(self.filepath.stem)
+                self.import_savedir = pathlib.Path(self.filedir / save_name)
+        self.import_savedir.mkdir()
+        self.import_status_label.value = "Normalizing"
+        self.normalize()
+        _metadata = self.metadata.metadata.copy()
+        self.import_status_label.value = "Saving projections as npy for faster IO"
+        self.filedir = self.import_savedir
+        self.save_normalized_as_npy()
+        self._check_downsampled_data()
+        self.toc = time.perf_counter()
+        self.metadata = self.save_normalized_metadata(self.toc - self.tic, _metadata)
+
+    def import_metadata(self, filepath=None):
+        if filepath is None:
+            filepath = self.filepath
+        self.metadata.load_metadata_h5(filepath)
+        self.metadata.set_attributes_from_metadata(self)
+
+    def import_file_projections(self, filepath):
+        tomo_grp = "/".join([exchange_base, "data"])
+        tomo = dxreader.read_hdf5(fname, tomo_grp, slc=(proj, sino), dtype=dtype)
+
+    def import_file_flats(self, filepath):
+        flat_grp = "/".join([exchange_base, "data_white"])
+        flat = dxreader.read_hdf5(fname, flat_grp, slc=(None, sino), dtype=dtype)
+
+    def import_file_darks(self, filepath):
+        dark_grp = "/".join([exchange_base, "data_dark"])
+        dark = dxreader.read_hdf5(fname, dark_grp, slc=(None, sino), dtype=dtype)
+
+    def import_file_angles(self, filepath):
+        theta_grp = "/".join([exchange_base, "theta"])
+        theta = dxreader.read_hdf5(fname, theta_grp, slc=None)
+
+    def save_normalized_metadata(self, import_time=None, parent_metadata=None):
+        metadata = Metadata_ALS_832_Prenorm()
+        metadata.filedir = self.filedir
+        metadata.metadata = parent_metadata.copy()
+        if parent_metadata is not None:
+            metadata.metadata["parent_metadata"] = parent_metadata.copy()
+        if import_time is not None:
+            metadata.metadata["import_time"] = import_time
+        metadata.set_metadata(self)
+        metadata.save_metadata()
+        return metadata
 
 
 class RawProjectionsHDF5_ALS832(RawProjectionsBase):
@@ -1326,7 +1434,7 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         return metadata
 
 
-class RawProjectionsHDF5_APS(RawProjectionsHDF5_ALS832):
+class RawProjectionsHDF5_APS(RawProjectionsHDF5_APS):
     """
     See RawProjectionsHDF5_ALS832 superclass description.
     # Francesco: you may need to edit here.
@@ -2074,6 +2182,81 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
 
 
+class Metadata_APS_Raw(Metadata):
+    def __init__(self):
+        super().__init__()
+        self.filename = "raw_metadata.json"
+        self.metadata["metadata_type"] = "APS_Raw"
+        self.metadata["data_hierarchy_level"] = 0
+        self.table_label.value = "APS Metadata"
+        # hdf file key definitions
+
+        self.energy_key          = 'measurement_instrument_monochromator_energy'
+        self.pixel_size_key      = 'measurement_instrument_detector_pixel_size'
+        self.magnification_key   = 'measurement_instrument_detection_system_objective_camera_objective'
+        self.resolution_key      = 'measurement_instrument_detection_system_objective_resolution'
+        self.exposure_time_key   = 'measurement_instrument_detector_exposure_time'
+        self.rotation_start_key  = 'process_acquisition_rotation_rotation_start'
+        self.angle_step_key      = 'process_acquisition_rotation_rotation_step'
+        self.num_angle_key       = 'process_acquisition_rotation_num_angles'
+        self.width_key           = 'measurement_instrument_detector_dimension_x'
+        self.height_key          = 'measurement_instrument_detector_dimension_y'
+        self.binning_key         = 'measurement_instrument_detector_binning_x'
+        self.beamline_key        = 'measurement_instrument_source_beamline'
+        self.instrument_key      = 'measurement_instrument_instrument_name'
+        self.camera_distance_key = 'measurement_instrument_camera_motor_stack_setup_camera_distance'
+
+    def set_metadata(self, projections):
+
+        self.metadata["numslices"] = projections.pxY
+        self.metadata["numrays"] = projections.pxX
+        self.metadata["num_angles"] = projections.pxZ
+        self.metadata["pxsize"] = projections.px_size
+        self.metadata["px_size_units"] = "cm"
+        self.metadata["propagation_dist"] = projections.propagation_dist
+        self.metadata["propagation_dist_units"] = "mm"
+        self.metadata["angularrange"] = projections.angular_range
+        self.metadata["kev"] = projections.energy
+        self.metadata["energy_units"] = "keV"
+        if projections.angles_deg is not None:
+            self.metadata["angles_deg"] = list(projections.angles_deg)
+            self.metadata["angles_rad"] = list(projections.angles_rad)
+
+    def set_attributes_from_metadata(self, projections):
+        projections.pxY = self.metadata["numslices"]
+        projections.pxX = self.metadata["numrays"]
+        projections.pxZ = self.metadata["num_angles"]
+        projections.px_size = self.metadata["pxsize"]
+        projections.px_size_units = self.metadata["px_size_units"]
+        projections.propagation_dist = self.metadata["propagation_dist"]
+        projections.propagation_dist_units = "mm"
+        projections.angular_range = self.metadata["angularrange"]
+        projections.energy = self.metadata["kev"]
+        projections.units = self.metadata["energy_units"]
+
+    def load_metadata_h5(self, h5_filepath):
+        self.filedir = h5_filepath.parent
+        self.filepath = h5_filepath
+        
+        #####
+        _, meta = dxchange.read_hdf_meta(h5_filepath)
+
+        self.metadata["pxY"] = int(meta[self.height_key][0])
+        self.metadata["numslices"] = self.metadata["pxY"]
+        self.metadata["pxX"] = int(meta[self.width_key][0])
+        self.metadata["numrays"] = self.metadata["pxX"]
+        self.metadata["pxZ"] = int(meta[self.num_angle_key][0])
+        self.metadata["num_angles"] = self.metadata["pxZ"]
+        self.metadata["pxsize"] = float(meta[self.pixel_size_key][0])
+        self.metadata["px_size_units"] = meta[self.pixel_size_key][1]
+        self.metadata["propagation_dist"] = float(meta[self.camera_distance_key][0])
+        self.metadata["propagation_dist_units"] = float(meta[self.camera_distance_key][1])
+        self.metadata["energy_float"] = float(meta[self.energy_key][0])
+        self.metadata["kev"] = self.metadata["energy_float"]
+        self.metadata["energy_str"] = meta[self.energy_key][0]
+        self.metadata["energy_units"] = meta[self.energy_key][1]
+        self.metadata["angularrange"] = float(meta[self.angle_step_key][0]) * float(meta[self.num_angle_key][0])
+
 class Metadata_ALS_832_Raw(Metadata):
     def __init__(self):
         super().__init__()
@@ -2322,6 +2505,12 @@ class Metadata_APS_Raw(Metadata):
         # Here you will set your metadata. I have left these here from the ALS metadata
         # class for reference. Some things are not inside the metadata (i.e.
         # "energy_units") that I set manually.
+
+        print('***********************')
+        print('***********************')
+        print(h5_filepath)
+        print('***********************')
+        print('***********************')
         self.metadata["pxY"] = int(
             dxchange.read_hdf5(
                 h5_filepath, "/measurement/instrument/detector/dimension_y"
