@@ -488,6 +488,17 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         self.darks = None
         self.normalized = False
 
+    def check_import_savedir_exists(self, filedir_name):
+        if self.import_savedir.exists():
+            now = datetime.datetime.now()
+            dt_str = now.strftime("%Y%m%d-%H%M-")
+            save_name = dt_str + filedir_name
+            self.import_savedir = pathlib.Path(self.filedir / save_name)
+            if self.import_savedir.exists():
+                dt_str = now.strftime("%Y%m%d-%H%M%S-")
+                save_name = dt_str + filedir_name
+                self.import_savedir = pathlib.Path(self.filedir / save_name)
+
     def normalize_nf(self):
         """
         Wrapper for tomopy's normalize_nf
@@ -650,6 +661,34 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
         arr = arr.rechunk((num_exposures_per_proj, -1, -1))
         arr = RawProjectionsBase.average_chunks(arr).astype(np.float32)
+        arr = -da.log(arr)
+        arr = arr.compute()
+        return arr
+
+    def normalize_no_locations_no_average(
+        projs,
+        flats,
+        dark,
+        status_label=None,
+    ):
+        """
+        Normalize using dask arrays. Only averages references and normalizes.
+        """
+        if status_label is not None:
+            status_label.value = "Averaging flatfields."
+        flat_mean = np.mean(flats, axis=0)
+        # Averaging flats
+        dark = np.median(dark, axis=0)
+        denominator = flats_reduced - dark
+        denominator.compute()
+        # Projection locations defined as the centerpoint between two reference
+        # collections
+        # Chunk the projections such that they will be divided by the nearest flat
+        # The first chunk of data will be divided by the first flat.
+        # The first chunk of data is likely smaller than the others.
+        if status_label is not None:
+            status_label.value = f"Dividing by flatfields and taking -log."
+        arr = projs / denominator
         arr = -da.log(arr)
         arr = arr.compute()
         return arr
@@ -1217,6 +1256,144 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         )
 
 
+class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
+
+    """
+    Raw data import functions associated with SSRL 6-2c. If you specify a folder filled
+    with raw XRMS, a ScanInfo file, and a run script, this will automatically import
+    your data and save it in a subfolder corresponding to the energy.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.allowed_extensions = self.allowed_extensions + [".xrm"]
+        self.angles_from_filenames = True
+        self.metadata_projections = Metadata_SSRL62B_Raw_Projections()
+        self.metadata_references = Metadata_SSRL62B_Raw_References()
+        self.metadata = Metadata_SSRL62B_Raw(
+            self.metadata_projections, self.metadata_references
+        )
+
+    def import_data(self, Uploader):
+        self.metadata_projections.set_extra_metadata(Uploader)
+        self.metadata_references.set_extra_metadata(Uploader)
+        # self.metadata_projections.filedir = Uploader.
+        self.metadata.filedir = self.metadata_projections.filedir
+        self.metadata.filepath = self.metadata.filedir / self.metadata.filename
+        self.metadata.save_metadata()
+        self.import_filedir_projections(Uploader)
+        self.import_filedir_flats(Uploader)
+        projs, flats, darks = self.setup_normalize(Uploader)
+        self._data = self.normalize_no_locations_no_average(projs, flats, darks)
+        self.data = self._data
+        save_filedir_name = str(self.metadata["energy_str"] + "eV")
+        self.import_savedir = self.metadata_projections.filedir / save_filedir_name
+        self.check_import_savedir_exists()
+        self.filedir = self.import_savedir
+        self.save_normalized_as_npy()
+
+    def import_metadata(self):
+        self.metadata = Metadata_SSRL62B_Raw(
+            self.metadata_projections, self.metadata_references
+        )
+
+    def import_metadata_projections(self, Uploader):
+        self.projections_filedir = Uploader.projections_metadata_filepath.parent
+        self.metadata_projections = Metadata_SSRL62B_Raw_Projections()
+        self.metadata_projections.filedir = (
+            Uploader.projections_metadata_filepath.parent
+        )
+        self.metadata_projections.filename = Uploader.projections_metadata_filepath.name
+        self.metadata_projections.filepath = Uploader.projections_metadata_filepath
+        self.metadata_projections.parse_raw_metadata()
+        self.metadata_projections.set_extra_metadata(Uploader)
+
+    def import_metadata_references(self, Uploader):
+        self.references_filedir = Uploader.references_metadata_filepath.parent
+        self.metadata_references = Metadata_SSRL62B_Raw_References()
+        self.metadata_references.filedir = Uploader.references_metadata_filepath.parent
+        self.metadata_references.filename = Uploader.references_metadata_filepath.name
+        self.metadata_references.filepath = Uploader.references_metadata_filepath
+        self.metadata_references.parse_raw_metadata()
+        self.metadata_references.set_extra_metadata(Uploader)
+
+    def import_filedir_all(self, Uploader):
+        pass
+
+    def import_filedir_projections(self, Uploader):
+        tifffiles = self.metadata_projections.metadata["filenames"]
+        tifffiles = [self.projections_filedir / file for file in tifffiles]
+        Uploader.upload_progress.value = 0
+        Uploader.upload_progress.max = len(tifffiles)
+        Uploader.import_status_label.value = "Uploading projections"
+        arr = []
+        for file in tifffiles:
+            arr.append(tf.imread(file))
+            Uploader.upload_progress.value += 1
+        Uploader.import_status_label.value = "Converting to numpy array"
+        arr = np.array(arr)
+        Uploader.import_status_label.value = "Saving as npy"
+        np.save(self.metadata_projections.filedir / "projections.npy", arr)
+
+    def import_filedir_flats(self, Uploader):
+        tifffiles = self.metadata_references.metadata["filenames"]
+        tifffiles = [self.metadata_references.filedir / file for file in tifffiles]
+        Uploader.upload_progress.value = 0
+        Uploader.upload_progress.max = len(tifffiles)
+        Uploader.import_status_label.value = "Uploading references"
+        arr = []
+        for file in tifffiles:
+            arr.append(tf.imread(file))
+            Uploader.upload_progress.value += 1
+        Uploader.import_status_label.value = "Converting to numpy array"
+        arr = np.array(arr)
+        Uploader.import_status_label.value = "Saving as npy"
+        np.save(self.metadata_projections.filedir / "flats.npy", arr)
+
+    def import_filedir_darks(self, filedir):
+        pass
+
+    def import_file_all(self, filepath):
+        pass
+
+    def import_file_projections(self, filepath):
+        pass
+
+    def import_file_flats(self, filepath):
+        pass
+
+    def import_file_darks(self, filepath):
+        pass
+
+    def setup_normalize(self, Uploader):
+        """
+        Function to lazy load flats and projections as npy, convert to chunked dask
+        arrays for normalization.
+
+        Returns
+        -------
+        projs: dask array
+            Projections chunked by scan_info["NEXPOSURES"]
+        flats: dask array
+            References chunked by scan_info["REFNEXPOSURES"]
+        darks: dask array
+            Zeros array with the same image dimensions as flats
+        """
+        self.flats = None
+        self._data = None
+        self.flats = np.load(
+            self.metadata_projections.filedir / "flats.npy", mmap_mode="r"
+        )
+        self._data = np.load(
+            self.metadata_projections.filedir / "projections.npy", mmap_mode="r"
+        )
+        self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
+        projs = da.from_array(self._data).astype(np.float32)
+        flats = da.from_array(self.flats).astype(np.float32)
+        darks = da.from_array(self.darks).astype(np.float32)
+        return projs, flats, darks
+
+
 class RawProjectionsHDF5_ALS832(RawProjectionsBase):
     """
     This class holds your projections data, metadata, and functions associated with
@@ -1434,6 +1611,10 @@ class Metadata(ABC):
             metadata_instance = Metadata_SSRL62C_Prenorm()
         if metadata["metadata_type"] == "SSRL62C_Raw":
             metadata_instance = Metadata_SSRL62C_Raw()
+        if metadata["metadata_type"] == "SSRL62B_Normalized":
+            metadata_instance = Metadata_SSRL62B_Prenorm()
+        if metadata["metadata_type"] == "SSRL62B_Raw":
+            metadata_instance = Metadata_SSRL62B_Raw()
 
         # ALS Beamlines
         if metadata["metadata_type"] == "ALS832_Normalized":
@@ -1885,6 +2066,527 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         self.metadata["metadata_type"] = "SSRL62C_Normalized"
         self.metadata["data_hierarchy_level"] = 1
         self.table_label.value = "SSRL 6-2C TomoPyUI-Imported Metadata"
+
+    def set_metadata(self, projections):
+        super().set_metadata(projections)
+        metadata_to_remove = [
+            "scan_info_path",
+            "run_script_path",
+            "scan_info",
+            "scan_type",
+            "scan_order",
+            "all_raw_energies_float",
+            "all_raw_energies_str",
+            "all_raw_pixel_sizes",
+            "pixel_size_from_scan_info",
+            "raw_projections_dtype",
+        ]
+        # removing unneeded things from parent raw
+        [
+            self.metadata.pop(name)
+            for name in metadata_to_remove
+            if name in self.metadata
+        ]
+        self.metadata["flats_ind"] = projections.flats_ind
+        self.metadata["user_overwrite_energy"] = projections.user_overwrite_energy
+        self.metadata["energy_str"] = projections.current_energy_str
+        self.metadata["energy_float"] = projections.current_energy_float
+        self.metadata["pixel_size"] = projections.current_pixel_size
+        self.metadata["normalized_projections_dtype"] = str(np.dtype(np.float32))
+        self.metadata["normalized_projections_size_gb"] = projections.size_gb
+        self.metadata["normalized_projections_directory"] = str(
+            projections.import_savedir
+        )
+        self.metadata["normalized_projections_filename"] = "normalized_projections.npy"
+        self.metadata["normalization_function"] = "dask"
+        self.metadata["downsampled_projections_directory"] = str(projections.filedir_ds)
+        self.metadata["downsampled_values"] = projections.ds_vals
+        self.metadata["saved_as_tiff"] = projections.saved_as_tiff
+
+    def metadata_to_DataFrame(self):
+        # create headers and data for table
+        px_size = self.metadata["pixel_size"]
+        px_units = self.metadata["pixel_units"]
+        en_units = self.metadata["energy_units"]
+        start_angle = self.metadata["start_angle"]
+        end_angle = self.metadata["end_angle"]
+        exp_time_proj = f"{self.metadata['projections_exposure_time']:0.2f}"
+        exp_time_ref = f"{self.metadata['references_exposure_time']:0.2f}"
+        ds_vals = self.metadata["downsampled_values"]
+        ds_vals = [x[2] for x in ds_vals]
+        if self.metadata["user_overwrite_energy"]:
+            user_overwrite = "Yes"
+        else:
+            user_overwrite = "No"
+        if self.metadata["saved_as_tiff"]:
+            save_as_tiff = "Yes"
+        else:
+            save_as_tiff = "No"
+        self.metadata_list_for_table = [
+            {
+                f"Energy ({en_units})": self.metadata["energy_str"],
+                f"Pixel Size ({px_units})": f"{px_size:0.2f}",
+                "Start θ (°)": f"{start_angle:0.1f}",
+                "End θ (°)": f"{end_angle:0.1f}",
+                # "Scan Type": self.metadata["scan_type"],
+                "Ref. Exp. Time": exp_time_ref,
+                "Proj. Exp. Time": exp_time_proj,
+            },
+            {
+                "X Pixels": self.metadata["pxX"],
+                "Y Pixels": self.metadata["pxY"],
+                "Num. θ": self.metadata["num_angles"],
+                "Binning": self.metadata["binning"],
+            },
+            {
+                "Energy Overwritten": user_overwrite,
+                ".tif Saved": save_as_tiff,
+                "Downsample Values": ds_vals,
+            },
+        ]
+        middle_headers = [[]]
+        data = [[]]
+        for i in range(len(self.metadata_list_for_table)):
+            middle_headers.append([key for key in self.metadata_list_for_table[i]])
+            data.append(
+                [
+                    self.metadata_list_for_table[i][key]
+                    for key in self.metadata_list_for_table[i]
+                ]
+            )
+        data.pop(0)
+        middle_headers.pop(0)
+        top_headers = [["Acquisition Information"]]
+        top_headers.append(["Image Information"])
+        top_headers.append(["Other Information"])
+
+        # create dataframe with the above settings
+        df = pd.DataFrame(
+            [data[0]],
+            columns=pd.MultiIndex.from_product([top_headers[0], middle_headers[0]]),
+        )
+        for i in range(len(middle_headers)):
+            if i == 0:
+                continue
+            else:
+                newdf = pd.DataFrame(
+                    [data[i]],
+                    columns=pd.MultiIndex.from_product(
+                        [top_headers[i], middle_headers[i]]
+                    ),
+                )
+                df = df.join(newdf)
+
+        # set datatable styles
+        s = df.style.hide(axis="index")
+        s.set_table_styles(
+            {
+                ("Image Information", middle_headers[1][0]): [
+                    {"selector": "td", "props": "border-left: 1px solid white"},
+                    {"selector": "th", "props": "border-left: 1px solid white"},
+                ],
+                ("Other Information", middle_headers[2][0]): [
+                    {"selector": "td", "props": "border-left: 1px solid white"},
+                    {"selector": "th", "props": "border-left: 1px solid white"},
+                ],
+            },
+            overwrite=False,
+        )
+        s.set_table_styles(
+            [
+                {"selector": "th.col_heading", "props": "text-align: center;"},
+                {"selector": "th.col_heading.level0", "props": "font-size: 1.2em;"},
+                {"selector": "td", "props": "text-align: center;" "font-size: 1.2em;"},
+                {
+                    "selector": "th:not(.index_name)",
+                    "props": "background-color: #0F52BA; color: white;",
+                },
+            ],
+            overwrite=False,
+        )
+
+        self.dataframe = s
+
+    def set_attributes_from_metadata(self, projections):
+        # projections.scan_info = copy.deepcopy(self.metadata["scan_info"])
+        # projections.scan_info["FILES"] = [
+        #     pathlib.Path(file) for file in self.metadata["scan_info"]["FILES"]
+        # ]
+        # projections.scan_info_path = self.metadata["scan_info_path"]
+        # projections.run_script_path = pathlib.Path(self.metadata["run_script_path"])
+        projections.flats_filenames = [
+            pathlib.Path(file) for file in self.metadata["flats_filenames"]
+        ]
+        projections.data_filenames = [
+            pathlib.Path(file) for file in self.metadata["projections_filenames"]
+        ]
+        # projections.scan_type = self.metadata["scan_type"]
+        # projections.scan_order = self.metadata["scan_order"]
+        projections.pxX = self.metadata["pxX"]
+        projections.pxY = self.metadata["pxY"]
+        projections.pxZ = self.metadata["pxZ"]
+        projections.angles_rad = self.metadata["angles_rad"]
+        projections.angles_deg = self.metadata["angles_deg"]
+        projections.start_angle = self.metadata["start_angle"]
+        projections.end_angle = self.metadata["end_angle"]
+        projections.binning = self.metadata["binning"]
+        # projections.energies_list_float = self.metadata["all_raw_energies_float"]
+        # projections.energies_list_str = self.metadata["all_raw_energies_str"]
+        projections.user_overwrite_energy = self.metadata["user_overwrite_energy"]
+        projections.current_energy_str = self.metadata["energy_str"]
+        projections.current_energy_float = self.metadata["energy_float"]
+        projections.energy_units = self.metadata["energy_units"]
+        # projections.raw_pixel_sizes = self.metadata["all_raw_pixel_sizes"]
+        # projections.pixel_size_from_metadata = self.metadata[
+        #     "pixel_size_from_scan_info"
+        # ]
+        projections.current_pixel_size = self.metadata["pixel_size"]
+        projections.pixel_units = self.metadata["pixel_units"]
+        # projections.size_gb = self.metadata["normalized_projections_size_gb"]
+        projections.import_savedir = pathlib.Path(
+            self.metadata["normalized_projections_directory"]
+        )
+        projections.filedir_ds = pathlib.Path(
+            self.metadata["downsampled_projections_directory"]
+        )
+        if "flats_ind" in self.metadata:
+            projections.flats_ind = self.metadata["flats_ind"]
+        projections.ds_vals = self.metadata["downsampled_values"]
+        projections.saved_as_tiff = self.metadata["saved_as_tiff"]
+
+
+class Metadata_SSRL62B_Raw_Projections(Metadata):
+    """
+    Raw projections metadata from SSRL 6-2B.
+    """
+
+    summary_key = "Summary"
+    coords_default_key = r"Coords-Default/"
+    metadata_default_key = r"Metadata-Default/"
+
+    def __init__(self):
+        super().__init__()
+        self.loaded_metadata = False  # did we load metadata yet? no
+        self.filename = "raw_metadata.json"
+        self.metadata["metadata_type"] = "SSRL62B_Raw_Projections"
+        self.metadata["data_hierarchy_level"] = 0
+        self.data_hierarchy_level = 0
+        self.table_label.value = "SSRL 6-2B Raw Projections Metadata"
+
+    def parse_raw_metadata(self):
+        self.load_metadata()
+        self.summary = self.imported_metadata["Summary"].copy()
+        self.metadata["acquisition_name"] = self.summary["Prefix"]
+        self.metadata["angular_resolution"] = self.summary["z-step_um"] / 1000
+        self.metadata["pxZ"] = self.summary["Slices"]
+        self.metadata["num_angles"] = self.metadata["pxZ"]
+        self.metadata["pixel_type"] = self.summary["PixelType"]
+        self.meta_keys = [
+            key for key in self.imported_metadata.keys() if "Metadata-Default" in key
+        ]
+        self.metadata["angles_deg"] = [
+            self.imported_metadata[key]["ZPositionUm"] / 1000 for key in self.meta_keys
+        ]
+        self.metadata["angles_rad"] = [
+            x * np.pi / 180 for x in self.metadata["angles_deg"]
+        ]
+        self.metadata["start_angle"] = self.metadata["angles_deg"][0]
+        self.metadata["end_angle"] = self.metadata["angles_deg"][-1]
+        self.metadata["exposure_times_ms"] = [
+            self.imported_metadata[key]["Exposure-ms"] for key in self.meta_keys
+        ]
+        self.metadata["average_exposure_time"] = np.mean(
+            self.metadata["exposure_times_ms"]
+        )
+        self.metadata["elapsed_times_ms"] = [
+            self.imported_metadata[key]["ElapsedTime-ms"] for key in self.meta_keys
+        ]
+        self.metadata["received_times"] = [
+            self.imported_metadata[key]["ReceivedTime"] for key in self.meta_keys
+        ]
+        self.metadata["filenames"] = [
+            key.replace(r"Metadata-Default/", "") for key in self.meta_keys
+        ]
+        self.metadata["widths"] = [
+            self.imported_metadata[key]["Width"] for key in self.meta_keys
+        ]
+        self.metadata["heights"] = [
+            self.imported_metadata[key]["Height"] for key in self.meta_keys
+        ]
+        self.metadata["binnings"] = [
+            self.imported_metadata[key]["Binning"] for key in self.meta_keys
+        ]
+        self.metadata["pxX"] = self.metadata["heights"][0]
+        self.metadata["pxY"] = self.metadata["widths"][0]
+        self.loaded_metadata = True
+
+    def set_extra_metadata(self, Uploader):
+        self.metadata["energy_float"] = Uploader.energy_textbox.value
+        self.metadata["energy_str"] = f"{self.metadata['energy_float']:0.2f}"
+        self.metadata["energy_units"] = Uploader.energy_units_dropdown.value
+        self.metadata["pixel_size"] = Uploader.px_size_textbox.value
+        self.metadata["pixel_units"] = Uploader.px_units_dropdown.value
+
+    def load_metadata(self):
+        with open(self.filepath) as f:
+            self.imported_metadata = json.load(f)
+        return self.imported_metadata
+
+    def set_attributes_from_metadata(self, projections):
+        projections.pxX
+
+    def set_metadata(self, projections):
+        pass
+
+    def metadata_to_DataFrame(self):
+        # create headers and data for table
+        px_size = self.metadata["pixel_size"]
+        px_units = self.metadata["pixel_units"]
+        en_units = self.metadata["energy_units"]
+        start_angle = self.metadata["start_angle"]
+        end_angle = self.metadata["end_angle"]
+        # ds_vals = [x[2] for x in ds_vals]
+        self.metadata_list_for_table = [
+            {
+                f"Energy ({en_units})": self.metadata["energy_str"],
+                f"Pixel Size ({px_units})": f"{px_size:0.2f}",
+                "Start θ (°)": f"{start_angle:0.1f}",
+                "End θ (°)": f"{end_angle:0.1f}",
+                "Exp. Time (ms)": f"{self.metadata['average_exposure_time']:0.2f}",
+            },
+            {
+                "X Pixels": self.metadata["pxX"],
+                "Y Pixels": self.metadata["pxY"],
+                "Num. θ": self.metadata["num_angles"],
+                "Binning": self.metadata["binnings"][0],
+            }
+            # {
+            # ".tif Saved": save_as_tiff,
+            # "Downsample Values": ds_vals,
+            # },
+        ]
+        middle_headers = [[]]
+        data = [[]]
+        for i in range(len(self.metadata_list_for_table)):
+            middle_headers.append([key for key in self.metadata_list_for_table[i]])
+            data.append(
+                [
+                    self.metadata_list_for_table[i][key]
+                    for key in self.metadata_list_for_table[i]
+                ]
+            )
+        data.pop(0)
+        middle_headers.pop(0)
+        top_headers = [["Acquisition Information"]]
+        top_headers.append(["Image Information"])
+        # top_headers.append(["Other Information"])
+
+        # create dataframe with the above settings
+        df = pd.DataFrame(
+            [data[0]],
+            columns=pd.MultiIndex.from_product([top_headers[0], middle_headers[0]]),
+        )
+        for i in range(len(middle_headers)):
+            if i == 0:
+                continue
+            else:
+                newdf = pd.DataFrame(
+                    [data[i]],
+                    columns=pd.MultiIndex.from_product(
+                        [top_headers[i], middle_headers[i]]
+                    ),
+                )
+                df = df.join(newdf)
+
+        # set datatable styles
+        s = df.style.hide(axis="index")
+        s.set_table_styles(
+            {
+                ("Image Information", middle_headers[1][0]): [
+                    {"selector": "td", "props": "border-left: 1px solid white"},
+                    {"selector": "th", "props": "border-left: 1px solid white"},
+                ],
+                # ("Other Information", middle_headers[2][0]): [
+                #     {"selector": "td", "props": "border-left: 1px solid white"},
+                #     {"selector": "th", "props": "border-left: 1px solid white"},
+                # ],
+            },
+            overwrite=False,
+        )
+        s.set_table_styles(
+            [
+                {"selector": "th.col_heading", "props": "text-align: center;"},
+                {"selector": "th.col_heading.level0", "props": "font-size: 1.2em;"},
+                {"selector": "td", "props": "text-align: center;" "font-size: 1.2em;"},
+                {
+                    "selector": "th:not(.index_name)",
+                    "props": "background-color: #0F52BA; color: white;",
+                },
+            ],
+            overwrite=False,
+        )
+
+        self.dataframe = s
+
+
+class Metadata_SSRL62B_Raw_References(Metadata_SSRL62B_Raw_Projections):
+    """
+    Raw reference metadata from SSRL 6-2B.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.filename = "raw_metadata.json"
+        self.metadata["metadata_type"] = "SSRL62B_Raw_References"
+        self.metadata["data_hierarchy_level"] = 0
+        self.data_hierarchy_level = 0
+        self.table_label.value = "SSRL 6-2B Raw References Metadata"
+
+    def metadata_to_DataFrame(self):
+        # create headers and data for table
+        px_size = self.metadata["pixel_size"]
+        px_units = self.metadata["pixel_units"]
+        en_units = self.metadata["energy_units"]
+        start_angle = self.metadata["start_angle"]
+        end_angle = self.metadata["end_angle"]
+        # ds_vals = [x[2] for x in ds_vals]
+        self.metadata_list_for_table = [
+            {
+                f"Energy ({en_units})": self.metadata["energy_str"],
+                f"Pixel Size ({px_units})": f"{px_size:0.2f}",
+                # "Start θ (°)": f"{start_angle:0.1f}",
+                # "End θ (°)": f"{end_angle:0.1f}",
+                "Exp. Time (ms)": f"{self.metadata['average_exposure_time']:0.2f}",
+            },
+            {
+                "X Pixels": self.metadata["pxX"],
+                "Y Pixels": self.metadata["pxY"],
+                "Num. Refs": len(self.metadata["widths"]),
+                "Binning": self.metadata["binnings"][0],
+            },
+            # {
+            # ".tif Saved": save_as_tiff,
+            # "Downsample Values": ds_vals,
+            # },
+        ]
+        middle_headers = [[]]
+        data = [[]]
+        for i in range(len(self.metadata_list_for_table)):
+            middle_headers.append([key for key in self.metadata_list_for_table[i]])
+            data.append(
+                [
+                    self.metadata_list_for_table[i][key]
+                    for key in self.metadata_list_for_table[i]
+                ]
+            )
+        data.pop(0)
+        middle_headers.pop(0)
+        top_headers = [["Acquisition Information"]]
+        top_headers.append(["Image Information"])
+        # top_headers.append(["Other Information"])
+
+        # create dataframe with the above settings
+        df = pd.DataFrame(
+            [data[0]],
+            columns=pd.MultiIndex.from_product([top_headers[0], middle_headers[0]]),
+        )
+        for i in range(len(middle_headers)):
+            if i == 0:
+                continue
+            else:
+                newdf = pd.DataFrame(
+                    [data[i]],
+                    columns=pd.MultiIndex.from_product(
+                        [top_headers[i], middle_headers[i]]
+                    ),
+                )
+                df = df.join(newdf)
+
+        # set datatable styles
+        s = df.style.hide(axis="index")
+        s.set_table_styles(
+            {
+                ("Image Information", middle_headers[1][0]): [
+                    {"selector": "td", "props": "border-left: 1px solid white"},
+                    {"selector": "th", "props": "border-left: 1px solid white"},
+                ],
+                # ("Other Information", middle_headers[2][0]): [
+                #     {"selector": "td", "props": "border-left: 1px solid white"},
+                #     {"selector": "th", "props": "border-left: 1px solid white"},
+                # ],
+            },
+            overwrite=False,
+        )
+        s.set_table_styles(
+            [
+                {"selector": "th.col_heading", "props": "text-align: center;"},
+                {"selector": "th.col_heading.level0", "props": "font-size: 1.2em;"},
+                {"selector": "td", "props": "text-align: center;" "font-size: 1.2em;"},
+                {
+                    "selector": "th:not(.index_name)",
+                    "props": "background-color: #0F52BA; color: white;",
+                },
+            ],
+            overwrite=False,
+        )
+
+        self.dataframe = s
+
+
+class Metadata_SSRL62B_Raw(Metadata_SSRL62B_Raw_Projections):
+    """
+    Raw reference metadata from SSRL 6-2B.
+    """
+
+    def __init__(self, metadata_projections, metadata_references):
+        super().__init__()
+        self.metadata_projections = metadata_projections
+        self.metadata_references = metadata_references
+        self.metadata["projections_metadata"] = self.metadata_projections.metadata
+        self.metadata["references_metadata"] = self.metadata_references.metadata
+        self.filename = "raw_metadata.json"
+        self.metadata["metadata_type"] = "SSRL62B_Raw"
+        self.metadata["data_hierarchy_level"] = 0
+        self.data_hierarchy_level = 0
+        self.table_label.value = "SSRL 6-2B Raw Metadata"
+
+    def metadata_to_DataFrame(self):
+        # create headers and data for table
+        self.metadata_projections.create_metadata_box()
+        self.metadata_references.create_metadata_box()
+
+    def create_metadata_hbox(self):
+        """
+        Creates the box to be displayed on the frontend when importing data. Has both
+        a label and the metadata dataframe (stored in table_output).
+
+        """
+        self.metadata_to_DataFrame()
+        self.table_output = Output()
+        if (
+            self.metadata_projections.dataframe is not None
+            and self.metadata_references.dataframe is not None
+        ):
+            self.metadata_hbox = HBox(
+                [
+                    self.metadata_projections.metadata_vbox,
+                    self.metadata_references.metadata_vbox,
+                ],
+                layout=Layout(justify_content="center"),
+            )
+
+
+class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
+    """
+    Metadata class for data from SSRL 6-2C that was normalized using TomoPyUI.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.filename = "import_metadata.json"
+        self.metadata["metadata_type"] = "SSRL62C_Normalized"
+        self.metadata["data_hierarchy_level"] = 1
+        self.table_label.value = "SSRL 6-2B TomoPyUI-Imported Metadata"
 
     def set_metadata(self, projections):
         super().set_metadata(projections)
