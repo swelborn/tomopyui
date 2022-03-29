@@ -16,10 +16,12 @@ import multiprocessing as mp
 import pandas as pd
 import time
 import datetime
+import h5py
 
 from abc import ABC, abstractmethod
 from tomopy.sim.project import angles as angle_maker
 from tomopyui.backend.util.dxchange.reader import read_ole_metadata, read_xrm
+from tomopyui.backend.util.dask_downsample import pyramid_reduce_gaussian
 from skimage.transform import rescale
 from joblib import Parallel, delayed
 from ipywidgets import *
@@ -97,26 +99,42 @@ class IOBase:
             This is a label that will update in the frontend.
         """
         filedir = self.filedir
-        try:
-            self.filedir_ds = pathlib.Path(filedir / "downsampled").mkdir(parents=True)
-            self.filedir_ds = pathlib.Path(filedir / "downsampled")
-        except FileExistsError:
-            self.filedir_ds = pathlib.Path(filedir / "downsampled")
-            try:
-                if label is not None:
-                    label.value = "Loading premade downsampled data and histograms."
-                self._load_ds_and_hists()
-            except Exception:
-                if label is not None:
-                    label.value = (
-                        "Downsampled folder exists, but doesn't match"
-                        + "format. Writing new downsampled data."
-                    )
-                self._write_downsampled_data()
+        files = [pathlib.PurePath(f) for f in os.scandir(filedir) if not f.is_dir()]
+        if "normalized_projections.hdf5" in files:
+            h5_file = h5py.File(self.filedir / "normalized_projections.hdf5", "r")
+            if "downsampled" in h5_file["projections"].keys():
+                self._load_ds_and_hists_h5(h5_file)
+            else:
+                h5_file.close()
+                pyramid_reduce_gaussian(
+                    self.data, h5_filepath=filedir / "normalized_projections.hdf5"
+                )
+                h5_file = h5py.File(self.filedir / "normalized_projections.hdf5", "r")
+                self._load_ds_and_hists_h5(h5_file)
+
         else:
-            if label is not None:
-                label.value = "Writing new downsampled data."
-            self._write_downsampled_data()
+            try:
+                self.filedir_ds = pathlib.Path(filedir / "downsampled").mkdir(
+                    parents=True
+                )
+                self.filedir_ds = pathlib.Path(filedir / "downsampled")
+            except FileExistsError:
+                self.filedir_ds = pathlib.Path(filedir / "downsampled")
+                try:
+                    if label is not None:
+                        label.value = "Loading premade downsampled data and histograms."
+                    self._load_ds_and_hists()
+                except Exception:
+                    if label is not None:
+                        label.value = (
+                            "Downsampled folder exists, but doesn't match"
+                            + "format. Writing new downsampled data."
+                        )
+                    self._write_downsampled_data()
+            else:
+                if label is not None:
+                    label.value = "Writing new downsampled data."
+                self._write_downsampled_data()
 
     def _write_downsampled_data(self):
         """
@@ -145,7 +163,6 @@ class IOBase:
 
         ds_data_da = [da.from_array(x) for x in ds_data]
         ranges = [[np.min(x), np.max(x)] for x in ds_data]
-        del ds_data
         hists = [
             da.histogram(x, range=[y[0], y[1]], bins=200)
             for x, y in zip(ds_data_da, ranges)
@@ -181,6 +198,17 @@ class IOBase:
             np.load(self.filedir_ds / str("ds" + string + ".npy"), mmap_mode="r")
             for string in ds_vals_strs
         ]
+
+    def _load_ds_and_hists_h5(self, h5file):
+        """
+        Loads in downsampled data and their respective histograms to memory for
+        fast viewing in the plotters.
+
+        """
+        ds = h5file["projections"]["downsampled"]
+        self.data_ds = [ds[key]["data"] for key in ds]
+        hist_keys = ["frequency", "bin_centers"]
+        self.hists = [{key: ds[key][hist_keys] for key in hist_keys} for key in ds]
 
     def _file_finder(self, filedir, filetypes: list):
         """
@@ -694,7 +722,7 @@ class RawProjectionsBase(ProjectionsBase, ABC):
 
         if status_label is not None:
             status_label.value = f"Dividing by flatfields and taking -log."
-        projs = projs.rechunk({0: 'auto', 1: -1, 2: -1})
+        projs = projs.rechunk({0: "auto", 1: -1, 2: -1})
         # chunks = projs.chunks[0]  # get all chunk sizes
         # blocks = projs.to_delayed().ravel()
 
@@ -1305,19 +1333,25 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         self.import_filedir_projections(Uploader)
         self.import_filedir_flats(Uploader)
         projs, flats, darks = self.setup_normalize(Uploader)
-        self._data = self.normalize_no_locations_no_average(projs, flats, darks, compute=False)
+        self._data = self.normalize_no_locations_no_average(
+            projs, flats, darks, compute=False
+        )
         self.data = self._data
         save_filedir_name = str(self.metadata_projections.metadata["energy_str"] + "eV")
         self.import_savedir = self.metadata_projections.filedir / save_filedir_name
         self.check_import_savedir_exists(save_filedir_name)
         self.filedir = self.import_savedir
         self.filedir.mkdir()
-        da.to_hdf5(self.filedir / "normalized_projections.hdf5", "/projections", self.data)
+        da.to_hdf5(
+            self.filedir / "normalized_projections.hdf5", "/projections/data", self.data
+        )
         self._check_downsampled_data()
         self.metadata_projections.set_attributes_from_metadata(self)
         self.metadata_prenorm = Metadata_SSRL62B_Prenorm()
         self.metadata_prenorm.set_metadata(self)
-        self.metadata_prenorm.metadata["parent_metadata"] = self.metadata.metadata.copy()
+        self.metadata_prenorm.metadata[
+            "parent_metadata"
+        ] = self.metadata.metadata.copy()
         self.metadata_prenorm.filedir = self.filedir
         self.metadata_prenorm.filepath = self.filedir / self.metadata_prenorm.filename
         self.metadata_prenorm.save_metadata()
@@ -1358,9 +1392,12 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         Uploader.import_status_label.value = "Uploading projections"
         Uploader.progress_output.clear_output()
         with Uploader.progress_output:
-            display(VBox([Uploader.upload_progress, Uploader.import_status_label], layout=Layout(justify_content="center", align_items="center")
+            display(
+                VBox(
+                    [Uploader.upload_progress, Uploader.import_status_label],
+                    layout=Layout(justify_content="center", align_items="center"),
                 )
-                )
+            )
 
         arr = []
         for file in tifffiles:
@@ -2375,7 +2412,7 @@ class Metadata_SSRL62B_Raw_Projections(Metadata):
         projections.start_angle = self.metadata["start_angle"]
         projections.end_angle = self.metadata["end_angle"]
         projections.start_angle = self.metadata["start_angle"]
-        projections.pxZ = self.metadata["pxZ"] 
+        projections.pxZ = self.metadata["pxZ"]
         projections.pxY = self.metadata["pxY"]
         projections.pxX = self.metadata["pxX"]
         projections.energy_float = self.metadata["energy_float"]
