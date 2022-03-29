@@ -1204,7 +1204,7 @@ class RawUploader_SSRL62B(UploaderBase):
         tic = time.perf_counter()
         self.projections.import_data(self)
         toc = time.perf_counter()
-        self.projections.status_label.value = (
+        self.import_status_label.value = (
             f"Import and normalization took {toc-tic:.0f}s"
         )
         self.projections.filedir = self.projections.import_savedir

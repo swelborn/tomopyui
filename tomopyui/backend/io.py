@@ -135,12 +135,17 @@ class IOBase:
         # ds_data = [rescale_parallel_pool(self.pxZ, self.data, ds_vals_list) for ds_vals_list in self.ds_vals]
         # :
         #     ds_data.append(rescale_parallel_pool(self.pxZ, self.data, self.ds_vals))
-        ds_data = Parallel(n_jobs=int(os.environ["num_cpu_cores"]))(
-            delayed(rescale)(self.data, x) for x in self.ds_vals
-        )
-        ds_data.append(self.data)
+        # ds_data = Parallel(n_jobs=int(os.environ["num_cpu_cores"]))(
+        #     delayed(rescale)(self.data, x) for x in self.ds_vals
+        # )
+        ds_data = rescale(self.data, self.ds_vals[0])
+        # ds_data.append(self.data)
+        for data, string in zip(ds_data, ds_vals_strs):
+            np.save(self.filedir_ds / str("ds" + string), data)
+
         ds_data_da = [da.from_array(x) for x in ds_data]
         ranges = [[np.min(x), np.max(x)] for x in ds_data]
+        del ds_data
         hists = [
             da.histogram(x, range=[y[0], y[1]], bins=200)
             for x, y in zip(ds_data_da, ranges)
@@ -149,8 +154,7 @@ class IOBase:
         hist_intensities = [hist.compute() for hist in hist_intensities]
         bin_edges = [hist[1] for hist in hists]
         xvals = [[(b[i] + b[i + 1]) / 2 for i in range(len(b) - 1)] for b in bin_edges]
-        for data, string in zip(ds_data, ds_vals_strs):
-            np.save(self.filedir_ds / str("ds" + string), data)
+
         for hist_int, string, bin_edge, bin_center in zip(
             hist_intensities, ds_vals_strs, bin_edges, xvals
         ):
@@ -665,11 +669,13 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         arr = arr.compute()
         return arr
 
+    @staticmethod
     def normalize_no_locations_no_average(
         projs,
         flats,
         dark,
         status_label=None,
+        compute=True,
     ):
         """
         Normalize using dask arrays. Only averages references and normalizes.
@@ -679,19 +685,33 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         flat_mean = np.mean(flats, axis=0)
         # Averaging flats
         dark = np.median(dark, axis=0)
-        denominator = flats_reduced - dark
-        denominator.compute()
-        # Projection locations defined as the centerpoint between two reference
-        # collections
-        # Chunk the projections such that they will be divided by the nearest flat
-        # The first chunk of data will be divided by the first flat.
-        # The first chunk of data is likely smaller than the others.
+        denominator = flat_mean - dark
+
+        @dask.delayed
+        def divide_arrays(x, ind):
+            y = denominator
+            return np.true_divide(x, y)
+
         if status_label is not None:
             status_label.value = f"Dividing by flatfields and taking -log."
-        arr = projs / denominator
-        arr = -da.log(arr)
-        arr = arr.compute()
-        return arr
+        projs = projs.rechunk({0: 'auto', 1: -1, 2: -1})
+        # chunks = projs.chunks[0]  # get all chunk sizes
+        # blocks = projs.to_delayed().ravel()
+
+        # results = [
+        #     da.from_delayed(
+        #         divide_arrays(b, i),
+        #         shape=(chunksize, projs_rechunked.shape[1], projs_rechunked.shape[2]),
+        #         dtype=np.float32,
+        #     )
+        #     for i, (b, chunksize) in enumerate(zip(blocks, chunks))
+        # ]
+        projs = projs / denominator
+        projs = -da.log(projs)
+        if compute:
+            projs = projs.compute()
+
+        return projs
 
     @abstractmethod
     def import_metadata(self, filedir):
@@ -1279,18 +1299,28 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         self.metadata_references.set_extra_metadata(Uploader)
         # self.metadata_projections.filedir = Uploader.
         self.metadata.filedir = self.metadata_projections.filedir
+        self.filedir = self.metadata.filedir
         self.metadata.filepath = self.metadata.filedir / self.metadata.filename
         self.metadata.save_metadata()
         self.import_filedir_projections(Uploader)
         self.import_filedir_flats(Uploader)
         projs, flats, darks = self.setup_normalize(Uploader)
-        self._data = self.normalize_no_locations_no_average(projs, flats, darks)
+        self._data = self.normalize_no_locations_no_average(projs, flats, darks, compute=False)
         self.data = self._data
-        save_filedir_name = str(self.metadata["energy_str"] + "eV")
+        save_filedir_name = str(self.metadata_projections.metadata["energy_str"] + "eV")
         self.import_savedir = self.metadata_projections.filedir / save_filedir_name
-        self.check_import_savedir_exists()
+        self.check_import_savedir_exists(save_filedir_name)
         self.filedir = self.import_savedir
-        self.save_normalized_as_npy()
+        self.filedir.mkdir()
+        da.to_hdf5(self.filedir / "normalized_projections.hdf5", "/projections", self.data)
+        self._check_downsampled_data()
+        self.metadata_projections.set_attributes_from_metadata(self)
+        self.metadata_prenorm = Metadata_SSRL62B_Prenorm()
+        self.metadata_prenorm.set_metadata(self)
+        self.metadata_prenorm.metadata["parent_metadata"] = self.metadata.metadata.copy()
+        self.metadata_prenorm.filedir = self.filedir
+        self.metadata_prenorm.filepath = self.filedir / self.metadata_prenorm.filename
+        self.metadata_prenorm.save_metadata()
 
     def import_metadata(self):
         self.metadata = Metadata_SSRL62B_Raw(
@@ -1326,6 +1356,12 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         Uploader.upload_progress.value = 0
         Uploader.upload_progress.max = len(tifffiles)
         Uploader.import_status_label.value = "Uploading projections"
+        Uploader.progress_output.clear_output()
+        with Uploader.progress_output:
+            display(VBox([Uploader.upload_progress, Uploader.import_status_label], layout=Layout(justify_content="center", align_items="center")
+                )
+                )
+
         arr = []
         for file in tifffiles:
             arr.append(tf.imread(file))
@@ -2333,7 +2369,20 @@ class Metadata_SSRL62B_Raw_Projections(Metadata):
         return self.imported_metadata
 
     def set_attributes_from_metadata(self, projections):
-        projections.pxX
+        projections.num_angles = self.metadata["num_angles"]
+        projections.angles_deg = self.metadata["angles_deg"]
+        projections.angles_rad = self.metadata["angles_rad"]
+        projections.start_angle = self.metadata["start_angle"]
+        projections.end_angle = self.metadata["end_angle"]
+        projections.start_angle = self.metadata["start_angle"]
+        projections.pxZ = self.metadata["pxZ"] 
+        projections.pxY = self.metadata["pxY"]
+        projections.pxX = self.metadata["pxX"]
+        projections.energy_float = self.metadata["energy_float"]
+        projections.energy_str = self.metadata["energy_str"]
+        projections.energy_units = self.metadata["energy_units"]
+        projections.pixel_size = self.metadata["pixel_size"]
+        projections.pixel_units = self.metadata["pixel_units"]
 
     def set_metadata(self, projections):
         pass
@@ -2589,40 +2638,20 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
         self.table_label.value = "SSRL 6-2B TomoPyUI-Imported Metadata"
 
     def set_metadata(self, projections):
-        super().set_metadata(projections)
-        metadata_to_remove = [
-            "scan_info_path",
-            "run_script_path",
-            "scan_info",
-            "scan_type",
-            "scan_order",
-            "all_raw_energies_float",
-            "all_raw_energies_str",
-            "all_raw_pixel_sizes",
-            "pixel_size_from_scan_info",
-            "raw_projections_dtype",
-        ]
-        # removing unneeded things from parent raw
-        [
-            self.metadata.pop(name)
-            for name in metadata_to_remove
-            if name in self.metadata
-        ]
-        self.metadata["flats_ind"] = projections.flats_ind
-        self.metadata["user_overwrite_energy"] = projections.user_overwrite_energy
-        self.metadata["energy_str"] = projections.current_energy_str
-        self.metadata["energy_float"] = projections.current_energy_float
-        self.metadata["pixel_size"] = projections.current_pixel_size
-        self.metadata["normalized_projections_dtype"] = str(np.dtype(np.float32))
-        self.metadata["normalized_projections_size_gb"] = projections.size_gb
-        self.metadata["normalized_projections_directory"] = str(
-            projections.import_savedir
-        )
-        self.metadata["normalized_projections_filename"] = "normalized_projections.npy"
-        self.metadata["normalization_function"] = "dask"
-        self.metadata["downsampled_projections_directory"] = str(projections.filedir_ds)
-        self.metadata["downsampled_values"] = projections.ds_vals
-        self.metadata["saved_as_tiff"] = projections.saved_as_tiff
+        self.metadata["num_angles"] = projections.num_angles
+        self.metadata["angles_deg"] = projections.angles_deg
+        self.metadata["angles_rad"] = projections.angles_rad
+        self.metadata["start_angle"] = projections.start_angle
+        self.metadata["end_angle"] = projections.end_angle
+        self.metadata["start_angle"] = projections.start_angle
+        self.metadata["pxZ"] = projections.pxZ
+        self.metadata["pxY"] = projections.pxY
+        self.metadata["pxX"] = projections.pxX
+        self.metadata["energy_float"] = projections.energy_float
+        self.metadata["energy_str"] = projections.energy_str
+        self.metadata["energy_units"] = projections.energy_units
+        self.metadata["pixel_size"] = projections.pixel_size
+        self.metadata["pixel_units"] = projections.pixel_units
 
     def metadata_to_DataFrame(self):
         # create headers and data for table
