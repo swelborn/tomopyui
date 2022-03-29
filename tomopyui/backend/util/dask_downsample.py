@@ -3,15 +3,17 @@
 ## eventually.
 
 import dask
-import dask.array
+import dask.array as da
 import dask_image
-import scipy.__version__ as scipy_version
 import math
 import numpy as np
 import scipy.ndimage as ndi
+import dask_image.ndfilters
+import dask_image.ndinterp
+
 
 from numpy.lib import NumpyVersion
-
+from scipy import __version__ as scipy_version
 from collections.abc import Iterable
 
 
@@ -24,6 +26,7 @@ def pyramid_reduce(
     cval=0.0,
     preserve_range=False,
     channel_axis=0,
+    pyramid_levels=3,
 ):
 
     """
@@ -60,11 +63,38 @@ def pyramid_reduce(
         sigma = 2 * downscale / 6.0
 
     smoothed = _smooth(image, sigma, mode, cval, channel_axis)
-    out = resize(
+    # TODO: change names. Resize only spline interpolates the data right now.
+    filtered = resize(
         smoothed, out_shape, order=order, mode=mode, cval=cval, anti_aliasing=False
     )
 
-    return out
+    pad_on_levels = [_check_divisible(filtered, 2)]
+    if pad_on_levels[0] is not None:
+        print(pad_on_levels[0])
+        filtered = da.pad(filtered, pad_on_levels[0])
+
+    coarsened = [da.coarsen(np.mean, filtered, {0: 1, 1: 2, 2: 2})]
+    for i in range(pyramid_levels):
+        _ = coarsened[i]
+        pad_on_levels.append(_check_divisible(_, 2))
+        _ = da.pad(_, pad_on_levels[i])
+        coarsened.append(da.coarsen(np.mean, _, {0: 1, 1: 2, 2: 2}))
+
+    return coarsened, pad_on_levels
+
+
+def _check_divisible(arr, factor):
+    shape = arr.shape
+    shape_mod = [dim % 2 for dim in shape]
+    print(shape_mod)
+    if any(x != 0 for x in shape_mod):
+        pad = [0 if mod == 0 else 1 for mod in shape_mod]
+        print(pad)
+        pad[0] = 0
+        pad = [(0, p) for p in pad]
+        return pad
+    else:
+        return None
 
 
 def _check_factor(factor):
@@ -120,8 +150,9 @@ def resize(
 
     if input_type == bool and anti_aliasing:
         raise ValueError("anti_aliasing must be False for boolean images")
+    print(input_shape, output_shape)
     factors = np.divide(input_shape, output_shape)
-
+    print(factors)
     # Save input value range for clip
     img_bounds = [da.min(image), da.max(image)] if clip else None
     # Translate modes used by np.pad to those used by scipy.ndimage
@@ -176,7 +207,7 @@ def _fix_ndimage_mode(mode):
     # SciPy 1.6.0 introduced grid variants of constant and wrap which
     # have less surprising behavior for images. Use these when available
     grid_modes = {"constant": "grid-constant", "wrap": "grid-wrap"}
-    if NumpyVersion(scipy.__version__) >= "1.6.0":
+    if NumpyVersion(scipy_version) >= "1.6.0":
         mode = grid_modes.get(mode, mode)
     return mode
 
@@ -195,12 +226,8 @@ def zoom(
         filtered = dask_image.ndinterp.spline_filter(
             padded, order, output=np.float32, mode=mode
         )
-    coarsened = []
-    coarsened.append(da.coarsen(np.mean, filtered, {0: 1, 1: 2, 2: 2}))
-    for i in range(3):
-        _ = coarsened[i]
-        coarsened.append(da.coarsen(np.mean, _, {0: 1, 1: 2, 2: 2}))
-    return coarsened
+
+    return filtered
 
 
 def _normalize_sequence(input, rank):
@@ -211,9 +238,9 @@ def _normalize_sequence(input, rank):
     is_str = isinstance(input, str)
     if not is_str and isinstance(input, Iterable):
         normalized = list(input)
-    if len(normalized) != rank:
-        err = "sequence argument must have length equal to input rank"
-        raise RuntimeError(err)
+        if len(normalized) != rank:
+            err = "sequence argument must have length equal to input rank"
+            raise RuntimeError(err)
     else:
         normalized = [input] * rank
     return normalized
