@@ -10,11 +10,88 @@ import numpy as np
 import scipy.ndimage as ndi
 import dask_image.ndfilters
 import dask_image.ndinterp
-
+import h5py
 
 from numpy.lib import NumpyVersion
 from scipy import __version__ as scipy_version
 from collections.abc import Iterable
+
+
+def pyramid_reduce_gaussian(
+    image,
+    downscale=2,
+    sigma=None,
+    order=3,
+    mode="reflect",
+    cval=0.0,
+    preserve_range=False,
+    channel_axis=0,
+    pyramid_levels=3,
+    h5_filepath=None,
+    compute=False,
+):
+    coarseneds = []
+    hists = []
+    return_da = True
+    if h5_filepath is not None:
+        compute = False
+        return_da = False
+        open_file = h5py.File(h5_filepath, "r+")
+        if "downsampled" in open_file["projections"].keys():
+            del open_file["/projections/downsampled"]
+    if compute:
+        return_da = False
+
+    for i in range(pyramid_levels):
+        pad_on_levels = _check_divisible(image, 2)
+        if pad_on_levels is not None:
+            image = da.pad(image, pad_on_levels)
+        filtered = pyramid_reduce(
+            image,
+            downscale=downscale,
+            sigma=sigma,
+            order=order,
+            mode=mode,
+            cval=cval,
+            preserve_range=preserve_range,
+            channel_axis=channel_axis,
+        )
+        if filtered is None:
+            break
+        coarsened = da.coarsen(np.mean, filtered, {0: 1, 1: 2, 2: 2})
+        r = [da.min(coarsened), da.max(coarsened)]
+        bins = 200 if coarsened.size > 200 else coarsened.size
+        hist = da.histogram(coarsened, range=r, bins=bins)
+
+        if h5_filepath is not None:
+            grp = "/projections/downsampled/" + str(i)
+            subgrp = "/projections/downsampled/" + str(i) + "/"
+            savedict = {
+                subgrp + "data": coarsened,
+                subgrp + "frequencies": hist[0],
+                subgrp + "bin_edges": hist[1],
+            }
+            da.to_hdf5(h5_filepath, savedict)
+            bin_edges = da.from_array(open_file[subgrp + "bin_edges"])
+            bin_centers = da.from_array(
+                [
+                    (bin_edges[i] + bin_edges[i + 1]) / 2
+                    for i in range(len(bin_edges) - 1)
+                ]
+            )
+            da.to_hdf5(h5_filepath, subgrp + "bin_centers", bin_centers)
+            image = da.from_array(open_file[subgrp + "data"])
+        else:
+            coarseneds.append(coarsened)
+            hists.append(hist)
+    open_file.close()
+
+    if compute:
+        computed_coarseneds = [coarsened.compute() for coarsened in coarsened]
+        computed_hists = [hist.compute() for hist in hists]
+        return computed_coarseneds, computed_hists
+    elif return_da:
+        return coarseneds, hists
 
 
 def pyramid_reduce(
@@ -26,7 +103,6 @@ def pyramid_reduce(
     cval=0.0,
     preserve_range=False,
     channel_axis=0,
-    pyramid_levels=3,
 ):
 
     """
@@ -64,32 +140,21 @@ def pyramid_reduce(
 
     smoothed = _smooth(image, sigma, mode, cval, channel_axis)
     # TODO: change names. Resize only spline interpolates the data right now.
-    filtered = resize(
-        smoothed, out_shape, order=order, mode=mode, cval=cval, anti_aliasing=False
-    )
-
-    pad_on_levels = [_check_divisible(filtered, 2)]
-    if pad_on_levels[0] is not None:
-        print(pad_on_levels[0])
-        filtered = da.pad(filtered, pad_on_levels[0])
-
-    coarsened = [da.coarsen(np.mean, filtered, {0: 1, 1: 2, 2: 2})]
-    for i in range(pyramid_levels):
-        _ = coarsened[i]
-        pad_on_levels.append(_check_divisible(_, 2))
-        _ = da.pad(_, pad_on_levels[i])
-        coarsened.append(da.coarsen(np.mean, _, {0: 1, 1: 2, 2: 2}))
-
-    return coarsened, pad_on_levels
+    try:
+        filtered = resize(
+            smoothed, out_shape, order=order, mode=mode, cval=cval, anti_aliasing=False
+        )
+    except ValueError as e:
+        return
+    else:
+        return filtered
 
 
 def _check_divisible(arr, factor):
     shape = arr.shape
     shape_mod = [dim % 2 for dim in shape]
-    print(shape_mod)
     if any(x != 0 for x in shape_mod):
         pad = [0 if mod == 0 else 1 for mod in shape_mod]
-        print(pad)
         pad[0] = 0
         pad = [(0, p) for p in pad]
         return pad
@@ -150,9 +215,7 @@ def resize(
 
     if input_type == bool and anti_aliasing:
         raise ValueError("anti_aliasing must be False for boolean images")
-    print(input_shape, output_shape)
     factors = np.divide(input_shape, output_shape)
-    print(factors)
     # Save input value range for clip
     img_bounds = [da.min(image), da.max(image)] if clip else None
     # Translate modes used by np.pad to those used by scipy.ndimage
