@@ -343,7 +343,6 @@ class BqImViewerBase(ABC):
             )
             self.plotted_image.image = self.imagestack[0]
 
-
     # Reset
     def reset(self, *args):
         if self.current_plot_axis == 1:
@@ -710,7 +709,7 @@ class BqImViewer_Center(BqImViewer_Import_Analysis):
         self.all_buttons.insert(-2, self.center_line_button)
 
     def create_app(self):
-        
+
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,
@@ -855,7 +854,7 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         self.all_buttons.insert(-2, self.range_from_parent_button)
 
     def create_app(self):
-        
+
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,
@@ -1137,7 +1136,6 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
         self.all_buttons.insert(-2, self.scale_button)
         self.all_buttons.insert(-2, self.start_button)
-
         self.diff_button.on_click(self.switch_to_diff)
         self._disable_diff_callback = True
         self.viewing = False
@@ -1178,7 +1176,7 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             self.scale_button.disabled = True
 
     def create_app(self):
-        
+
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,
@@ -1247,7 +1245,7 @@ class BqImViewer_DataExplorer_AfterAnalysis(BqImViewer_DataExplorer_BeforeAnalys
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
 
     def create_app(self):
-        
+
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,
@@ -1257,7 +1255,6 @@ class BqImViewer_DataExplorer_AfterAnalysis(BqImViewer_DataExplorer_BeforeAnalys
                 self.button_box,
             ]
         )
-
         footer = VBox([self.footer1, footer2])
 
         self.app = VBox([self.header, self.center, footer])
@@ -1383,10 +1380,16 @@ class BqImHist:
 
         if self.implotter.precomputed_hists is not None:
             if isinstance(self.implotter.precomputed_hists, dict):
-                self.ds_numbers = sorted([int(i) for i in self.implotter.precomputed_hists.keys()])
+                self.ds_numbers = sorted(
+                    [int(i) for i in self.implotter.precomputed_hists.keys()]
+                )
                 self.ds_numbers = [str(i) for i in self.ds_numbers]
-                self.bin_centers = self.implotter.precomputed_hists[self.ds_numbers[0]]["bin_centers"]
-                self.frequency = self.implotter.precomputed_hists[self.ds_numbers[0]]["frequency"]
+                self.bin_centers = self.implotter.precomputed_hists[self.ds_numbers[0]][
+                    "bin_centers"
+                ]
+                self.frequency = self.implotter.precomputed_hists[self.ds_numbers[0]][
+                    "frequency"
+                ]
             else:
                 self.bin_centers = self.implotter.precomputed_hists[-1]["bin_centers"]
                 self.frequency = self.implotter.precomputed_hists[-1]["frequency"]

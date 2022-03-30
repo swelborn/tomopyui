@@ -52,6 +52,7 @@ def pyramid_reduce_gaussian(
     pyramid_levels: int
         Number of levels to downscale by 2.
     """
+    from tomopyui.backend.io import IOBase
 
     coarseneds = []
     hists = []
@@ -60,8 +61,8 @@ def pyramid_reduce_gaussian(
         compute = False
         return_da = False
         open_file = h5py.File(h5_filepath, "r+")
-        if "downsampled" in open_file["projections"].keys():
-            del open_file["/projections/downsampled"]
+        if IOBase.hdf_key_ds in open_file:
+            del open_file[IOBase.hdf_key_ds]
     if compute:
         return_da = False
 
@@ -87,23 +88,22 @@ def pyramid_reduce_gaussian(
         hist = da.histogram(coarsened, range=r, bins=bins)
 
         if h5_filepath is not None:
-            grp = "/projections/downsampled/" + str(i)
-            subgrp = "/projections/downsampled/" + str(i) + "/"
+            subgrp = IOBase.hdf_key_ds + str(i) + "/"
             savedict = {
-                subgrp + "data": coarsened,
-                subgrp + "frequency": hist[0],
-                subgrp + "bin_edges": hist[1],
+                subgrp + IOBase.hdf_key_ds_data: coarsened,
+                subgrp + IOBase.hdf_key_ds_bin_frequency: hist[0],
+                subgrp + IOBase.hdf_key_ds_bin_edges: hist[1],
             }
             da.to_hdf5(h5_filepath, savedict)
-            bin_edges = da.from_array(open_file[subgrp + "bin_edges"])
+            bin_edges = da.from_array(open_file[subgrp + IOBase.hdf_key_ds_bin_edges])
             bin_centers = da.from_array(
                 [
                     (bin_edges[i] + bin_edges[i + 1]) / 2
                     for i in range(len(bin_edges) - 1)
                 ]
             )
-            da.to_hdf5(h5_filepath, subgrp + "bin_centers", bin_centers)
-            image = da.from_array(open_file[subgrp + "data"])
+            da.to_hdf5(h5_filepath, subgrp + IOBase.hdf_key_ds_bin_centers, bin_centers)
+            image = da.from_array(open_file[subgrp + IOBase.hdf_key_ds_data])
         else:
             coarseneds.append(coarsened)
             hists.append(hist)
