@@ -30,6 +30,29 @@ def pyramid_reduce_gaussian(
     h5_filepath=None,
     compute=False,
 ):
+
+    """
+    Wrapper for skimage.transform.pyramid_reduce_gaussian.
+
+    Parameters
+    ----------
+    image: dask.array
+        Time series images that you want to reduce into pyramid form.
+    downscale: int
+        Factor by which you would like to downscale the image (along "X" and "Y" pixels)
+    sigma
+        Gaussian standard deviation. Will apply equally on x and y, but not on the channel
+        axis (which defaults to 0).
+    order: int
+        Found in pyramid_reduce order description.
+    mode: str
+        Check pyramid_reduce for description.
+    cval
+        Defines constant value added to borders.
+    pyramid_levels: int
+        Number of levels to downscale by 2.
+    """
+
     coarseneds = []
     hists = []
     return_da = True
@@ -68,7 +91,7 @@ def pyramid_reduce_gaussian(
             subgrp = "/projections/downsampled/" + str(i) + "/"
             savedict = {
                 subgrp + "data": coarsened,
-                subgrp + "frequencies": hist[0],
+                subgrp + "frequency": hist[0],
                 subgrp + "bin_edges": hist[1],
             }
             da.to_hdf5(h5_filepath, savedict)

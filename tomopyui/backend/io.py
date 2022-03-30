@@ -99,7 +99,7 @@ class IOBase:
             This is a label that will update in the frontend.
         """
         filedir = self.filedir
-        files = [pathlib.PurePath(f) for f in os.scandir(filedir) if not f.is_dir()]
+        files = [pathlib.Path(f).name for f in os.scandir(filedir) if not f.is_dir()]
         if "normalized_projections.hdf5" in files:
             h5_file = h5py.File(self.filedir / "normalized_projections.hdf5", "r")
             if "downsampled" in h5_file["projections"].keys():
@@ -208,7 +208,7 @@ class IOBase:
         ds = h5file["projections"]["downsampled"]
         self.data_ds = [ds[key]["data"] for key in ds]
         hist_keys = ["frequency", "bin_centers"]
-        self.hists = [{key: ds[key][hist_keys] for key in hist_keys} for key in ds]
+        self.hists = {key: {h_key:ds[key][h_key] for h_key in hist_keys} for key in ds}
 
     def _file_finder(self, filedir, filetypes: list):
         """
@@ -1330,22 +1330,28 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         self.filedir = self.metadata.filedir
         self.metadata.filepath = self.metadata.filedir / self.metadata.filename
         self.metadata.save_metadata()
+        save_filedir_name = str(self.metadata_projections.metadata["energy_str"] + "eV")
+        self.import_savedir = self.metadata_projections.filedir / save_filedir_name
+        self.check_import_savedir_exists(save_filedir_name)
+        self.import_savedir.mkdir()
         self.import_filedir_projections(Uploader)
         self.import_filedir_flats(Uploader)
         projs, flats, darks = self.setup_normalize(Uploader)
+        Uploader.import_status_label.value = "Normalizing projections"
         self._data = self.normalize_no_locations_no_average(
             projs, flats, darks, compute=False
         )
         self.data = self._data
-        save_filedir_name = str(self.metadata_projections.metadata["energy_str"] + "eV")
-        self.import_savedir = self.metadata_projections.filedir / save_filedir_name
-        self.check_import_savedir_exists(save_filedir_name)
         self.filedir = self.import_savedir
-        self.filedir.mkdir()
         da.to_hdf5(
             self.filedir / "normalized_projections.hdf5", "/projections/data", self.data
         )
-        self._check_downsampled_data()
+        Uploader.import_status_label.value = "Getting data from hdf5"
+        open_file = h5py.File(self.filedir / "normalized_projections.hdf5")["projections"]["data"]
+        self._data = da.from_array(open_file)
+        self.data = self._data
+        Uploader.import_status_label.value = "Downsampling data in a pyramid"
+        self._check_downsampled_data(label=Uploader.import_status_label)
         self.metadata_projections.set_attributes_from_metadata(self)
         self.metadata_prenorm = Metadata_SSRL62B_Prenorm()
         self.metadata_prenorm.set_metadata(self)
@@ -1355,6 +1361,7 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         self.metadata_prenorm.filedir = self.filedir
         self.metadata_prenorm.filepath = self.filedir / self.metadata_prenorm.filename
         self.metadata_prenorm.save_metadata()
+        self.metadata_prenorm.save_metadata_h5(open_file, )
 
     def import_metadata(self):
         self.metadata = Metadata_SSRL62B_Raw(
@@ -1405,8 +1412,13 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
             Uploader.upload_progress.value += 1
         Uploader.import_status_label.value = "Converting to numpy array"
         arr = np.array(arr)
-        Uploader.import_status_label.value = "Saving as npy"
-        np.save(self.metadata_projections.filedir / "projections.npy", arr)
+        arr = np.rot90(arr, axes=(1, 2))
+        Uploader.import_status_label.value = "Converting to dask array"
+        arr = da.from_array(arr, chunks = {0:"auto", 1:-1, 2:-1})
+        Uploader.import_status_label.value = "Saving in normalized_projections.hdf5"
+        da.to_hdf5(
+            self.import_savedir / "normalized_projections.hdf5", "/raw/projections", arr
+        )
 
     def import_filedir_flats(self, Uploader):
         tifffiles = self.metadata_references.metadata["filenames"]
@@ -1420,8 +1432,13 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
             Uploader.upload_progress.value += 1
         Uploader.import_status_label.value = "Converting to numpy array"
         arr = np.array(arr)
-        Uploader.import_status_label.value = "Saving as npy"
-        np.save(self.metadata_projections.filedir / "flats.npy", arr)
+        arr = np.rot90(arr, axes=(1, 2))
+        Uploader.import_status_label.value = "Converting to dask array"
+        arr = da.from_array(arr, chunks = {0:"auto", 1:-1, 2:-1})
+        Uploader.import_status_label.value = "Saving in normalized_projections.hdf5"
+        da.to_hdf5(
+            self.import_savedir / "normalized_projections.hdf5", "/raw/flats", arr
+        )
 
     def import_filedir_darks(self, filedir):
         pass
@@ -1454,12 +1471,9 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         """
         self.flats = None
         self._data = None
-        self.flats = np.load(
-            self.metadata_projections.filedir / "flats.npy", mmap_mode="r"
-        )
-        self._data = np.load(
-            self.metadata_projections.filedir / "projections.npy", mmap_mode="r"
-        )
+        open_file = h5py.File(self.import_savedir / "normalized_projections.hdf5", "a")
+        self.flats = open_file["raw"]["flats"]
+        self._data = open_file["raw"]["projections"]
         self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
         projs = da.from_array(self._data).astype(np.float32)
         flats = da.from_array(self.flats).astype(np.float32)
