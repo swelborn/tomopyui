@@ -1382,8 +1382,14 @@ class BqImHist:
         self.fig.scale_y = bq.LinearScale()
 
         if self.implotter.precomputed_hists is not None:
-            self.bin_centers = self.implotter.precomputed_hists[-1]["bin_centers"]
-            self.frequency = self.implotter.precomputed_hists[-1]["frequency"]
+            if isinstance(self.implotter.precomputed_hists, dict):
+                self.ds_numbers = sorted([int(i) for i in self.implotter.precomputed_hists.keys()])
+                self.ds_numbers = [str(i) for i in self.ds_numbers]
+                self.bin_centers = self.implotter.precomputed_hists[self.ds_numbers[0]]["bin_centers"]
+                self.frequency = self.implotter.precomputed_hists[self.ds_numbers[0]]["frequency"]
+            else:
+                self.bin_centers = self.implotter.precomputed_hists[-1]["bin_centers"]
+                self.frequency = self.implotter.precomputed_hists[-1]["frequency"]
             self.hists = [
                 bq.Bars(
                     x=self.bin_centers,
