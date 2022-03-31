@@ -36,14 +36,14 @@ class AnalysisBase(ABC):
         self.wd = None
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
-        self.downsample_factor = 0.5
+        self.ds_factor = 0.5
         self.num_iter = 1
         self.center = Center.current_center
         self.upsample_factor = 50
         self.extra_options = {}
         self.num_batches = 20
-        self.pixel_range_x = (0, 10)
-        self.pixel_range_y = (0, 10)
+        self.px_range_x = (0, 10)
+        self.px_range_y = (0, 10)
         self.paddingX = 10
         self.paddingY = 10
         self.use_subset_correlation = False
@@ -193,8 +193,8 @@ class AnalysisBase(ABC):
 
         # Downsampling
         self.downsample_checkbox = Checkbox(description="Downsample?", value=False)
-        self.downsample_factor_textbox = BoundedFloatText(
-            value=self.downsample_factor,
+        self.ds_factor_textbox = BoundedFloatText(
+            value=self.ds_factor,
             min=0.001,
             max=1.0,
             description="Downsample factor:",
@@ -266,7 +266,7 @@ class AnalysisBase(ABC):
 
         # Downsampling
         self.downsample_checkbox.observe(self._downsample_turn_on)
-        self.downsample_factor_textbox.observe(
+        self.ds_factor_textbox.observe(
             self.update_downsample_factor_dict, names="value"
         )
 
@@ -329,8 +329,8 @@ class AnalysisBase(ABC):
         self.projections.data = copy.deepcopy(self.Import.projections.data)
         self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
         self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
-        self.pixel_range_x = self.projections.pixel_range_x
-        self.pixel_range_y = self.projections.pixel_range_y
+        self.px_range_x = self.projections.px_range_x
+        self.px_range_y = self.projections.px_range_y
         self.result_before_viewer = self.imported_viewer
         self.result_after_viewer = BqImViewer_DataExplorer_AfterAnalysis(
             self.result_before_viewer
@@ -348,12 +348,12 @@ class AnalysisBase(ABC):
         self.use_altered_button.button_style = "info"
         self.use_altered_button.description = "Creating analysis projections"
         self.use_altered_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections._data = self.altered_viewer.original_imagestack
-        self.projections.data = self.altered_viewer.original_imagestack
+        self.projections._data = self.altered_viewer.original_images
+        self.projections.data = self.altered_viewer.original_images
         self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
         self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
-        self.pixel_range_x = self.altered_viewer.pixel_range_x
-        self.pixel_range_y = self.altered_viewer.pixel_range_y
+        self.px_range_x = self.altered_viewer.px_range_x
+        self.px_range_y = self.altered_viewer.px_range_y
         self.result_before_viewer = self.altered_viewer
         self.result_after_viewer = BqImViewer_DataExplorer_AfterAnalysis(
             self.result_before_viewer
@@ -404,14 +404,14 @@ class AnalysisBase(ABC):
     def _downsample_turn_on(self, change):
         if change.new is True:
             self.downsample = True
-            self.downsample_factor = self.downsample_factor_textbox.value
-            self.downsample_factor_textbox.disabled = False
+            self.ds_factor = self.ds_factor_textbox.value
+            self.ds_factor_textbox.disabled = False
             self.metadata.set_metadata(self)
         if change.new is False:
             self.downsample = False
-            self.downsample_factor = 1
-            self.downsample_factor_textbox.value = 1
-            self.downsample_factor_textbox.disabled = True
+            self.ds_factor = 1
+            self.ds_factor_textbox.value = 1
+            self.ds_factor_textbox.disabled = True
             self.metadata.set_metadata(self)
 
     # Phase cross correlation subset (from altered projections)
@@ -420,7 +420,7 @@ class AnalysisBase(ABC):
         self.metadata.set_metadata(self)
 
     def update_downsample_factor_dict(self, change):
-        self.downsample_factor = change.new
+        self.ds_factor = change.new
         self.metadata.set_metadata(self)
 
     # Batch size
@@ -488,9 +488,9 @@ class AnalysisBase(ABC):
 
     #     # Downsampling
     #     self.downsample_checkbox.value = self.downsample
-    #     self.downsample_factor_textbox.value = self.downsample_factor
+    #     self.ds_factor_textbox.value = self.ds_factor
     #     if self.downsample_checkbox.value:
-    #         self.downsample_factor_textbox.disabled = False
+    #         self.ds_factor_textbox.disabled = False
 
     #     # Batch size
     #     self.num_batches_textbox.value = self.num_batches
@@ -724,7 +724,7 @@ class Align(AnalysisBase):
                         self.paddingX_textbox,
                         self.paddingY_textbox,
                         self.downsample_checkbox,
-                        self.downsample_factor_textbox,
+                        self.ds_factor_textbox,
                         self.extra_options_textbox,
                         self.use_subset_correlation_checkbox,
                         self.pre_alignment_iters_textbox,
@@ -887,7 +887,7 @@ class Recon(AnalysisBase):
                         self.paddingX_textbox,
                         self.paddingY_textbox,
                         self.downsample_checkbox,
-                        self.downsample_factor_textbox,
+                        self.ds_factor_textbox,
                         self.extra_options_textbox,
                     ],
                     layout=Layout(

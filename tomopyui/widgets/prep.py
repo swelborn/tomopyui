@@ -379,23 +379,20 @@ class Prep(ABC):
         self.low_e_viewer.start_button.disabled = False
         self.low_e_viewer.scale_button.button_style = "success"
         self.low_e_viewer.scale_button.icon = "fa-check-square"
-        self.low_e_viewer.diff_imagestack = np.array(
-            [
-                x / np.mean(x)
-                for x in self.low_e_viewer.viewer_parent.original_imagestack
-            ]
-        ) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_imagestack])
-        self.low_e_viewer._original_imagestack = self.low_e_viewer.original_imagestack
+        self.low_e_viewer.diff_images = np.array(
+            [x / np.mean(x) for x in self.low_e_viewer.viewer_parent.original_images]
+        ) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_images])
+        self.low_e_viewer._original_images = self.low_e_viewer.original_images
         self.low_e_viewer.diff_on = False
         self.low_e_viewer._disable_diff_callback = True
         self.low_e_viewer.diff_button.disabled = False
         self.low_e_viewer._disable_diff_callback = False
 
     def register_low_e(self, *args):
-        high_range_x = self.high_e_viewer.pixel_range_x
-        high_range_y = self.high_e_viewer.pixel_range_y
-        low_range_x = self.low_e_viewer.pixel_range_x
-        low_range_y = self.low_e_viewer.pixel_range_y
+        high_range_x = self.high_e_viewer.px_range_x
+        high_range_y = self.high_e_viewer.px_range_y
+        low_range_x = self.low_e_viewer.px_range_x
+        low_range_y = self.low_e_viewer.px_range_y
         low_range_x[1] = int(low_range_x[0] + (high_range_x[1] - high_range_x[0]))
         low_range_y[1] = int(low_range_y[0] + (high_range_y[1] - high_range_y[0]))
         self.low_e_viewer.start_button.button_style = "info"
@@ -438,13 +435,10 @@ class Prep(ABC):
             use_corr_prj_gpu=False,
         )
         self.low_e_viewer.plot(self.low_e_viewer.projections)
-        self.low_e_viewer.diff_imagestack = np.array(
-            [
-                x / np.mean(x)
-                for x in self.low_e_viewer.viewer_parent.original_imagestack
-            ]
-        ) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_imagestack])
-        self.low_e_viewer._original_imagestack = self.low_e_viewer.original_imagestack
+        self.low_e_viewer.diff_images = np.array(
+            [x / np.mean(x) for x in self.low_e_viewer.viewer_parent.original_images]
+        ) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_images])
+        self.low_e_viewer._original_images = self.low_e_viewer.original_images
         self.low_e_viewer.diff_on = False
         self.low_e_viewer._disable_diff_callback = True
         self.low_e_viewer.diff_button.disabled = False
@@ -504,8 +498,8 @@ class Prep(ABC):
             "ROI Normalization",
             renormalize_by_roi,
             [
-                self.imported_viewer.pixel_range_x,
-                self.imported_viewer.pixel_range_y,
+                self.imported_viewer.px_range_x,
+                self.imported_viewer.px_range_y,
             ],
         )
         self.prep_list.append(method.method_tuple)
@@ -628,18 +622,18 @@ class Prep(ABC):
             image_index = self.imported_viewer.image_index_slider.value
             self.altered_viewer.image_index_slider.value = image_index
             self.prepped_data = copy.deepcopy(
-                self.imported_viewer.original_imagestack[image_index]
+                self.imported_viewer.original_images[image_index]
             )
             self.prepped_data = self.prepped_data[np.newaxis, ...]
             for prep_method_tuple in self.prep_list:
                 prep_method_tuple[1].update_method_and_run()
             self.altered_viewer.plotted_image.image = self.prepped_data[0]
         else:
-            self.prepped_data = copy.deepcopy(self.imported_viewer.original_imagestack)
+            self.prepped_data = copy.deepcopy(self.imported_viewer.original_images)
             for num, prep_method_tuple in enumerate(self.prep_list):
                 prep_method_tuple[1].update_method_and_run()
                 self.prep_list_select.index = num
-            self.altered_viewer.original_imagestack = self.prepped_data
+            self.altered_viewer.original_images = self.prepped_data
             self.altered_viewer.plot()
             if self.save_on:
                 self.make_prep_dir()

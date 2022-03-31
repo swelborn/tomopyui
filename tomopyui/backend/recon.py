@@ -39,7 +39,7 @@ class TomoRecon(TomoAlign):
         self.metadata.set_metadata(Recon)
         self.metadata.set_attributes_from_metadata(self)
         if not self.downsample:
-            self.downsample_factor = 1
+            self.ds_factor = 1
         self.Recon = Recon
         self.import_metadata = self.Recon.projections.metadata
         self.projections = Recon.projections

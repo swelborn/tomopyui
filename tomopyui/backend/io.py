@@ -51,15 +51,27 @@ class IOBase:
     hdf_key_raw_darks = "/exchange/data_dark"
     hdf_key_theta = "/exchange/theta"
     hdf_key_norm_proj = "/process/normalized/data"
+    df_key_norm = "/process/normalized/"
     hdf_key_ds = "/process/downsampled/"
     hdf_key_ds_0 = "/process/downsampled/0/"
     hdf_key_ds_1 = "/process/downsampled/1/"
     hdf_key_ds_2 = "/process/downsampled/2/"
-    hdf_key_ds_data = "data"  # to be added after downsampled/0,1,2/...
-    hdf_key_ds_bin_frequency = "frequency"  # to be added after downsampled/0,1,2/...
+    hdf_key_data = "data"  # to be added after downsampled/0,1,2/...
+    hdf_key_bin_frequency = "frequency"  # to be added after downsampled/0,1,2/...
     hdf_key_ds_bin_centers = "bin_centers"  # to be added after downsampled/0,1,2/...
-    hdf_key_ds_bin_edges = "bin_edges"
+    hdf_key_image_range = "image_range"  # to be added after downsampled/0,1,2/...
+    hdf_key_bin_edges = "bin_edges"
+    hdf_key_percentile = "percentile"
+    hdf_key_ds_factor = "ds_factor"
     hdf_key_process = "/process"
+
+    hdf_keys_ds_hist = [
+        hdf_key_bin_frequency,
+        hdf_key_ds_bin_centers,
+        hdf_key_image_range,
+        hdf_key_percentile,
+    ]
+    hdf_keys_ds_hist_scalar = [hdf_key_ds_factor]
 
     def __init__(self):
 
@@ -79,9 +91,10 @@ class IOBase:
         self.energy = None
         self.raw = False
         self.single_file = False
-        self.hists = None
+        self.hist = None
         self.allowed_extensions = [".npy", ".tiff", ".tif"]
         self.metadata = Metadata_General_Prenorm()
+        self.hdf_file = None
 
     @property
     def data(self):
@@ -108,6 +121,107 @@ class IOBase:
         self.extension = value.suffix
         self._filepath = value
 
+    def _check_and_open_hdf(hdf_func):
+        def inner_func(self, *args, **kwargs):
+            self._filepath = self.filedir / self.filename
+            if self.hdf_file:
+                hdf_func(self, *args, **kwargs)
+            else:
+                self._open_hdf_file_read_only(self.filepath)
+
+                hdf_func(self, *args, **kwargs)
+
+        return inner_func
+
+    def _check_and_open_hdf_read_write(hdf_func):
+        def inner_func(self, *args, **kwargs):
+            self._filepath = self.filedir / self.filename
+            if self.hdf_file:
+                hdf_func(self, *args, **kwargs)
+            else:
+                self._open_hdf_file_read_write(self.filepath)
+                hdf_func(self, *args, **kwargs)
+
+        return inner_func
+
+    def _open_hdf_file_read_only(self, filepath=None):
+        if filepath is None:
+            filepath = self.filepath
+        self._close_hdf_file()
+        self.hdf_file = h5py.File(filepath, "r")
+
+    def _open_hdf_file_read_write(self, filepath=None):
+        if filepath is None:
+            filepath = self.filepath
+        self._close_hdf_file()
+        self.hdf_file = h5py.File(filepath, "r+")
+
+    def _open_hdf_file_append(self, filepath=None):
+        if filepath is None:
+            filepath = self.filepath
+        self._close_hdf_file()
+        self.hdf_file = h5py.File(filepath, "a")
+
+    @_check_and_open_hdf
+    def _load_hdf_normalized_data_into_memory(self):
+        self._data = self.hdf_file[self.hdf_key_norm_proj][:]
+        self.data = self._data
+
+    @_check_and_open_hdf
+    def _unload_hdf_normalized_data_from_memory(self):
+        self._data = self.hdf_file[self.hdf_key_norm_proj]
+        self.data = self._data
+
+    @_check_and_open_hdf
+    def _load_hdf_ds_data_into_memory(self, pyramid_level=0):
+        pyramid_level = self.hdf_key_ds + str(pyramid_level) + "/"
+        ds_data_key = pyramid_level + self.hdf_key_data
+        self.data_ds = self.hdf_file[ds_data_key][:]
+        self.hist = {
+            key: self.hdf_file[pyramid_level + key][:] for key in self.hdf_keys_ds_hist
+        }
+        for key in self.hdf_keys_ds_hist_scalar:
+            self.hist[key] = self.hdf_file[pyramid_level + key][()]
+
+    @_check_and_open_hdf
+    def _unload_hdf_ds_data_from_memory(self, pyramid_level=0):
+        pyramid_level = self.hdf_key_ds + str(pyramid_level) + "/"
+        ds_data_key = pyramid_level + self.hdf_key_data
+        self.data_ds = self.hdf_file[ds_data_key]
+        self.hist = {
+            key: self.hdf_file[pyramid_level + key] for key in self.hdf_keys_ds_hist
+        }
+        for key in self.hdf_keys_ds_hist_scalar:
+            self.hist[key] = self.hdf_file[pyramid_level + key]
+
+    @_check_and_open_hdf
+    def _delete_downsampled_data(self):
+        if self.hdf_key_ds in self.hdf_file:
+            del self.hdf_file[self.hdf_key_ds]
+
+    def _close_hdf_file(self):
+        if self.hdf_file:
+            self.hdf_file.close()
+
+    def _dask_hist(self):
+        r = [da.min(self.data), da.max(self.data)]
+        bins = 200 if self.data.size > 200 else self.data.size
+        hist = da.histogram(self.data, range=r, bins=bins)
+        percentile = da.percentile(self.data.flatten(), q=(0.5, 99.5))
+        bin_edges = hist[1]
+        return hist, r, bins, percentile
+
+    def _dask_bin_centers(self, grp, write=False, savedir=None):
+        bin_edges = da.from_array(self.hdf_file[grp + self.hdf_key_bin_edges])
+        bin_centers = da.from_array(
+            [(bin_edges[i] + bin_edges[i + 1]) / 2 for i in range(len(bin_edges) - 1)]
+        )
+        if write and savedir is not None:
+            data_dict = {grp + self.hdf_key_ds_bin_centers: bin_centers}
+            self.dask_data_to_h5(data_dict, savedir=savedir)
+
+        return bin_centers
+
     def _check_downsampled_data(self, label=None):
         """
         Checks to see if there is downsampled data in a directory. If it doesn't it
@@ -123,20 +237,17 @@ class IOBase:
         filedir = self.filedir
         files = [pathlib.Path(f).name for f in os.scandir(filedir) if not f.is_dir()]
         if self.normalized_projections_hdf_key in files:
-            h5_file = h5py.File(self.filedir / self.normalized_projections_hdf_key, "r")
-            if self.hdf_key_ds in h5_file:
-                self._load_ds_and_hists_h5(h5_file)
+            self._filepath = filedir / self.normalized_projections_hdf_key
+            self.filepath = self._filepath
+            self._open_hdf_file_read_write()
+            if self.hdf_key_ds in self.hdf_file:
+                self._load_hdf_ds_data_into_memory()
             else:
-                h5_file.close()
                 pyramid_reduce_gaussian(
                     self.data,
-                    h5_filepath=filedir / self.normalized_projections_hdf_key,
+                    io_obj=self,
                 )
-                # TODO unsure if you need to open and close it like this
-                h5_file = h5py.File(
-                    self.filedir / self.normalized_projections_hdf_key, "r"
-                )
-                self._load_ds_and_hists_h5(h5_file)
+                self._load_hdf_ds_data_into_memory()
 
         else:
             try:
@@ -216,7 +327,7 @@ class IOBase:
 
         """
         ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
-        self.hists = [
+        self.hist = [
             np.load(self.filedir_ds / str("ds" + string + "hist.npz"))
             for string in ds_vals_strs
         ]
@@ -224,17 +335,6 @@ class IOBase:
             np.load(self.filedir_ds / str("ds" + string + ".npy"), mmap_mode="r")
             for string in ds_vals_strs
         ]
-
-    def _load_ds_and_hists_h5(self, h5file):
-        """
-        Loads in downsampled data and their respective histograms to memory for
-        fast viewing in the plotters.
-
-        """
-        ds = h5file[self.hdf_key_ds]
-        self.data_ds = [ds[key][self.hdf_key_ds_data] for key in ds]
-        hist_keys = [self.hdf_key_ds_bin_frequency, self.hdf_key_ds_bin_centers]
-        self.hists = {key: {h_key: ds[key][h_key] for h_key in hist_keys} for key in ds}
 
     def _file_finder(self, filedir, filetypes: list):
         """
@@ -287,15 +387,15 @@ class ProjectionsBase(IOBase, ABC):
         "num_angles": "pxZ",
         "width": "pxX",
         "height": "pxY",
-        "pixel_range_x": "rangeX",
-        "pixel_range_y": "rangeY",
-        "pixel_range_z": "rangeZ",  # Could probably fix these
+        "px_range_x": "rangeX",
+        "px_range_y": "rangeY",
+        "px_range_z": "rangeZ",  # Could probably fix these
     }
 
     def __init__(self):
         super().__init__()
         self.ds_vals = [(1, 0.25, 0.25)]
-        self.current_pixel_size = 1
+        self.px_size = 1
         self.angles_rad = None
         self.angles_deg = None
         self.saved_as_tiff = False
@@ -325,16 +425,14 @@ class ProjectionsBase(IOBase, ABC):
         """
         tf.imwrite(self.filedir / str(self.normalized_projections_tif_key), self.data)
 
-    def dask_data_to_h5(self, data, dataset_key: str, savedir=None):
+    def dask_data_to_h5(self, data_dict, savedir=None):
         """
         Brings lazy dask arrays to hdf5 under /exchange under current filedir.
 
         Parameters
         ----------
-        data: dask.Array
-            Data you want to save
-        dataset_key: str
-            Dataset you want to wave the data under
+        data_dict: dict
+            Dictionary like {"/path/to/data": data}
         savedir: pathlib.Path
             Optional. Will default to self.filedir
         """
@@ -342,11 +440,13 @@ class ProjectionsBase(IOBase, ABC):
             filedir = self.filedir
         else:
             filedir = savedir
-        if not isinstance(data, da.Array):
-            data = da.from_array(data)
+        for key in data_dict:
+            if not isinstance(data_dict[key], da.Array):
+                data_dict[key] = da.from_array(data_dict[key])
+
         da.to_hdf5(
             filedir / self.normalized_projections_hdf_key,
-            {dataset_key: data},
+            data_dict,
         )
 
     @abstractmethod
@@ -422,14 +522,22 @@ class Projections_Prenormalized(ProjectionsBase):
         # will be uploaded. This behavior is probably OK if we stick to this file
         # structure
         if Uploader.imported_metadata:
-            Uploader.import_status_label.value = (
-                "Detected metadata.json in this directory,"
-                + " uploading normalized_projections.npy."
-            )
+            files = self._file_finder(self.filedir, [".npy", ".hdf5", ".h5"])
+            if any([x in files for x in [".h5", ".hdf5"]]):
+                Uploader.import_status_label.value = (
+                    "Detected metadata and hdf5 file in this directory,"
+                    + " uploading normalized_projections.hdf5"
+                )
+            elif ".npy" in files:
+                Uploader.import_status_label.value = (
+                    "Detected metadata and npy file in this directory,"
+                    + " uploading normalized_projections.npy"
+                )
+                self.metadata.set_attributes_from_metadata(self)
+                self._data = np.load(
+                    self.filedir / "normalized_projections.npy"
+                ).astype(np.float32)
             self.metadata.set_attributes_from_metadata(self)
-            self._data = np.load(
-                self.filedir / self.normalized_projections_npy_key
-            ).astype(np.float32)
             self._check_downsampled_data()
             if Uploader.save_tiff_on_import_checkbox.value:
                 Uploader.import_status_label.value = "Saving projections as .tiff."
@@ -537,7 +645,7 @@ class Projections_Prenormalized(ProjectionsBase):
         Saves current data and metadata in import_savedir.
         """
         self.filedir = self.import_savedir
-        self.dask_data_to_h5(self.data, self.hdf_key_norm_proj)
+        self.dask_data_to_h5({self.hdf_key_norm_proj: self.data})
         self.saved_as_tiff = False
         if Uploader.save_tiff_on_import_checkbox.value:
             Uploader.import_status_label.value = "Saving projections as .tiff."
@@ -1180,14 +1288,13 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             if energy not in self.selected_energies:
                 continue
             else:
+                _tmp_filedir = copy.deepcopy(self.filedir)
                 self.metadata = Metadata_SSRL62C_Prenorm()
                 self.metadata.set_parent_metadata(parent_metadata)
                 Uploader.upload_progress.value = 0
-                self.current_energy_str = energy
-                self.current_energy_float = float(energy)
-                self.current_pixel_size = self.calculate_px_size(
-                    float(energy), self.binning
-                )
+                self.energy_str = energy
+                self.energy_float = float(energy)
+                self.px_size = self.calculate_px_size(float(energy), self.binning)
                 Uploader.progress_output.clear_output()
                 self.energy_label = Label(
                     f"{energy} eV", layout=Layout(justify_content="center")
@@ -1235,10 +1342,8 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                         dt_str = now.strftime("%Y%m%d-%H%M%S-")
                         save_name = dt_str + energy_filedir_name
                         self.import_savedir = pathlib.Path(self.filedir / save_name)
-
                 self.import_savedir.mkdir()
-
-                projs, flats, darks, open_file = self.setup_normalize()
+                projs, flats, darks = self.setup_normalize()
                 self.status_label.value = "Calculating flat positions."
                 self.flats_ind_from_collect(collect)
                 self.status_label.value = "Normalizing."
@@ -1254,11 +1359,18 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 self.data = self._data
 
                 self.status_label.value = "Saving projections as .npy for faster IO."
-                self.dask_data_to_h5(
-                    self.data, self.hdf_key_norm_proj, savedir=self.import_savedir
-                )
+                hist, r, bins, percentile = self._dask_hist()
+                grp = IOBase.df_key_norm + "/"
+                data_dict = {
+                    self.hdf_key_norm_proj: self.data,
+                    grp + self.hdf_key_bin_frequency: hist[0],
+                    grp + self.hdf_key_bin_edges: hist[1],
+                    grp + self.hdf_key_image_range: r,
+                    grp + self.hdf_key_percentile: percentile,
+                }
+                self.dask_data_to_h5(data_dict, savedir=self.import_savedir)
+                self._dask_bin_centers(grp, write=True, savedir=self.import_savedir)
                 self.saved_as_tiff = False
-                _tmp_filedir = copy.deepcopy(self.filedir)
                 self.filedir = self.import_savedir
                 if Uploader.save_tiff_on_import_checkbox.value:
                     self.status_label.value = "Saving projections as .tiff."
@@ -1273,7 +1385,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 self.metadata.filename = "import_metadata.json"
                 self.metadata.save_metadata()
                 self.filedir = _tmp_filedir
-                open_file.close()
+                self._close_hdf_file()
 
     def setup_normalize(self):
         """
@@ -1289,36 +1401,32 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         darks: dask array
             Zeros array with the same image dimensions as flats
         """
-        self.status_label.value = "Saving flats."
-        self.dask_data_to_h5(
-            self.flats, self.hdf_key_raw_flats, savedir=self.import_savedir
-        )
-        self.status_label.value = "Saving projections."
-        self.dask_data_to_h5(
-            self._data, self.hdf_key_raw_proj, savedir=self.import_savedir
-        )
-        open_file = h5py.File(
-            self.import_savedir / self.normalized_projections_hdf_key, "r+"
-        )
+        data_dict = {
+            self.hdf_key_raw_flats: self.flats,
+            self.hdf_key_raw_proj: self._data,
+        }
+        self.dask_data_to_h5(data_dict, savedir=self.import_savedir)
+        self.filepath = self.import_savedir / self.normalized_projections_hdf_key
+        self._open_hdf_file_read_write()
         z_chunks_proj = self.scan_info["NEXPOSURES"]
         z_chunks_flats = self.scan_info["REFNEXPOSURES"]
         self.flats = None
         self._data = None
 
         self.flats = da.from_array(
-            open_file[self.hdf_key_raw_flats],
+            self.hdf_file[self.hdf_key_raw_flats],
             chunks=(z_chunks_flats, -1, -1),
         ).astype(np.float32)
 
         self._data = da.from_array(
-            open_file[self.hdf_key_raw_proj],
+            self.hdf_file[self.hdf_key_raw_proj],
             chunks=(z_chunks_proj, -1, -1),
         ).astype(np.float32)
         darks = da.from_array(self.darks, chunks=(-1, -1, -1)).astype(np.float32)
         projs = self._data
         flats = self.flats
 
-        return projs, flats, darks, open_file
+        return projs, flats, darks
 
     def flats_ind_from_collect(self, collect):
         """
@@ -1961,11 +2069,11 @@ class Metadata_General_Prenorm(Metadata):
         projections.start_angle = self.metadata["start_angle"]
         projections.end_angle = self.metadata["end_angle"]
         projections.binning = self.metadata["binning"]
-        projections.current_energy_str = self.metadata["energy_str"]
-        projections.current_energy_float = self.metadata["energy_float"]
-        projections.energy = projections.current_energy_float
+        projections.energy_str = self.metadata["energy_str"]
+        projections.energy_float = self.metadata["energy_float"]
+        projections.energy = projections.energy_float
         projections.energy_units = self.metadata["energy_units"]
-        projections.current_pixel_size = self.metadata["pixel_size"]
+        projections.px_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
 
     def set_metadata_from_attributes_after_import(self, projections):
@@ -1973,7 +2081,10 @@ class Metadata_General_Prenorm(Metadata):
         self.metadata["normalized_projections_directory"] = str(
             projections.import_savedir
         )
-        self.metadata["downsampled_projections_directory"] = str(projections.filedir_ds)
+        if "filedir_ds" in projections.__dict__:
+            self.metadata["downsampled_projections_directory"] = str(
+                projections.filedir_ds
+            )
         self.metadata["downsampled_values"] = projections.ds_vals
         self.metadata["saved_as_tiff"] = projections.saved_as_tiff
         self.metadata["num_angles"] = projections.data.shape[0]
@@ -1988,19 +2099,20 @@ class Metadata_General_Prenorm(Metadata):
         projections.start_angle = self.metadata["start_angle"]
         projections.end_angle = self.metadata["end_angle"]
         projections.binning = self.metadata["binning"]
-        projections.current_energy_str = self.metadata["energy_str"]
-        projections.current_energy_float = self.metadata["energy_float"]
-        projections.energy = projections.current_energy_float
+        projections.energy_str = self.metadata["energy_str"]
+        projections.energy_float = self.metadata["energy_float"]
+        projections.energy = projections.energy_float
         projections.energy_units = self.metadata["energy_units"]
-        projections.current_pixel_size = self.metadata["pixel_size"]
+        projections.px_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
         projections.size_gb = self.metadata["normalized_projections_size_gb"]
         projections.import_savedir = pathlib.Path(
             self.metadata["normalized_projections_directory"]
         )
-        projections.filedir_ds = pathlib.Path(
-            self.metadata["downsampled_projections_directory"]
-        )
+        if "downsampled_projections_directory" in self.metadata:
+            projections.filedir_ds = pathlib.Path(
+                self.metadata["downsampled_projections_directory"]
+            )
         projections.ds_vals = self.metadata["downsampled_values"]
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
         if "angles_rad" in self.metadata:
@@ -2240,9 +2352,9 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         ]
         self.metadata["flats_ind"] = projections.flats_ind
         self.metadata["user_overwrite_energy"] = projections.user_overwrite_energy
-        self.metadata["energy_str"] = projections.current_energy_str
-        self.metadata["energy_float"] = projections.current_energy_float
-        self.metadata["pixel_size"] = projections.current_pixel_size
+        self.metadata["energy_str"] = projections.energy_str
+        self.metadata["energy_float"] = projections.energy_float
+        self.metadata["pixel_size"] = projections.px_size
         self.metadata["normalized_projections_dtype"] = str(np.dtype(np.float32))
         self.metadata["normalized_projections_size_gb"] = projections.size_gb
         self.metadata["normalized_projections_directory"] = str(
@@ -2252,8 +2364,6 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
             "normalized_projections_filename"
         ] = projections.normalized_projections_hdf_key
         self.metadata["normalization_function"] = "dask"
-        self.metadata["downsampled_projections_directory"] = str(projections.filedir_ds)
-        self.metadata["downsampled_values"] = projections.ds_vals
         self.metadata["saved_as_tiff"] = projections.saved_as_tiff
 
     def metadata_to_DataFrame(self):
@@ -2265,8 +2375,8 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         end_angle = self.metadata["end_angle"]
         exp_time_proj = f"{self.metadata['projections_exposure_time']:0.2f}"
         exp_time_ref = f"{self.metadata['references_exposure_time']:0.2f}"
-        ds_vals = self.metadata["downsampled_values"]
-        ds_vals = [x[2] for x in ds_vals]
+        # ds_vals = self.metadata["downsampled_values"]
+        # ds_vals = [x[2] for x in ds_vals]
         if self.metadata["user_overwrite_energy"]:
             user_overwrite = "Yes"
         else:
@@ -2294,7 +2404,7 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
             {
                 "Energy Overwritten": user_overwrite,
                 ".tif Saved": save_as_tiff,
-                "Downsample Values": ds_vals,
+                # "Downsample Values": ds_vals,
             },
         ]
         middle_headers = [[]]
@@ -2386,25 +2496,27 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         # projections.energies_list_float = self.metadata["all_raw_energies_float"]
         # projections.energies_list_str = self.metadata["all_raw_energies_str"]
         projections.user_overwrite_energy = self.metadata["user_overwrite_energy"]
-        projections.current_energy_str = self.metadata["energy_str"]
-        projections.current_energy_float = self.metadata["energy_float"]
+        projections.energy_str = self.metadata["energy_str"]
+        projections.energy_float = self.metadata["energy_float"]
         projections.energy_units = self.metadata["energy_units"]
         # projections.raw_pixel_sizes = self.metadata["all_raw_pixel_sizes"]
         # projections.pixel_size_from_metadata = self.metadata[
         #     "pixel_size_from_scan_info"
         # ]
-        projections.current_pixel_size = self.metadata["pixel_size"]
+        projections.px_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
         # projections.size_gb = self.metadata["normalized_projections_size_gb"]
         projections.import_savedir = pathlib.Path(
             self.metadata["normalized_projections_directory"]
         )
-        projections.filedir_ds = pathlib.Path(
-            self.metadata["downsampled_projections_directory"]
-        )
+        if "downsampled_projections_directory" in self.metadata:
+            projections.filedir_ds = pathlib.Path(
+                self.metadata["downsampled_projections_directory"]
+            )
         if "flats_ind" in self.metadata:
             projections.flats_ind = self.metadata["flats_ind"]
-        projections.ds_vals = self.metadata["downsampled_values"]
+        if "downsampled_values" in self.metadata:
+            projections.ds_vals = self.metadata["downsampled_values"]
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
 
 
@@ -2900,14 +3012,14 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
         # projections.energies_list_float = self.metadata["all_raw_energies_float"]
         # projections.energies_list_str = self.metadata["all_raw_energies_str"]
         projections.user_overwrite_energy = self.metadata["user_overwrite_energy"]
-        projections.current_energy_str = self.metadata["energy_str"]
-        projections.current_energy_float = self.metadata["energy_float"]
+        projections.energy_str = self.metadata["energy_str"]
+        projections.energy_float = self.metadata["energy_float"]
         projections.energy_units = self.metadata["energy_units"]
         # projections.raw_pixel_sizes = self.metadata["all_raw_pixel_sizes"]
         # projections.pixel_size_from_metadata = self.metadata[
         #     "pixel_size_from_scan_info"
         # ]
-        projections.current_pixel_size = self.metadata["pixel_size"]
+        projections.px_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
         # projections.size_gb = self.metadata["normalized_projections_size_gb"]
         projections.import_savedir = pathlib.Path(
@@ -3400,7 +3512,7 @@ class Metadata_Align(Metadata):
     def set_metadata(self, Align):
         self.metadata["metadata_type"] = "Align"
         self.metadata["opts"]["downsample"] = Align.downsample
-        self.metadata["opts"]["downsample_factor"] = Align.downsample_factor
+        self.metadata["opts"]["downsample_factor"] = Align.ds_factor
         self.metadata["opts"]["num_iter"] = Align.num_iter
         self.metadata["opts"]["center"] = Align.center
         self.metadata["opts"]["pad"] = (
@@ -3410,8 +3522,8 @@ class Metadata_Align(Metadata):
         self.metadata["opts"]["extra_options"] = Align.extra_options
         self.metadata["methods"] = Align.methods_opts
         self.metadata["save_opts"] = Align.save_opts
-        self.metadata["pixel_range_x"] = Align.pixel_range_x
-        self.metadata["pixel_range_y"] = Align.pixel_range_y
+        self.metadata["px_range_x"] = Align.px_range_x
+        self.metadata["px_range_y"] = Align.px_range_y
         self.metadata["parent_filedir"] = Align.projections.filedir
         self.metadata["parent_filename"] = Align.projections.filename
         self.metadata["angle_start"] = Align.projections.angles_deg[0]
@@ -3443,8 +3555,8 @@ class Metadata_Align(Metadata):
         ]
         metadata_frame["Headers"] = metadata_frame["Headers"] + extra_headers
         extra_values = [
-            self.metadata["pixel_range_x"],
-            self.metadata["pixel_range_y"],
+            self.metadata["px_range_x"],
+            self.metadata["px_range_y"],
             self.metadata["angle_start"],
             self.metadata["angle_end"],
             time,
@@ -3477,7 +3589,7 @@ class Metadata_Align(Metadata):
 
     def set_attributes_from_metadata(self, Align):
         Align.downsample = self.metadata["opts"]["downsample"]
-        Align.downsample_factor = self.metadata["opts"]["downsample_factor"]
+        Align.ds_factor = self.metadata["opts"]["downsample_factor"]
         Align.num_iter = self.metadata["opts"]["num_iter"]
         Align.center = self.metadata["opts"]["center"]
         (Align.paddingX, Align.paddingY) = self.metadata["opts"]["pad"]
@@ -3485,8 +3597,12 @@ class Metadata_Align(Metadata):
         Align.extra_options = self.metadata["opts"]["extra_options"]
         Align.methods_opts = self.metadata["methods"]
         Align.save_opts = self.metadata["save_opts"]
-        Align.pixel_range_x = self.metadata["pixel_range_x"]
-        Align.pixel_range_y = self.metadata["pixel_range_y"]
+        if "px_range_x" in self.metadata.keys():
+            Align.px_range_x = self.metadata["px_range_x"]
+            Align.px_range_y = self.metadata["px_range_y"]
+        else:
+            Align.px_range_x = self.metadata["pixel_range_x"]
+            Align.px_range_y = self.metadata["pixel_range_y"]
         self.set_attributes_object_specific(Align)
 
     def set_attributes_object_specific(self, Align):

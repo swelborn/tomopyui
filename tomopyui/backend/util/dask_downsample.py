@@ -11,6 +11,7 @@ import scipy.ndimage as ndi
 import dask_image.ndfilters
 import dask_image.ndinterp
 import h5py
+import os
 
 from numpy.lib import NumpyVersion
 from scipy import __version__ as scipy_version
@@ -29,6 +30,7 @@ def pyramid_reduce_gaussian(
     pyramid_levels=3,
     h5_filepath=None,
     compute=False,
+    io_obj=None,
 ):
 
     """
@@ -57,12 +59,22 @@ def pyramid_reduce_gaussian(
     coarseneds = []
     hists = []
     return_da = True
+    downsample_factor = 1
     if h5_filepath is not None:
         compute = False
         return_da = False
         open_file = h5py.File(h5_filepath, "r+")
         if IOBase.hdf_key_ds in open_file:
             del open_file[IOBase.hdf_key_ds]
+    if io_obj is not None:
+        compute = False
+        return_da = False
+        io_obj._open_hdf_file_append()
+        io_obj._delete_downsampled_data()
+        image = io_obj.hdf_file[io_obj.hdf_key_norm_proj]
+        open_file = io_obj.hdf_file
+        h5_filepath = io_obj.filepath
+
     if compute:
         return_da = False
 
@@ -80,22 +92,31 @@ def pyramid_reduce_gaussian(
             preserve_range=preserve_range,
             channel_axis=channel_axis,
         )
+
         if filtered is None:
             break
-        coarsened = da.coarsen(np.mean, filtered, {0: 1, 1: 2, 2: 2})
+        coarsened = da.coarsen(np.mean, filtered, {0: 1, 1: 2, 2: 2}).astype(np.float32)
         r = [da.min(coarsened), da.max(coarsened)]
         bins = 200 if coarsened.size > 200 else coarsened.size
         hist = da.histogram(coarsened, range=r, bins=bins)
+        percentile = da.percentile(coarsened.flatten(), q=(0.5, 99.5))
+        downsample_factor = da.from_array(np.power(2, i + 1))
 
         if h5_filepath is not None:
+
             subgrp = IOBase.hdf_key_ds + str(i) + "/"
+            r = da.from_array(r)
+            downsample_factor = downsample_factor
             savedict = {
-                subgrp + IOBase.hdf_key_ds_data: coarsened,
-                subgrp + IOBase.hdf_key_ds_bin_frequency: hist[0],
-                subgrp + IOBase.hdf_key_ds_bin_edges: hist[1],
+                subgrp + IOBase.hdf_key_data: coarsened,
+                subgrp + IOBase.hdf_key_bin_frequency: hist[0],
+                subgrp + IOBase.hdf_key_bin_edges: hist[1],
+                subgrp + IOBase.hdf_key_image_range: r,
+                subgrp + IOBase.hdf_key_percentile: percentile,
+                subgrp + IOBase.hdf_key_ds_factor: downsample_factor,
             }
             da.to_hdf5(h5_filepath, savedict)
-            bin_edges = da.from_array(open_file[subgrp + IOBase.hdf_key_ds_bin_edges])
+            bin_edges = da.from_array(open_file[subgrp + IOBase.hdf_key_bin_edges])
             bin_centers = da.from_array(
                 [
                     (bin_edges[i] + bin_edges[i + 1]) / 2
@@ -103,7 +124,7 @@ def pyramid_reduce_gaussian(
                 ]
             )
             da.to_hdf5(h5_filepath, subgrp + IOBase.hdf_key_ds_bin_centers, bin_centers)
-            image = da.from_array(open_file[subgrp + IOBase.hdf_key_ds_data])
+            image = da.from_array(open_file[subgrp + IOBase.hdf_key_data])
         else:
             coarseneds.append(coarsened)
             hists.append(hist)
@@ -240,7 +261,7 @@ def resize(
         raise ValueError("anti_aliasing must be False for boolean images")
     factors = np.divide(input_shape, output_shape)
     # Save input value range for clip
-    img_bounds = [da.min(image), da.max(image)] if clip else None
+    # img_bounds = [da.min(image), da.max(image)] if clip else None
     # Translate modes used by np.pad to those used by scipy.ndimage
     ndi_mode = _to_ndimage_mode(mode)
     if NumpyVersion(scipy_version) >= "1.6.0":

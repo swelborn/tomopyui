@@ -40,27 +40,26 @@ class BqImViewerBase(ABC):
         "PuBuGn",
     ]
 
-    def __init__(self, imagestack=None):
-        if imagestack is None:
-            self.original_imagestack = np.random.rand(5, 50, 50)
-            self.imagestack = self.original_imagestack
+    def __init__(self, images=None):
+        if images is None:
+            self.original_images = np.random.rand(5, 50, 50)
+            self.images = self.original_images
         else:
-            self.original_imagestack = imagestack
-            self.imagestack = imagestack
+            self.original_images = images
+            self.images = images
         self.current_image_ind = 0
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.pxX = self.imagestack.shape[2]
-        self.pxY = self.imagestack.shape[1]
+        self.pxX = self.images.shape[2]
+        self.pxY = self.images.shape[1]
         self.aspect_ratio = self.pxX / self.pxY
         self.fig = None
-        self.downsample_factor = 0.25
-        self.precomputed_hists = None
-        self.current_pixel_size = 1
+        self.ds_factor = 0
+        self.px_size = 1
         self.dimensions = ("550px", "550px")
         self.current_plot_axis = 0
         self.rectangle_selector_on = False
         self.current_interval = 300
+        self.from_hdf = False
+        self.from_npy = False
         self._init_fig()
         self._init_widgets()
         self._init_observes()
@@ -82,13 +81,13 @@ class BqImViewerBase(ABC):
             "x": self.scale_x,
             "y": self.scale_y,
             "image": bq.ColorScale(
-                min=self.vmin,
-                max=self.vmax,
+                min=np.min(self.images),
+                max=np.max(self.images),
                 scheme="viridis",
             ),
         }
         self.plotted_image = ImageGL(
-            image=self.imagestack[self.current_image_ind],
+            image=self.images[self.current_image_ind],
             scales=self.image_scale,
         )
         self.fig.marks = (self.plotted_image,)
@@ -114,7 +113,7 @@ class BqImViewerBase(ABC):
         self.image_index_slider = IntSlider(
             value=0,
             min=0,
-            max=self.imagestack.shape[0] - 1,
+            max=self.images.shape[0] - 1,
             step=1,
         )
 
@@ -122,7 +121,7 @@ class BqImViewerBase(ABC):
         self.play = Play(
             value=0,
             min=0,
-            max=self.imagestack.shape[0] - 1,
+            max=self.images.shape[0] - 1,
             step=1,
             interval=self.current_interval,
             disabled=False,
@@ -176,22 +175,12 @@ class BqImViewerBase(ABC):
         # Histogram
         self.hist = BqImHist(self)
 
-        # Downsample (for viewing) textbox
-        self.downsample_viewer_textbox = FloatText(
-            description="Viewer sampling:",
-            min=0.1,
-            max=1,
-            value=self.downsample_factor,
-            step=0.1,
+        # Downsample dropdown menu
+        self.ds_viewer_dropdown = Dropdown(
+            description="Viewer binning: ",
+            options=[("Original", -1), ("2", 0), ("4", 1), ("8", 2)],
+            value=0,
             style=extend_description_style,
-        )
-
-        # Downsample (for viewing) button
-        self.downsample_viewer_button = Button(
-            icon="arrow-down",
-            layout=self.button_layout,
-            style=self.button_font,
-            tooltip="Downsample for faster viewing. Does not impact analysis data.",
         )
 
         # Reset button
@@ -237,7 +226,7 @@ class BqImViewerBase(ABC):
         self.swap_axes_button.on_click(self.swap_axes)
 
         # Removing high/low intensities button
-        self.rm_high_low_int_button.on_click(self.rm_high_low_int)
+        self.rm_high_low_int_button.on_click(self.hist.rm_high_low_int)
 
         # Faster play interval
         self.plus_button.on_click(self.speed_up)
@@ -248,11 +237,8 @@ class BqImViewerBase(ABC):
         # Save a movie at the current vmin/vmax
         self.save_movie_button.on_click(self.save_movie)
 
-        # Downsample (for viewing) button
-        self.downsample_viewer_textbox.observe(self.change_downsample_button, "value")
-
-        # Downsample (for viewing) button
-        self.downsample_viewer_button.on_click(self.downsample_viewer)
+        # Downsample dropdown menu
+        self.ds_viewer_dropdown.observe(self.downsample_viewer, "value")
 
         # Reset button
         self.reset_button.on_click(self.reset)
@@ -261,7 +247,7 @@ class BqImViewerBase(ABC):
         self.msg_interaction.on_msg(self.on_mouse_msg_intensity)
 
         # Rectangle selector
-        self.rectangle_selector.observe(self.rectangle_to_pixel_range, "selected")
+        self.rectangle_selector.observe(self.rectangle_to_px_range, "selected")
 
         # Rectangle selector button
         self.rectangle_selector_button.on_click(self.rectangle_select)
@@ -277,13 +263,8 @@ class BqImViewerBase(ABC):
 
     # Image index
     def change_image(self, change):
-        self.plotted_image.image = self.imagestack[change.new]
+        self.plotted_image.image = self.images[change.new]
         self.current_image_ind = change.new
-
-    # Color range
-    def update_color_range(self, change):
-        self.image_scale["image"].min = change["new"][0]
-        self.image_scale["image"].max = change["new"][1]
 
     # Scheme
     def update_scheme(self, *args):
@@ -291,57 +272,47 @@ class BqImViewerBase(ABC):
 
     # Swap axes
     def swap_axes(self, *args):
-        self.imagestack = np.swapaxes(self.imagestack, 0, 1)
+        self.images = np.swapaxes(self.images, 0, 1)
         self.change_aspect_ratio()
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
-        self.plotted_image.image = self.imagestack[self.image_index_slider.value]
+        self.plotted_image.image = self.images[self.image_index_slider.value]
         if self.current_plot_axis == 0:
             self.current_plot_axis = 1
         else:
             self.current_plot_axis = 0
 
-    # Removing high/low intensities
-    def rm_high_low_int(self, change):
-        self.vmin, self.vmax = np.percentile(self.imagestack, q=(0.5, 99.5))
-        self.hist.selector.selected = [self.vmin, self.vmax]
-
-    # Change downsample to upsample
-    def change_downsample_button(self, *args):
-        if self.downsample_viewer_textbox.value > self.downsample_factor:
-            self.downsample_viewer_button.disabled = False
-            self.downsample_viewer_button.icon = "arrow-up"
-            self.downsample_viewer_button.button_style = "success"
-        elif self.downsample_viewer_textbox.value < self.downsample_factor:
-            self.downsample_viewer_button.disabled = False
-            self.downsample_viewer_button.icon = "arrow-down"
-            self.downsample_viewer_button.button_style = "success"
-        else:
-            self.downsample_viewer_button.icon = "sort"
-            self.downsample_viewer_button.disabled = True
-            self.downsample_viewer_button.button_style = ""
-
     # Downsample the plot view
     def downsample_viewer(self, *args):
-        self.downsample_factor = self.downsample_viewer_textbox.value
-        self.downsample_imagestack(self.original_imagestack)
-        self.change_downsample_button()
+        self.ds_factor = self.ds_viewer_dropdown.value
 
-    def downsample_imagestack(self, imagestack):
-        self.imagestack = copy.deepcopy(imagestack)
-        self.image_index_slider.value = 0
-        if self.downsample_factor == 1:
-            self.plotted_image.image = self.original_imagestack[0]
-            self.imagestack = self.original_imagestack
-            self.change_aspect_ratio()
-            return
+        if self.from_hdf and self.ds_factor != -1:
+            self.projections._unload_hdf_normalized_data_from_memory()
+            self.projections._load_hdf_ds_data_into_memory(pyramid_level=self.ds_factor)
+            self.hist.refresh_histogram()
+            self.images = self.projections.data_ds
+
+        elif self.from_hdf and self.ds_factor == -1:
+            self.projections._unload_hdf_ds_data_from_memory(pyramid_level=0)
+            self.projections._load_hdf_normalized_data_into_memory()
+            self.images = self.projections.data
+
         else:
-            self.imagestack = rescale(
-                self.imagestack,
-                (1, self.downsample_factor, self.downsample_factor),
-                anti_aliasing=False,
-            )
-            self.plotted_image.image = self.imagestack[0]
+            if self.ds_factor == -1:
+                self.plotted_image.image = self.original_images[0]
+                self.images = self.original_images
+                self.change_aspect_ratio()
+            else:
+                self.images = copy.deepcopy(self.original_images)
+                ds_num = np.power(2, int(self.ds_factor) + 1)
+                ds_num = float(1 / ds_num)
+                self.images = rescale(
+                    self.images,
+                    (1, ds_num, ds_num),
+                    anti_aliasing=False,
+                )
+        self.plotted_image.image = self.images[self.image_index_slider.value]
+        self.change_aspect_ratio()
 
     # Reset
     def reset(self, *args):
@@ -349,15 +320,12 @@ class BqImViewerBase(ABC):
             self.swap_axes()
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.image_scale["image"].min = self.vmin
-        self.image_scale["image"].max = self.vmax
-        self.hist.selector.selected = None
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.plotted_image.image = self.images[0]
+        self.hist.reset_state()
+        self.image_scale["image"].min = self.hist.vmin
+        self.image_scale["image"].max = self.hist.vmax
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
-        self.rm_high_low_int(None)
 
     # Speed up playback of play button
     def speed_up(self, *args):
@@ -379,7 +347,7 @@ class BqImViewerBase(ABC):
         ims = []
         vmin = self.image_scale["image"].min
         vmax = self.image_scale["image"].max
-        for image in self.original_imagestack:
+        for image in self.original_images:
             im = ax.imshow(image, animated=True, vmin=vmin, vmax=vmax)
             ims.append([im])
         ani = animation.ArtistAnimation(
@@ -409,31 +377,25 @@ class BqImViewerBase(ABC):
             self.fig.interaction = self.msg_interaction
 
     # Rectangle selector to update projection range
-    def rectangle_to_pixel_range(self, *args):
-        self.pixel_range = self.rectangle_selector.selected
-        self.pixel_range = np.where(self.pixel_range < 0, 0, self.pixel_range)
-        self.pixel_range = np.where(self.pixel_range > 1, 1, self.pixel_range)
-        self.pixel_range_x = [
-            int(x) for x in np.around(self.pixel_range[:, 0] * (self.pxX - 1))
+    def rectangle_to_px_range(self, *args):
+        self.px_range = self.rectangle_selector.selected
+        self.px_range = np.where(self.px_range < 0, 0, self.px_range)
+        self.px_range = np.where(self.px_range > 1, 1, self.px_range)
+        self.px_range_x = [
+            int(x) for x in np.around(self.px_range[:, 0] * (self.pxX - 1))
         ]
-        self.pixel_range_y = np.around(self.pixel_range[:, 1] * (self.pxY - 1))
-        self.pixel_range_y = [int(x) for x in self.pixel_range_y]
-        if self.current_pixel_size is not None:
-            self.nm_x = int(
-                (self.pixel_range_x[1] - self.pixel_range_x[0])
-                * self.current_pixel_size
-            )
-            self.nm_y = int(
-                (self.pixel_range_y[1] - self.pixel_range_y[0])
-                * self.current_pixel_size
-            )
+        self.px_range_y = np.around(self.px_range[:, 1] * (self.pxY - 1))
+        self.px_range_y = [int(x) for x in self.px_range_y]
+        if self.px_size is not None:
+            self.nm_x = int((self.px_range_x[1] - self.px_range_x[0]) * self.px_size)
+            self.nm_y = int((self.px_range_y[1] - self.px_range_y[0]) * self.px_size)
             self.micron_x = round(self.nm_x / 1000, 2)
             self.micron_y = round(self.nm_y / 1000, 2)
-        self.update_pixel_range_status_bar()
+        self.update_px_range_status_bar()
 
-    def update_pixel_range_status_bar(self):
-        self.status_bar_xrange.value = f"X Pixel Range: {self.pixel_range_x} | "
-        self.status_bar_yrange.value = f"Y Pixel Range: {self.pixel_range_y}"
+    def update_px_range_status_bar(self):
+        self.status_bar_xrange.value = f"X Pixel Range: {self.px_range_x} | "
+        self.status_bar_yrange.value = f"Y Pixel Range: {self.px_range_y}"
         if self.nm_x < 1000:
             self.status_bar_xdistance.value = f"X Distance (nm): {self.nm_x} | "
         else:
@@ -478,8 +440,8 @@ class BqImViewerBase(ABC):
 
     # -- Other methods -----------------------------------------------------------------
     def change_aspect_ratio(self):
-        pxX = self.imagestack.shape[2]
-        pxY = self.imagestack.shape[1]
+        pxX = self.images.shape[2]
+        pxY = self.images.shape[1]
         self.aspect_ratio = pxX / pxY
         if self.aspect_ratio >= 1:
             if self.aspect_ratio > self.fig.max_aspect_ratio:
@@ -495,8 +457,7 @@ class BqImViewerBase(ABC):
         self.header_layout = Layout(justify_content="center", align_items="center")
         self.header = HBox(
             [
-                self.downsample_viewer_button,
-                self.downsample_viewer_textbox,
+                self.ds_viewer_dropdown,
                 self.scheme_dropdown,
             ],
             layout=self.header_layout,
@@ -561,25 +522,48 @@ class BqImViewer_Import(BqImViewerBase):
     def plot(self, projections):
         self.projections = projections
         self.filedir = projections.filedir
-        self.precomputed_hists = projections.hists
-        self.current_pixel_size = projections.current_pixel_size
+        if self.projections.hdf_file is not None:
+            self.plot_hdf()
+            return
+        self.from_hdf = False
+        self.from_npy = True
         self.pxX = projections.data.shape[2]
         self.pxY = projections.data.shape[1]
-        self.original_imagestack = projections.data
+        self.hist.precomputed_hist = projections.hists
+        self.px_size = projections.px_size
+        self.original_images = projections.data
         self.projections._check_downsampled_data()
-        self.imagestack = np.array(self.projections.data_ds[0])
-        self.downsample_factor = 0.25
-        self.downsample_viewer_textbox.value = self.downsample_factor
-        self.change_downsample_button()
+        self.images = np.array(self.projections.data_ds[0])
+        self.ds_factor = 2
+        self.ds_viewer_dropdown.value = 0
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.image_index_slider.max = self.original_imagestack.shape[0] - 1
+        self.plotted_image.image = self.images[0]
+        self.image_index_slider.max = self.original_images.shape[0] - 1
         self.image_index_slider.value = 0
-        self.hist.preflatten_imagestack(self.imagestack)
+        self.hist.refresh_histogram(self.images)
         self.rm_high_low_int(None)
+
+    def plot_hdf(self):
+        self.from_hdf = True
+        self.projections._open_hdf_file_read_only()
+        self.projections._unload_hdf_normalized_data_from_memory()
+        self.pxX = self.projections.data.shape[2]
+        self.pxY = self.projections.data.shape[1]
+        self.projections._check_downsampled_data()
+        self.hist.precomputed_hist = self.projections.hist
+        self.px_size = self.projections.px_size
+        self.original_images = self.projections.data
+        self.images = self.projections.data_ds
+        self.ds_viewer_dropdown.value = 0
+        self.ds_factor = self.ds_viewer_dropdown.value
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.plotted_image.image = self.images[0]
+        self.image_index_slider.max = self.original_images.shape[0] - 1
+        self.image_index_slider.value = 0
+        self.hist.refresh_histogram(self.images)
+        # self.hist.rm_high_low_int(None)
 
 
 class BqImViewer_Prep(BqImViewer_Import):
@@ -618,33 +602,33 @@ class BqImViewer_Prep(BqImViewer_Import):
         self.app = VBox([self.header, self.center, footer])
 
     def plot(self):
-        self.original_imagestack = self.Prep.Import.projections.data
-        self.pxX = self.original_imagestack.shape[2]
-        self.pxY = self.original_imagestack.shape[1]
-        self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = np.array(self.Prep.Import.projections.data_ds[0])
-        self.downsample_factor = 0.25
-        self.downsample_viewer_textbox.value = self.downsample_factor
-        self.current_pixel_size = self.Prep.Import.projections.current_pixel_size
-        self.precomputed_hists = self.Prep.Import.projections.hists
-        # self.downsample_imagestack(self.original_imagestack)
+        self.original_images = self.Prep.Import.projections.data
+        self.pxX = self.original_images.shape[2]
+        self.pxY = self.original_images.shape[1]
+        self.pxZ = self.original_images.shape[0]
+        self.images = np.array(self.Prep.Import.projections.data_ds[0])
+        self.ds_viewer_dropdown.value = 0
+        self.ds_factor = self.ds_viewer_dropdown.value
+        self.px_size = self.Prep.Import.projections.px_size
+        self.hist.precomputed_hist = self.Prep.Import.projections.hists
+        # self.downsample_images(self.original_images)
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.image_scale["image"].min = float(self.vmin)
-        self.image_scale["image"].max = float(self.vmax)
-        self.pixel_range_x = [0, self.pxX - 1]
-        self.pixel_range_y = [0, self.pxY - 1]
-        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
-        # self.update_pixel_range_status_bar()
+        self.plotted_image.image = self.images[0]
+        self.hist.vmin = np.min(self.images)
+        self.hist.vmax = np.max(self.images)
+        self.image_scale["image"].min = float(self.hist.vmin)
+        self.image_scale["image"].max = float(self.hist.vmax)
+        self.px_range_x = [0, self.pxX - 1]
+        self.px_range_y = [0, self.pxY - 1]
+        self.px_range = [self.px_range_x, self.px_range_y]
+        # self.update_px_range_status_bar()
         self.hist.selector.selected = None
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
-        self.hist.preflatten_imagestack(self.imagestack)
-        self.rm_high_low_int(None)
-        self.change_downsample_button()
+        self.hist.refresh_histogram(self.images)
+        self.hist.rm_high_low_int(None)
+        self.hist.change_downsample_button()
 
 
 class BqImViewer_Import_Analysis(BqImViewer_Import):
@@ -658,32 +642,32 @@ class BqImViewer_Import_Analysis(BqImViewer_Import):
         )
 
     def plot(self):
-        self.original_imagestack = self.Analysis.Import.projections.data
-        self.pxX = self.original_imagestack.shape[2]
-        self.pxY = self.original_imagestack.shape[1]
-        self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = np.array(self.Analysis.Import.projections.data_ds[0])
-        self.downsample_factor = 0.25
-        self.downsample_viewer_textbox.value = self.downsample_factor
-        self.current_pixel_size = self.Analysis.Import.projections.current_pixel_size
-        self.precomputed_hists = self.Analysis.Import.projections.hists
-        # self.downsample_imagestack(self.original_imagestack)
+        self.original_images = self.Analysis.Import.projections.data
+        self.pxX = self.original_images.shape[2]
+        self.pxY = self.original_images.shape[1]
+        self.pxZ = self.original_images.shape[0]
+        self.images = np.array(self.Analysis.Import.projections.data_ds[0])
+        self.ds_viewer_dropdown.value = 0
+        self.ds_factor = self.ds_viewer_dropdown.value
+        self.px_size = self.Analysis.Import.projections.px_size
+        self.hist.precomputed_hist = self.Analysis.Import.projections.hists
+        # self.downsample_images(self.original_images)
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.image_scale["image"].min = float(self.vmin)
-        self.image_scale["image"].max = float(self.vmax)
-        self.pixel_range_x = [0, self.pxX - 1]
-        self.pixel_range_y = [0, self.pxY - 1]
-        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
-        # self.update_pixel_range_status_bar()
+        self.plotted_image.image = self.images[0]
+        self.hist.vmin = np.min(self.images)
+        self.hist.vmax = np.max(self.images)
+        self.image_scale["image"].min = float(self.hist.vmin)
+        self.image_scale["image"].max = float(self.hist.vmax)
+        self.px_range_x = [0, self.pxX - 1]
+        self.px_range_y = [0, self.pxY - 1]
+        self.px_range = [self.px_range_x, self.px_range_y]
+        # self.update_px_range_status_bar()
         self.hist.selector.selected = None
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
-        self.hist.preflatten_imagestack(self.imagestack)
-        self.rm_high_low_int(None)
+        self.hist.refresh_histogram(self.images)
+        self.hist.rm_high_low_int(None)
         self.change_downsample_button()
 
 
@@ -753,32 +737,30 @@ class BqImViewer_Center(BqImViewer_Import_Analysis):
             self.fig.marks = (self.plotted_image,)
 
     def plot(self):
-        self.original_imagestack = self.Center.Import.projections.data
-        self.pxX = self.original_imagestack.shape[2]
-        self.pxY = self.original_imagestack.shape[1]
-        self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = np.array(self.Center.Import.projections.data_ds[0])
-        self.downsample_factor = 0.25
-        self.downsample_viewer_textbox.value = self.downsample_factor
-        self.current_pixel_size = self.Center.Import.projections.current_pixel_size
-        self.precomputed_hists = self.Center.Import.projections.hists
-        # self.downsample_imagestack(self.original_imagestack)
+        self.original_images = self.Center.Import.projections.data
+        self.pxX = self.original_images.shape[2]
+        self.pxY = self.original_images.shape[1]
+        self.pxZ = self.original_images.shape[0]
+        self.images = np.array(self.Center.Import.projections.data_ds[0])
+        self.ds_viewer_dropdown.value = 0
+        self.ds_factor = self.ds_viewer_dropdown.value
+        self.px_size = self.Center.Import.projections.px_size
+        self.hist.precomputed_hist = self.Center.Import.projections.hists
+        # self.downsample_images(self.original_images)
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.image_scale["image"].min = float(self.vmin)
-        self.image_scale["image"].max = float(self.vmax)
-        self.pixel_range_x = [0, self.pxX - 1]
-        self.pixel_range_y = [0, self.pxY - 1]
-        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
-        # self.update_pixel_range_status_bar()
+        self.plotted_image.image = self.images[0]
+        self.image_scale["image"].min = float(self.hist.vmin)
+        self.image_scale["image"].max = float(self.hist.vmax)
+        self.px_range_x = [0, self.pxX - 1]
+        self.px_range_y = [0, self.pxY - 1]
+        self.px_range = [self.px_range_x, self.px_range_y]
+        # self.update_px_range_status_bar()
         self.hist.selector.selected = None
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
-        self.hist.preflatten_imagestack(self.imagestack)
-        self.rm_high_low_int(None)
+        self.hist.refresh_histogram(self.images)
+        self.hist.rm_high_low_int(None)
         self.change_downsample_button()
         self.center_line_on = False
         self.center_line_on_update()
@@ -791,20 +773,20 @@ class BqImViewer_Center_Recon(BqImViewer_Import):
     def plot(self, rec):
         self.pxX = rec.shape[2]
         self.pxY = rec.shape[1]
-        self.original_imagestack = rec
-        self.imagestack = rec
-        self.downsample_factor = 1
-        self.downsample_viewer_textbox.value = self.downsample_factor
+        self.original_images = rec
+        self.images = rec
+        self.ds_viewer_dropdown.value = 0
+        self.ds_factor = self.ds_viewer_dropdown.value
         self.change_downsample_button()
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.plotted_image.image = self.images[0]
+        self.hist.vmin = np.min(self.images)
+        self.hist.vmax = np.max(self.images)
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
-        self.hist.preflatten_imagestack(self.imagestack)
-        self.rm_high_low_int(None)
+        self.hist.refresh_histogram(self.images)
+        self.hist.rm_high_low_int(None)
 
 
 class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
@@ -848,7 +830,7 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         self.remove_data_outside_button.on_click(self.remove_data_outside)
 
         # Rectangle selector
-        self.rectangle_selector.observe(self.rectangle_to_pixel_range, "selected")
+        self.rectangle_selector.observe(self.rectangle_to_px_range, "selected")
         self.all_buttons.insert(-2, self.copy_button)
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
         self.all_buttons.insert(-2, self.range_from_parent_button)
@@ -883,24 +865,24 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
 
     # Image plot
     def plot(self):
-        self.original_imagestack = copy.copy(self.viewer_parent.original_imagestack)
-        self.pxX = self.original_imagestack.shape[2]
-        self.pxY = self.original_imagestack.shape[1]
-        self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = copy.copy(self.viewer_parent.imagestack)
-        self.pixel_range_x = [0, self.pxX - 1]
-        self.pixel_range_y = [0, self.pxY - 1]
-        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
-        self.subset_pixel_range_x = self.pixel_range_x
-        self.subset_pixel_range_y = self.pixel_range_y
+        self.original_images = copy.copy(self.viewer_parent.original_images)
+        self.pxX = self.original_images.shape[2]
+        self.pxY = self.original_images.shape[1]
+        self.pxZ = self.original_images.shape[0]
+        self.images = copy.copy(self.viewer_parent.images)
+        self.px_range_x = [0, self.pxX - 1]
+        self.px_range_y = [0, self.pxY - 1]
+        self.px_range = [self.px_range_x, self.px_range_y]
+        self.subset_px_range_x = self.px_range_x
+        self.subset_px_range_y = self.px_range_y
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = self.viewer_parent.vmin
-        self.vmax = self.viewer_parent.vmax
-        self.image_scale["image"].min = self.vmin
-        self.image_scale["image"].max = self.vmax
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.plotted_image.image = self.images[0]
+        self.hist.vmin = self.viewer_parent.vmin
+        self.hist.vmax = self.viewer_parent.vmax
+        self.image_scale["image"].min = self.hist.vmin
+        self.image_scale["image"].max = self.hist.vmax
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
 
     def copy_parent_projections(self, *args):
@@ -939,59 +921,53 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
             self.viewer_parent.rectangle_selector_button.button_style == "success"
             and self.viewer_parent.rectangle_selector.selected is not None
         ):
-            imtemp = self.viewer_parent.imagestack
+            imtemp = self.viewer_parent.images
             lowerY = int(
-                self.viewer_parent.pixel_range_y[0]
-                * self.viewer_parent.downsample_factor
+                self.viewer_parent.px_range_y[0] * self.viewer_parent.ds_factor
             )
             upperY = int(
-                self.viewer_parent.pixel_range_y[1]
-                * self.viewer_parent.downsample_factor
+                self.viewer_parent.px_range_y[1] * self.viewer_parent.ds_factor
             )
             lowerX = int(
-                self.viewer_parent.pixel_range_x[0]
-                * self.viewer_parent.downsample_factor
+                self.viewer_parent.px_range_x[0] * self.viewer_parent.ds_factor
             )
             upperX = int(
-                self.viewer_parent.pixel_range_x[1]
-                * self.viewer_parent.downsample_factor
+                self.viewer_parent.px_range_x[1] * self.viewer_parent.ds_factor
             )
-            self.imagestack = copy.deepcopy(imtemp[:, lowerY:upperY, lowerX:upperX])
+            self.images = copy.deepcopy(imtemp[:, lowerY:upperY, lowerX:upperX])
             self.change_aspect_ratio()
-            self.plotted_image.image = self.imagestack[
-                self.viewer_parent.current_image_ind
-            ]
+            self.plotted_image.image = self.images[self.viewer_parent.current_image_ind]
             # This is confusing - decide on better names. The actual dimensions are
-            # stored in self.projections.pixel_range_x, but this will eventually set the
-            # Analysis attributes for pixel_range_x, pixel_range_y to input into
+            # stored in self.projections.px_range_x, but this will eventually set the
+            # Analysis attributes for px_range_x, px_range_y to input into
             # algorithms
-            self.pixel_range_x = (
-                self.viewer_parent.pixel_range_x[0],
-                self.viewer_parent.pixel_range_x[1],
+            self.px_range_x = (
+                self.viewer_parent.px_range_x[0],
+                self.viewer_parent.px_range_x[1],
             )
-            self.pixel_range_y = (
-                self.viewer_parent.pixel_range_y[0],
-                self.viewer_parent.pixel_range_y[1],
+            self.px_range_y = (
+                self.viewer_parent.px_range_y[0],
+                self.viewer_parent.px_range_y[1],
             )
 
     # Rectangle selector to update projection range
-    def rectangle_to_pixel_range(self, *args):
-        self.pixel_range = self.rectangle_selector.selected
-        x_len = self.pixel_range_x[1] - self.pixel_range_x[0]
-        y_len = self.pixel_range_y[1] - self.pixel_range_y[0]
-        lowerX = int(self.pixel_range[0, 0] * x_len + self.pixel_range_x[0])
-        upperX = int(self.pixel_range[1, 0] * x_len + self.pixel_range_x[0])
-        lowerY = int(self.pixel_range[0, 1] * y_len + self.pixel_range_y[0])
-        upperY = int(self.pixel_range[1, 1] * y_len + self.pixel_range_y[0])
+    def rectangle_to_px_range(self, *args):
+        self.px_range = self.rectangle_selector.selected
+        x_len = self.px_range_x[1] - self.px_range_x[0]
+        y_len = self.px_range_y[1] - self.px_range_y[0]
+        lowerX = int(self.px_range[0, 0] * x_len + self.px_range_x[0])
+        upperX = int(self.px_range[1, 0] * x_len + self.px_range_x[0])
+        lowerY = int(self.px_range[0, 1] * y_len + self.px_range_y[0])
+        upperY = int(self.px_range[1, 1] * y_len + self.px_range_y[0])
         self.printed_range_x = [lowerX, upperX]
         self.printed_range_y = [lowerY, upperY]
         self.Analysis.subset_range_x = [
-            x - self.pixel_range_x[0] for x in self.printed_range_x
+            x - self.px_range_x[0] for x in self.printed_range_x
         ]
         self.Analysis.subset_range_y = [
-            y - self.pixel_range_y[0] for y in self.printed_range_y
+            y - self.px_range_y[0] for y in self.printed_range_y
         ]
-        self.update_pixel_range_status_bar()
+        self.update_px_range_status_bar()
 
     # Rectangle selector button
     def rectangle_select(self, change):
@@ -1009,7 +985,7 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
             self.fig.interaction = self.msg_interaction
             self.Analysis.use_subset_correlation_checkbox.value = False
 
-    def update_pixel_range_status_bar(self):
+    def update_px_range_status_bar(self):
         self.status_bar_xrange.value = (
             f"Phase Correlation X Pixel Range: {self.printed_range_x} | "
         )
@@ -1018,17 +994,17 @@ class BqImViewer_Altered_Analysis(BqImViewer_Import_Analysis):
         )
 
     def remove_data_outside(self, *args):
-        self.remove_high_indexes = self.original_imagestack > self.vmax
-        self.original_imagestack[self.remove_high_indexes] = 1e-6
-        self.remove_low_indexes = self.original_imagestack < self.vmin
-        self.original_imagestack[self.remove_low_indexes] = 1e-6
-        self.plotted_image.image = self.original_imagestack[0]
-        self.remove_high_indexes = self.imagestack > self.vmax
-        self.imagestack[self.remove_high_indexes] = 1e-6
-        self.remove_low_indexes = self.imagestack < self.vmin
-        self.imagestack[self.remove_low_indexes] = 1e-6
-        self.plotted_image.image = self.imagestack[0]
-        self.hist.preflatten_imagestack(self.imagestack)
+        self.remove_high_indexes = self.original_images > self.hist.vmax
+        self.original_images[self.remove_high_indexes] = 1e-6
+        self.remove_low_indexes = self.original_images < self.hist.vmin
+        self.original_images[self.remove_low_indexes] = 1e-6
+        self.plotted_image.image = self.original_images[0]
+        self.remove_high_indexes = self.images > self.hist.vmax
+        self.images[self.remove_high_indexes] = 1e-6
+        self.remove_low_indexes = self.images < self.hist.vmin
+        self.images[self.remove_low_indexes] = 1e-6
+        self.plotted_image.image = self.images[0]
+        self.hist.refresh_histogram()
 
 
 class BqImViewer_TwoEnergy_High(BqImViewer_Import_Analysis):
@@ -1045,33 +1021,33 @@ class BqImViewer_TwoEnergy_High(BqImViewer_Import_Analysis):
 
     def plot(self, projections):
         self.projections = projections
-        self.original_imagestack = projections.data
+        self.original_images = projections.data
         self.filedir = projections.filedir
-        self.pxX = self.original_imagestack.shape[2]
-        self.pxY = self.original_imagestack.shape[1]
-        self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = copy.deepcopy(self.original_imagestack)
-        self.downsample_factor = 1
-        self.downsample_viewer_textbox.value = self.downsample_factor
-        self.current_pixel_size = projections.current_pixel_size
-        self.precomputed_hists = projections.hists
-        # self.downsample_imagestack(self.original_imagestack)
+        self.pxX = self.original_images.shape[2]
+        self.pxY = self.original_images.shape[1]
+        self.pxZ = self.original_images.shape[0]
+        self.images = copy.deepcopy(self.original_images)
+        self.ds_viewer_dropdown.value = 0
+        self.ds_factor = self.ds_viewer_dropdown.value
+        self.px_size = projections.px_size
+        self.hist.precomputed_hist = projections.hists
+        # self.downsample_images(self.original_images)
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = np.min(self.imagestack)
-        self.vmax = np.max(self.imagestack)
-        self.image_scale["image"].min = float(self.vmin)
-        self.image_scale["image"].max = float(self.vmax)
-        self.pixel_range_x = [0, self.pxX - 1]
-        self.pixel_range_y = [0, self.pxY - 1]
-        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
-        # self.update_pixel_range_status_bar()
+        self.plotted_image.image = self.images[0]
+        self.hist.vmin = np.min(self.images)
+        self.hist.vmax = np.max(self.images)
+        self.image_scale["image"].min = float(self.hist.vmin)
+        self.image_scale["image"].max = float(self.hist.vmax)
+        self.px_range_x = [0, self.pxX - 1]
+        self.px_range_y = [0, self.pxY - 1]
+        self.px_range = [self.px_range_x, self.px_range_y]
+        # self.update_px_range_status_bar()
         self.hist.selector.selected = None
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
-        self.hist.preflatten_imagestack(self.imagestack)
-        self.rm_high_low_int(None)
+        self.hist.refresh_histogram()
+        self.hist.rm_high_low_int(None)
         self.change_downsample_button()
         self.viewing = True
         self.change_buttons()
@@ -1085,8 +1061,8 @@ class BqImViewer_TwoEnergy_High(BqImViewer_Import_Analysis):
             self.viewer_child.scale_button.disabled = True
 
     # Rectangle selector to update projection range
-    def rectangle_to_pixel_range(self, *args):
-        BqImViewer_Import.rectangle_to_pixel_range(self)
+    def rectangle_to_px_range(self, *args):
+        BqImViewer_Import.rectangle_to_px_range(self)
         self.viewer_child.match_rectangle_selector_range_parent()
 
 
@@ -1142,8 +1118,8 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
         self.diff_on = False
 
     # Rectangle selector to update projection range
-    def rectangle_to_pixel_range(self, *args):
-        BqImViewer_Import.rectangle_to_pixel_range(self)
+    def rectangle_to_px_range(self, *args):
+        BqImViewer_Import.rectangle_to_px_range(self)
         self.match_rectangle_selector_range_parent()
 
     def link_plotted_projections(self, *args):
@@ -1201,15 +1177,15 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
 
     def switch_to_diff(self, *args):
         if not self.diff_on and not self._disable_diff_callback:
-            self.imagestack = self.diff_imagestack
-            self.plotted_image.image = self.imagestack[self.image_index_slider.value]
+            self.images = self.diff_images
+            self.plotted_image.image = self.images[self.image_index_slider.value]
             self.diff_on = True
             self._disable_diff_callback = True
             self.diff_button.button_style = "success"
             self._disable_diff_callback = False
         elif not self._disable_diff_callback:
-            self.imagestack = self.original_imagestack
-            self.plotted_image.image = self.imagestack[self.image_index_slider.value]
+            self.images = self.original_images
+            self.plotted_image.image = self.images[self.image_index_slider.value]
             self.diff_on = False
             self._disable_diff_callback = True
             self.diff_button.button_style = ""
@@ -1240,7 +1216,8 @@ class BqImViewer_DataExplorer_AfterAnalysis(BqImViewer_DataExplorer_BeforeAnalys
         )
         self.link_plotted_projections_button.on_click(self.link_plotted_projections)
         self.plots_linked = False
-        self.downsample_factor = 0.5
+        self.ds_viewer_dropdown.value = -1
+        self.ds_factor = self.ds_viewer_dropdown.value
         self.all_buttons = self.init_buttons
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
 
@@ -1285,15 +1262,15 @@ class BqImViewer_DataExplorer_AfterAnalysis(BqImViewer_DataExplorer_BeforeAnalys
         vmax_parent = self.viewer_parent.image_scale["image"].max
         vmin = self.image_scale["image"].min
         vmax = self.image_scale["image"].max
-        for i in range(len(self.original_imagestack)):
+        for i in range(len(self.original_images)):
             im1 = ax1.imshow(
-                self.viewer_parent.original_imagestack[i],
+                self.viewer_parent.original_images[i],
                 animated=True,
                 vmin=vmin_parent,
                 vmax=vmax_parent,
             )
             im2 = ax2.imshow(
-                self.original_imagestack[i], animated=True, vmin=vmin, vmax=vmax
+                self.original_images[i], animated=True, vmin=vmin, vmax=vmax
             )
             ims.append([im1, im2])
         ani = animation.ArtistAnimation(
@@ -1312,9 +1289,10 @@ class BqImViewer_Altered_Prep(BqImViewer_Altered_Analysis):
         super().__init__(viewer_parent, Prep)
         self.Prep = Prep
         self.viewer_parent
-        self.downsample_factor = 1
+        self.ds_viewer_dropdown.value = -1
+        self.ds_factor = self.ds_viewer_dropdown.value
 
-    def update_pixel_range_status_bar(self):
+    def update_px_range_status_bar(self):
         self.status_bar_xrange.value = f"X Pixel Range: {self.printed_range_x} | "
         self.status_bar_yrange.value = f"Y Pixel Range: {self.printed_range_y}"
 
@@ -1334,122 +1312,160 @@ class BqImViewer_Altered_Prep(BqImViewer_Altered_Analysis):
 
     def plot(self):
         if self.copying:
-            self.Prep.prepped_data = copy.deepcopy(
-                self.viewer_parent.original_imagestack
-            )
-        self.original_imagestack = self.Prep.prepped_data
-        self.pxX = self.original_imagestack.shape[2]
-        self.pxY = self.original_imagestack.shape[1]
-        self.pxZ = self.original_imagestack.shape[0]
-        self.imagestack = self.original_imagestack
-        self.pixel_range_x = [0, self.pxX - 1]
-        self.pixel_range_y = [0, self.pxY - 1]
-        self.pixel_range = [self.pixel_range_x, self.pixel_range_y]
-        self.subset_pixel_range_x = self.pixel_range_x
-        self.subset_pixel_range_y = self.pixel_range_y
+            self.Prep.prepped_data = copy.deepcopy(self.viewer_parent.original_images)
+        self.original_images = self.Prep.prepped_data
+        self.pxX = self.original_images.shape[2]
+        self.pxY = self.original_images.shape[1]
+        self.pxZ = self.original_images.shape[0]
+        self.images = self.original_images
+        self.px_range_x = [0, self.pxX - 1]
+        self.px_range_y = [0, self.pxY - 1]
+        self.px_range = [self.px_range_x, self.px_range_y]
+        self.subset_px_range_x = self.px_range_x
+        self.subset_px_range_y = self.px_range_y
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.imagestack[0]
-        self.vmin = self.viewer_parent.vmin
-        self.vmax = self.viewer_parent.vmax
-        self.image_scale["image"].min = self.vmin
-        self.image_scale["image"].max = self.vmax
-        self.image_index_slider.max = self.imagestack.shape[0] - 1
+        self.plotted_image.image = self.images[0]
+        self.hist.vmin = self.viewer_parent.vmin
+        self.hist.vmax = self.viewer_parent.vmax
+        self.image_scale["image"].min = self.hist.vmin
+        self.image_scale["image"].max = self.hist.vmax
+        self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = 0
 
 
 class BqImHist:
     def __init__(self, implotter: BqImViewerBase):
+        self.vmin = np.min(implotter.images)
+        self.vmax = np.max(implotter.images)
+        self.init_vmin = None
+        self.init_vmax = None
         self.implotter = implotter
         self.fig = bq.Figure(
             padding=0,
             fig_margin=dict(top=0, bottom=0, left=0, right=0),
         )
-
-        self.preflatten_imagestack(self.implotter.imagestack)
+        self.precomputed_hist = None
+        self.refresh_histogram(self.implotter.images)
         self.fig.layout.width = "100px"
         self.fig.layout.height = implotter.fig.layout.height
 
-    def preflatten_imagestack(self, imagestack):
-        self.x_sc = bq.LinearScale(
-            min=float(self.implotter.vmin), max=float(self.implotter.vmax)
+    def reset_state(self):
+        self.vmin = self.init_vmin
+        self.vmax = self.init_vmax
+        self.selector.selected = None
+        self.vmin = np.min(self.images)
+        self.vmax = np.max(self.images)
+        self.rm_high_low_int(None)
+
+    def refresh_histogram_from_hdf(self):
+        self.ds_factor = self.implotter.ds_factor
+        self.ds_dict = self.precomputed_hist
+        self.bin_centers = self.precomputed_hist[
+            self.implotter.projections.hdf_key_ds_bin_centers
+        ]
+        self.frequency = self.ds_dict[self.implotter.projections.hdf_key_bin_frequency]
+        self.images_min = float(
+            self.ds_dict[self.implotter.projections.hdf_key_image_range][0]
         )
+        self.images_max = float(
+            self.ds_dict[self.implotter.projections.hdf_key_image_range][1]
+        )
+        self.vmin = float(
+            self.ds_dict[self.implotter.projections.hdf_key_percentile][0]
+        )
+        self.init_vmin = float(self.vmin)
+        self.vmax = float(
+            self.ds_dict[self.implotter.projections.hdf_key_percentile][1]
+        )
+        self.init_vmax = float(self.vmax)
+        self.ds_factor_num = self.ds_dict[self.implotter.projections.hdf_key_ds_factor]
+
+    def refresh_histogram_from_downsampled_folder(self):
+        self.bin_centers = self.precomputed_hist[-1]["bin_centers"]
+        self.frequency = self.precomputed_hist[-1]["frequency"]
+        self.images_min = float(np.min(self.implotter.images))
+        self.images_max = float(np.max(self.implotter.images))
+        self.vmin = self.images_min
+        self.vmax = self.images_max
+
+    def refresh_histogram_without_precompute(self):
+        self.images_min = float(np.min(self.implotter.images))
+        self.images_max = float(np.max(self.implotter.images))
+        self.vmin = self.images_min
+        self.vmax = self.images_max
+        self.x_sc = bq.LinearScale(min=float(self.vmin), max=float(self.vmax))
         self.y_sc = bq.LinearScale()
         self.fig.scale_x = self.x_sc
         self.fig.scale_y = bq.LinearScale()
+        self.hist = bq.Bins(
+            sample=self.implotter.images.ravel(),
+            scales={
+                "x": self.x_sc,
+                "y": self.y_sc,
+            },
+            colors=["dodgerblue"],
+            opacities=[0.75],
+            orientation="horizontal",
+            bins=100,
+            density=True,
+        )
+        self.bin_centers = self.hist.x
+        self.frequency = self.hist.y
+        ind = self.bin_centers < self.vmin
+        self.frequency[ind] = 0
+        self.hist.scales["y"].max = np.max(self.frequency)
 
-        if self.implotter.precomputed_hists is not None:
-            if isinstance(self.implotter.precomputed_hists, dict):
-                self.ds_numbers = sorted(
-                    [int(i) for i in self.implotter.precomputed_hists.keys()]
-                )
-                self.ds_numbers = [str(i) for i in self.ds_numbers]
-                self.bin_centers = self.implotter.precomputed_hists[self.ds_numbers[0]][
-                    "bin_centers"
-                ]
-                self.frequency = self.implotter.precomputed_hists[self.ds_numbers[0]][
-                    "frequency"
-                ]
+    def refresh_histogram(self, images=None):
+        if self.precomputed_hist is not None:
+            if self.implotter.from_hdf:
+                self.refresh_histogram_from_hdf()
             else:
-                self.bin_centers = self.implotter.precomputed_hists[-1]["bin_centers"]
-                self.frequency = self.implotter.precomputed_hists[-1]["frequency"]
-            self.hists = [
-                bq.Bars(
-                    x=self.bin_centers,
-                    y=self.frequency,
-                    scales={
-                        "x": self.x_sc,
-                        "y": self.y_sc,
-                    },
-                    colors=["dodgerblue"],
-                    opacities=[0.75],
-                    orientation="horizontal",
-                )
-            ]
-            ind = self.bin_centers < self.implotter.vmin
+                self.refresh_histogram_from_downsampled_folder()
+            self.x_sc = bq.LinearScale(
+                min=float(self.images_min), max=float(self.images_max)
+            )
+            self.y_sc = bq.LinearScale()
+            self.fig.scale_x = self.x_sc
+            self.fig.scale_y = bq.LinearScale()
+            self.hist = bq.Bars(
+                x=self.bin_centers,
+                y=self.frequency,
+                scales={
+                    "x": self.x_sc,
+                    "y": self.y_sc,
+                },
+                colors=["dodgerblue"],
+                opacities=[0.75],
+                orientation="horizontal",
+            )
+            ind = self.bin_centers < self.vmin
             self.frequency[ind] = 0
-            self.hists[0].scales["y"].max = float(np.max(self.frequency))
+            self.hist.scales["y"].max = float(np.max(self.frequency))
         else:
-            self.hists = [
-                bq.Bins(
-                    sample=self.implotter.imagestack.ravel(),
-                    scales={
-                        "x": self.x_sc,
-                        "y": self.y_sc,
-                    },
-                    colors=["dodgerblue"],
-                    opacities=[0.75],
-                    orientation="horizontal",
-                    bins=100,
-                    density=True,
-                )
-            ]
-            self.bin_centers = [x.x for x in self.hists]
-            self.frequency = [x.y for x in self.hists]
-            for i in range(len(self.hists)):
-                ind = self.bin_centers[i] < self.implotter.vmin
-                self.frequency[i][ind] = 0
-                self.hists[i].scales["y"].max = np.max(self.frequency[i])
+            self.refresh_histogram_without_precompute()
+
         self.selector = bq.interacts.BrushIntervalSelector(
             orientation="vertical", scale=self.x_sc
         )
         self.selector.observe(self.update_crange_selector, "selected")
-        self.fig.marks = [self.hists[0]]
+        self.fig.marks = [self.hist]
         self.fig.interaction = self.selector
 
     def update_crange_selector(self, *args):
         if self.selector.selected is not None:
             self.implotter.image_scale["image"].min = self.selector.selected[0]
             self.implotter.image_scale["image"].max = self.selector.selected[1]
-            self.implotter.vmin = self.selector.selected[0]
-            self.implotter.vmax = self.selector.selected[1]
+            self.vmin = self.selector.selected[0]
+            self.vmax = self.selector.selected[1]
 
-    # def update(self):
-    #     if self.implotter.current_plot_axis == 0:
-    #         self.hist = self.hists
-    #     else:
-    #         self.hist = self.hists
-    # self.fig.marks = [self.hist]
+    def rm_high_low_int(self, change):
+        if self.implotter.from_hdf or self.implotter.from_npy:
+            self.vmin, self.vmax = self.init_vmin, self.init_vmax
+            self.selector.selected = [self.vmin, self.vmax]
+        else:
+            self.vmin, self.vmax = np.percentile(self.images, q=(0.5, 99.5))
+            self.selector.selected = [self.vmin, self.vmax]
 
 
 class ScaleBar:
@@ -1463,8 +1479,8 @@ class ScaleBar:
         # sc_y = LinearScale(min=1, max=0)
 
         # pxX = 1024
-        # current_pixel_size = 30
-        # px_per_micron = 1000 / current_pixel_size
+        # px_size = 30
+        # px_per_micron = 1000 / px_size
         # px_per_micron_half = px_per_micron / 2
         # x_px_center = 0.85 * pxX
         # num_microns = 5
