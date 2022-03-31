@@ -157,13 +157,13 @@ class RecentAnalysisExplorer(DataExplorerBase):
                 metadata["angle_end"] = self.analysis.run_list[run][filedir][
                     "angle_end"
                 ]
-                self.imagestacks[0] = TomoData(metadata=metadata).prj_imgs
+                self.imagess[0] = TomoData(metadata=metadata).prj_imgs
                 metadata["filedir"] = self.analysis.run_list[run][filedir]["savedir"]
                 if self.obj.widget_type == "Align":
                     metadata["filename"] = "projections_after_alignment.tif"
                 else:
                     metadata["filename"] = "recon.tif"
-                self.imagestacks[1] = TomoData(metadata=metadata).prj_imgs
+                self.imagess[1] = TomoData(metadata=metadata).prj_imgs
                 self._create_image_app()
 
     def choose_file_to_plot(self, change):

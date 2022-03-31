@@ -59,7 +59,7 @@ class ImportBase(ABC):
             "Raw/normalized data from Import tab in use for alignment/reconstruction.",
         )
         self.use_prenorm_button = ReactiveTextButton(
-            self.disable_raw,
+            self.enable_prenorm,
             "Click to use prenormalized data from the Import tab.",
             "Updating plots.",
             "Prenormalized data from Import tab in use for alignment/reconstruction.",
@@ -80,7 +80,7 @@ class ImportBase(ABC):
         self.log = logging.getLogger(__name__)
         self.log_handler, self.log = helpers.return_handler(self.log, logging_level=20)
 
-    def disable_raw(self, *args):
+    def enable_prenorm(self, *args):
         """
         Makes the prenorm_uploader projections the projections used throughout the app.
         Refreshes plots in the other tabs to match these.
@@ -88,7 +88,11 @@ class ImportBase(ABC):
         self.use_raw_button.reset_state()
         self.use_raw = False
         self.use_prenorm = True
+        if self.raw_uploader.projections.hdf_file is not None:
+            self.raw_uploader.projections._close_hdf_file()
         self.projections = self.prenorm_uploader.projections
+        if self.projections.hdf_file is not None:
+            self.projections._open_hdf_file_read_only()
         self.uploader = self.prenorm_uploader
         self.Recon.projections = self.projections
         self.Align.projections = self.projections
@@ -105,7 +109,11 @@ class ImportBase(ABC):
         self.use_prenorm_button.reset_state()
         self.use_raw = True
         self.use_prenorm = False
+        if self.prenorm_uploader.projections.hdf_file is not None:
+            self.prenorm_uploader.projections._close_hdf_file()
         self.projections = self.raw_uploader.projections
+        if self.projections.hdf_file is not None:
+            self.projections._open_hdf_file_read_only()
         self.uploader = self.raw_uploader
         self.Recon.projections = self.projections
         self.Align.projections = self.projections
@@ -469,9 +477,9 @@ class PrenormUploader(UploaderBase):
         self.viewer.rectangle_selector_on = False  # TODO: Remove?
 
         # Quick search/filechooser will look for these types of files.
-        self.filetypes_to_look_for = [".json", ".npy", ".tif", ".tiff"]
+        self.filetypes_to_look_for = [".json", ".npy", ".tif", ".tiff", ".hdf5", ".h5"]
         self.files_not_found_str = ""
-        self.filetypes_to_look_for_images = [".npy", ".tif", ".tiff"]
+        self.filetypes_to_look_for_images = [".npy", ".tif", ".tiff", ".hdf5", ".h5"]
 
         # Create widgets for required data entry if the prenorm data does not have
         # proper metadata to run with the rest of the program. For ex, these boxes will
@@ -736,6 +744,11 @@ class PrenormUploader(UploaderBase):
                 sizeY = size[1]
                 sizeX = size[2]
 
+            elif image.suffix == ".hdf5" or image.suffix == ".h5":
+                sizeZ = 1
+                sizeY = 1
+                sizeX = 1
+
             size_tuple = (sizeZ, sizeY, sizeX)
             size_list.append(size_tuple)
 
@@ -842,6 +855,7 @@ class PrenormUploader(UploaderBase):
                 self.create_and_display_metadata_tables()
                 self.metadata_already_displayed = True
                 self.imported_metadata = True
+                self.import_button.enable()
                 if len(self.projections.metadatas) > 1:
                     if (
                         self.projections.metadatas[-1].metadata["metadata_type"]
@@ -1204,9 +1218,7 @@ class RawUploader_SSRL62B(UploaderBase):
         tic = time.perf_counter()
         self.projections.import_data(self)
         toc = time.perf_counter()
-        self.import_status_label.value = (
-            f"Import and normalization took {toc-tic:.0f}s"
-        )
+        self.import_status_label.value = f"Import and normalization took {toc-tic:.0f}s"
         self.projections.filedir = self.projections.import_savedir
         self.viewer.plot(self.projections)
 

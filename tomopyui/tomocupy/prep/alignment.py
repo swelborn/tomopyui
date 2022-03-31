@@ -19,7 +19,6 @@ from ipywidgets import *
 from tomopyui.backend.util.padding import *
 
 
-
 def align_joint(TomoAlign):
 
     # ensure it only runs on 1 thread for CUDA
@@ -301,7 +300,7 @@ def align_joint(TomoAlign):
             num_batches,
             TomoAlign.pad_ds,
             center,
-            downsample_factor=TomoAlign.downsample_factor,
+            downsample_factor=TomoAlign.ds_factor,
             progress=TomoAlign.Align.progress_shifting,
         )
         TomoAlign.conv[n] = np.linalg.norm(err)
@@ -320,13 +319,11 @@ def align_joint(TomoAlign):
     TomoAlign.prjs *= scl
     TomoAlign.recon = circ_mask(TomoAlign.recon, 0)
     if downsample:
-        TomoAlign.sx /= TomoAlign.downsample_factor
-        TomoAlign.sy /= TomoAlign.downsample_factor
-        TomoAlign.shift /= TomoAlign.downsample_factor
+        TomoAlign.sx /= TomoAlign.ds_factor
+        TomoAlign.sy /= TomoAlign.ds_factor
+        TomoAlign.shift /= TomoAlign.ds_factor
 
-    TomoAlign.pad = tuple(
-        [int(x / TomoAlign.downsample_factor) for x in TomoAlign.pad_ds]
-    )
+    TomoAlign.pad = tuple([int(x / TomoAlign.ds_factor) for x in TomoAlign.pad_ds])
     return TomoAlign
 
 
@@ -403,8 +400,8 @@ def batch_cross_correlation(
             _sim_gpu = cp.array(_sim[batch], dtype=cp.float32)
 
         if median_filter:
-            _prj_gpu = ndi_cp.median_filter(_prj_gpu, size=(1,5,5))
-            _sim_gpu = ndi_cp.median_filter(_sim_gpu, size=(1,5,5))
+            _prj_gpu = ndi_cp.median_filter(_prj_gpu, size=(1, 5, 5))
+            _sim_gpu = ndi_cp.median_filter(_sim_gpu, size=(1, 5, 5))
         if mask_sim:
             _sim_gpu = cp.where(_prj_gpu < 1e-7, 0, _sim_gpu)
 

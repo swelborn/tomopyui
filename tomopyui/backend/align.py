@@ -37,7 +37,7 @@ class TomoAlign:
         self.metadata.set_metadata(Align)
         self.metadata.set_attributes_from_metadata(self)
         if not self.downsample:
-            self.downsample_factor = 1
+            self.ds_factor = 1
         self.Align = Align
         self.projections = Align.projections
         self.data_before_align = deepcopy(Align.Import.projections.data)
@@ -123,26 +123,26 @@ class TomoAlign:
         self.prjs = deepcopy(self.projections.data)
         self.prjs = self.prjs[
             :,
-            self.pixel_range_y[0] : self.pixel_range_y[1],
-            self.pixel_range_x[0] : self.pixel_range_x[1],
+            self.px_range_y[0] : self.px_range_y[1],
+            self.px_range_x[0] : self.px_range_x[1],
         ]
         # center of rotation change to fit new range
-        self.center = self.center - self.pixel_range_x[0]
-        self.pad_ds = tuple([int(self.downsample_factor * x) for x in self.pad])
+        self.center = self.center - self.px_range_x[0]
+        self.pad_ds = tuple([int(self.ds_factor * x) for x in self.pad])
         self.center = self.center + self.pad[0]
 
         # Downsample
         if self.downsample:
             self.prjs = rescale(
                 self.prjs,
-                (1, self.downsample_factor, self.downsample_factor),
+                (1, self.ds_factor, self.ds_factor),
                 anti_aliasing=True,
             )
             # center of rotation change for downsampled data
-            self.center = self.center * self.downsample_factor
+            self.center = self.center * self.ds_factor
             if self.use_subset_correlation:
-                self.subset_x = [x * self.downsample_factor for x in self.subset_x]
-                self.subset_y = [y * self.downsample_factor for y in self.subset_y]
+                self.subset_x = [x * self.ds_factor for x in self.subset_x]
+                self.subset_y = [y * self.ds_factor for y in self.subset_y]
         # Pad
         self.prjs, self.pad_ds = pad_projections(self.prjs, self.pad_ds)
 
