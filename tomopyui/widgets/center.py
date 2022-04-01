@@ -44,6 +44,7 @@ class Center:
     def __init__(self, Import):
 
         self.Import = Import
+        self.projections = Import.projections
         self.Import.Center = self
         self.current_center = self.Import.prenorm_uploader.projections.pxX / 2
         self.center_guess = None
@@ -176,7 +177,7 @@ class Center:
         self.set_metadata()
 
     def _load_rough_center_onclick(self, change):
-        self.center_guess = self.Import.projections.pxX / 2
+        self.center_guess = self.projections.pxX / 2
         self.current_center = self.center_guess
         self.center_textbox.value = self.center_guess
         self.center_guess_textbox.value = self.center_guess
@@ -348,7 +349,8 @@ class Center:
         )
 
     def refresh_plots(self):
-        self.projection_viewer.plot()
+        self.projection_viewer.plot(self.projections)
+        self._load_rough_center_onclick(None)
 
     def make_tab(self):
         """

@@ -51,14 +51,14 @@ class IOBase:
     hdf_key_raw_darks = "/exchange/data_dark"
     hdf_key_theta = "/exchange/theta"
     hdf_key_norm_proj = "/process/normalized/data"
-    df_key_norm = "/process/normalized/"
+    hdf_key_norm = "/process/normalized/"
     hdf_key_ds = "/process/downsampled/"
     hdf_key_ds_0 = "/process/downsampled/0/"
     hdf_key_ds_1 = "/process/downsampled/1/"
     hdf_key_ds_2 = "/process/downsampled/2/"
     hdf_key_data = "data"  # to be added after downsampled/0,1,2/...
     hdf_key_bin_frequency = "frequency"  # to be added after downsampled/0,1,2/...
-    hdf_key_ds_bin_centers = "bin_centers"  # to be added after downsampled/0,1,2/...
+    hdf_key_bin_centers = "bin_centers"  # to be added after downsampled/0,1,2/...
     hdf_key_image_range = "image_range"  # to be added after downsampled/0,1,2/...
     hdf_key_bin_edges = "bin_edges"
     hdf_key_percentile = "percentile"
@@ -67,7 +67,7 @@ class IOBase:
 
     hdf_keys_ds_hist = [
         hdf_key_bin_frequency,
-        hdf_key_ds_bin_centers,
+        hdf_key_bin_centers,
         hdf_key_image_range,
         hdf_key_percentile,
     ]
@@ -76,8 +76,10 @@ class IOBase:
     def __init__(self):
 
         self._data = np.random.rand(10, 100, 100)
+        self.data = self._data
+        self.data_ds = self.data
         self.imported = False
-        self._filepath = None
+        self._filepath = pathlib.Path()
         self.dtype = None
         self.shape = None
         self.pxX = self._data.shape[2]
@@ -166,11 +168,24 @@ class IOBase:
     def _load_hdf_normalized_data_into_memory(self):
         self._data = self.hdf_file[self.hdf_key_norm_proj][:]
         self.data = self._data
+        self.hist = {
+            key: self.hdf_file[self.hdf_key_norm + key][:]
+            for key in self.hdf_keys_ds_hist
+        }
+        pyramid_level = self.hdf_key_ds + str(0) + "/"
+        ds_data_key = pyramid_level + self.hdf_key_data
+        self.data_ds = self.hdf_file[ds_data_key]
 
     @_check_and_open_hdf
-    def _unload_hdf_normalized_data_from_memory(self):
+    def _unload_hdf_normalized_and_ds(self):
         self._data = self.hdf_file[self.hdf_key_norm_proj]
         self.data = self._data
+        self.hist = {
+            key: self.hdf_file[self.hdf_key_norm + key] for key in self.hdf_keys_ds_hist
+        }
+        pyramid_level = self.hdf_key_ds + str(0) + "/"
+        ds_data_key = pyramid_level + self.hdf_key_data
+        self.data_ds = self.hdf_file[ds_data_key]
 
     @_check_and_open_hdf
     def _load_hdf_ds_data_into_memory(self, pyramid_level=0):
@@ -182,17 +197,8 @@ class IOBase:
         }
         for key in self.hdf_keys_ds_hist_scalar:
             self.hist[key] = self.hdf_file[pyramid_level + key][()]
-
-    @_check_and_open_hdf
-    def _unload_hdf_ds_data_from_memory(self, pyramid_level=0):
-        pyramid_level = self.hdf_key_ds + str(pyramid_level) + "/"
-        ds_data_key = pyramid_level + self.hdf_key_data
-        self.data_ds = self.hdf_file[ds_data_key]
-        self.hist = {
-            key: self.hdf_file[pyramid_level + key] for key in self.hdf_keys_ds_hist
-        }
-        for key in self.hdf_keys_ds_hist_scalar:
-            self.hist[key] = self.hdf_file[pyramid_level + key]
+        self._data = self.hdf_file[self.hdf_key_norm_proj]
+        self.data = self._data
 
     @_check_and_open_hdf
     def _delete_downsampled_data(self):
@@ -212,14 +218,18 @@ class IOBase:
         return hist, r, bins, percentile
 
     def _dask_bin_centers(self, grp, write=False, savedir=None):
+        tmp_filepath = copy.copy(self.filepath)
+        self.filedir = savedir
+        self.filepath = self.filedir / self.normalized_projections_hdf_key
+        self._open_hdf_file_append()
         bin_edges = da.from_array(self.hdf_file[grp + self.hdf_key_bin_edges])
         bin_centers = da.from_array(
             [(bin_edges[i] + bin_edges[i + 1]) / 2 for i in range(len(bin_edges) - 1)]
         )
         if write and savedir is not None:
-            data_dict = {grp + self.hdf_key_ds_bin_centers: bin_centers}
+            data_dict = {grp + self.hdf_key_bin_centers: bin_centers}
             self.dask_data_to_h5(data_dict, savedir=savedir)
-
+        self.filepath = tmp_filepath
         return bin_centers
 
     def _check_downsampled_data(self, label=None):
@@ -460,6 +470,38 @@ class ProjectionsBase(IOBase, ABC):
     @abstractmethod
     def import_file_projections(self, filepath):
         ...
+
+
+class Projections_Child(ProjectionsBase):
+    def __init__(self, parent_projections):
+        super().__init__()
+        self.parent_projections = parent_projections
+        # self.copy_from_parent()
+
+    def copy_from_parent(self):
+        self.parent_projections._unload_hdf_normalized_and_ds()
+        self._data = self.parent_projections.data
+        self.data = self._data
+        self.data_ds = self.parent_projections.data_ds
+        self.hist = self.parent_projections.hist
+        self.hdf_file = self.parent_projections.hdf_file
+        self.filedir = self.parent_projections.filedir
+        self.filepath = self.parent_projections.filepath
+        self.filename = self.parent_projections.filename
+
+    def deepcopy_data_from_parent(self):
+        self.parent_projections._load_hdf_normalized_data_into_memory()
+        self._data = copy.deepcopy(self.parent_projections.data[:])
+        self.data = self._data
+
+    def import_file_projections(self):
+        pass
+
+    def import_filedir_projections(self):
+        pass
+
+    def import_metadata(self):
+        pass
 
 
 class Projections_Prenormalized(ProjectionsBase):
@@ -1018,6 +1060,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         self.metadata.save_metadata()
 
     def import_filedir_all(self, Uploader):
+        self.import_metadata(Uploader)
         self.user_overwrite_energy = Uploader.user_overwrite_energy
         self.filedir = Uploader.filedir
         self.selected_energies = Uploader.energy_select_multiple.value
@@ -1360,7 +1403,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
 
                 self.status_label.value = "Saving projections as .npy for faster IO."
                 hist, r, bins, percentile = self._dask_hist()
-                grp = IOBase.df_key_norm + "/"
+                grp = IOBase.hdf_key_norm + "/"
                 data_dict = {
                     self.hdf_key_norm_proj: self.data,
                     grp + self.hdf_key_bin_frequency: hist[0],

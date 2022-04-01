@@ -2,17 +2,19 @@ import numpy as np
 import copy
 import datetime
 import pathlib
+import dask.array as da
+
 from ipywidgets import *
 from abc import ABC, abstractmethod
 from functools import partial
 from tomopyui._sharedvars import *
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
-from tomopyui.backend.io import Projections_Prenormalized
+from tomopyui.backend.io import Projections_Child
 from tomopyui.widgets.imports import ShiftsUploader, TwoEnergyUploader
 from tomopyui.widgets.view import (
-    BqImViewer_Prep,
-    BqImViewer_Altered_Prep,
+    BqImViewer_Projections_Parent,
+    BqImViewer_Projections_Child,
     BqImViewer_TwoEnergy_High,
     BqImViewer_TwoEnergy_Low,
 )
@@ -38,8 +40,8 @@ class Prep(ABC):
 
         self.Import = Import
         self.Import.Prep = self
-        self.imported_projections = Import.projections
-        self.altered_projections = Projections_Prenormalized()
+        self.projections = Import.projections
+        self.altered_projections = Projections_Child(self.projections)
         self.prep_list = []
         self.metadata = {}
         self.accordions_open = False
@@ -63,10 +65,12 @@ class Prep(ABC):
         self.button_layout = Layout(width="45px", height="40px")
 
         # -- Main viewers --------------------------------------------------------------
-        self.imported_viewer = BqImViewer_Prep(self)
+        self.imported_viewer = BqImViewer_Projections_Parent()
         self.imported_viewer.create_app()
-        self.altered_viewer = BqImViewer_Altered_Prep(self.imported_viewer, self)
+        self.altered_viewer = BqImViewer_Projections_Child(self.imported_viewer)
         self.altered_viewer.create_app()
+        self.altered_viewer.ds_viewer_dropdown.options = [("Original", -1)]
+        self.altered_viewer.ds_viewer_dropdown.value = -1
 
         # -- Headers for plotting -------------------------------------
         self.import_plot_header = "Imported Projections"
@@ -278,18 +282,27 @@ class Prep(ABC):
             ],
         )
 
-        # tomopy.misc.corr Gaussian Filter options
+        self.remove_data_outside_button = Button(
+            description="Set data = 0 outside of current histogram range.",
+            layout=Layout(width="auto", height="auto"),
+        )
+        self.remove_data_outside_button.on_click(self.remove_data_outside)
+
         self.renormalize_by_roi_button = Button(
             description="Click to normalize by ROI.",
             button_style="info",
-            layout=Layout(width="auto", height="auto", align_items="stretch"),
-            disabled=True,
+            layout=Layout(width="auto", height="auto"),
+            disabled=False,
         )
-        # self.renormalize_by_roi_button.on_click(self.renormalize_by_roi)
+        self.renormalize_by_roi_button.on_click(self.add_ROI_background)
 
+        self.roi_buttons_box = VBox(
+            [self.remove_data_outside_button, self.renormalize_by_roi_button]
+        )
         self.prep_buttons = [
             self.tomocorr_median_filter_box,
             self.tomocorr_gaussian_filter_box,
+            self.roi_buttons_box,
         ]
 
         # -- Widgets for shifting other energies tool ----------------------------------
@@ -505,6 +518,16 @@ class Prep(ABC):
         self.prep_list.append(method.method_tuple)
         self.update_prep_list()
 
+    def remove_data_outside(self, *args):
+        method = PrepMethod(
+            self,
+            "Remove Data Outside",
+            remove_data_outside,
+            [(self.imported_viewer.hist.vmin, self.imported_viewer.hist.vmax)],
+        )
+        self.prep_list.append(method.method_tuple)
+        self.update_prep_list()
+
     def update_prep_list(self):
         if self.prep_list == []:
             self.prep_list_select.options = [
@@ -522,8 +545,10 @@ class Prep(ABC):
                 x.disabled = False
 
     def refresh_plots(self):
-        self.imported_projections = self.Import.projections
-        self.imported_viewer.plot()
+        self.imported_viewer.plot(self.projections)
+        self.altered_projections.parent_projections = self.projections
+        self.altered_projections.copy_from_parent()
+        self.altered_viewer.plot(self.altered_projections)
 
     def set_observes(self):
 
@@ -621,33 +646,53 @@ class Prep(ABC):
         if self.preview_only:
             image_index = self.imported_viewer.image_index_slider.value
             self.altered_viewer.image_index_slider.value = image_index
-            self.prepped_data = copy.deepcopy(
-                self.imported_viewer.original_images[image_index]
-            )
+            self.prepped_data = copy.deepcopy(self.altered_viewer.plotted_image.image)
             self.prepped_data = self.prepped_data[np.newaxis, ...]
             for prep_method_tuple in self.prep_list:
                 prep_method_tuple[1].update_method_and_run()
-            self.altered_viewer.plotted_image.image = self.prepped_data[0]
+            self.altered_viewer.plotted_image.image = self.prepped_data
         else:
-            self.prepped_data = copy.deepcopy(self.imported_viewer.original_images)
+            self.altered_projections.parent_projections = (
+                self.imported_viewer.projections
+            )
+            self.altered_projections.deepcopy_data_from_parent()
+            self.prepped_data = self.altered_projections.data
             for num, prep_method_tuple in enumerate(self.prep_list):
                 prep_method_tuple[1].update_method_and_run()
                 self.prep_list_select.index = num
-            self.altered_viewer.original_images = self.prepped_data
-            self.altered_viewer.plot()
+            self.altered_projections.data = self.prepped_data
+            self.altered_viewer.images = self.altered_projections.data
+            self.altered_viewer.plotted_image.image = self.altered_projections.data[0]
             if self.save_on:
                 self.make_prep_dir()
                 self.metadata.set_metadata(self)
                 self.metadata.filedir = self.filedir
                 self.metadata.save_metadata()
-                self.altered_projections.data = self.prepped_data
-                np.save(self.filedir / "normalized_projections.npy", self.prepped_data)
+                self.altered_projections.data = da.from_array(
+                    self.altered_projections.data
+                )
+                hist, r, bins, percentile = self.altered_projections._dask_hist()
+                grp = self.altered_projections.hdf_key_norm + "/"
+                data_dict = {
+                    self.altered_projections.hdf_key_norm_proj: self.altered_projections.data,
+                    grp + self.altered_projections.hdf_key_bin_frequency: hist[0],
+                    grp + self.altered_projections.hdf_key_bin_edges: hist[1],
+                    grp + self.altered_projections.hdf_key_image_range: r,
+                    grp + self.altered_projections.hdf_key_percentile: percentile,
+                }
+                self.altered_projections.dask_data_to_h5(
+                    data_dict, savedir=self.filedir
+                )
+                self.altered_projections._dask_bin_centers(
+                    grp, write=True, savedir=self.filedir
+                )
 
     def make_prep_dir(self):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y%m%d-%H%M%S-prep")
         self.filedir = pathlib.Path(self.Import.projections.filedir) / dt_string
-        os.mkdir(self.filedir)
+        self.filedir.mkdir()
+        # os.mkdir(self.filedir)
 
     def make_tab(self):
 
@@ -768,23 +813,6 @@ def shift_projections(projections, sx, sy):
     return new_prj_imgs
 
 
-def shift_projections(projections, sx, sy):
-    new_prj_imgs = copy.deepcopy(projections)
-    pad_x = int(np.ceil(np.max(np.abs(sx))))
-    pad_y = int(np.ceil(np.max(np.abs(sy))))
-    pad = (pad_x, pad_y)
-    new_prj_imgs, pad = pad_projections(new_prj_imgs, pad)
-    new_prj_imgs = shift_prj_cp(
-        new_prj_imgs,
-        sx,
-        sy,
-        20,
-        pad,
-        use_corr_prj_gpu=False,
-    )
-    return new_prj_imgs
-
-
 def renormalize_by_roi(projections, px_range_x, px_range_y):
     exp_full = np.exp(-projections)
     averages = [
@@ -793,9 +821,17 @@ def renormalize_by_roi(projections, px_range_x, px_range_y):
         )
         for i in range(len(exp_full))
     ]
-    prj = [exp_full[i] / averages[i] for i in range(len(exp_full))]
-    prj = -np.log(prj)
-    return prj
+    projections = [exp_full[i] / averages[i] for i in range(len(exp_full))]
+    projections = -np.log(projections)
+    return projections
+
+
+def remove_data_outside(projections, vmin_vmax: tuple):
+    remove_high_indexes = projections > vmin_vmax[1]
+    projections[remove_high_indexes] = 1e-6
+    remove_low_indexes = projections < vmin_vmax[0]
+    projections[remove_low_indexes] = 1e-6
+    return projections
 
 
 ### May use?
