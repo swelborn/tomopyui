@@ -246,6 +246,7 @@ class IOBase:
         """
         filedir = self.filedir
         files = [pathlib.Path(f).name for f in os.scandir(filedir) if not f.is_dir()]
+        print(files)
         if self.normalized_projections_hdf_key in files:
             self._filepath = filedir / self.normalized_projections_hdf_key
             self.filepath = self._filepath
@@ -1526,9 +1527,9 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         )
 
     def import_data(self, Uploader):
+        self.import_metadata()
         self.metadata_projections.set_extra_metadata(Uploader)
         self.metadata_references.set_extra_metadata(Uploader)
-        # self.metadata_projections.filedir = Uploader.
         self.metadata.filedir = self.metadata_projections.filedir
         self.filedir = self.metadata.filedir
         self.metadata.filepath = self.metadata.filedir / self.metadata.filename
@@ -1539,25 +1540,26 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         self.import_savedir.mkdir()
         self.import_filedir_projections(Uploader)
         self.import_filedir_flats(Uploader)
+        self.filedir = self.import_savedir
         projs, flats, darks = self.setup_normalize(Uploader)
         Uploader.import_status_label.value = "Normalizing projections"
         self._data = self.normalize_no_locations_no_average(
             projs, flats, darks, compute=False
         )
         self.data = self._data
-        self.filedir = self.import_savedir
-        da.to_hdf5(
-            self.filedir / self.normalized_projections_hdf_key,
-            "/projections/data",
-            self.data,
-        )
-        Uploader.import_status_label.value = "Getting data from hdf5"
-        open_file = h5py.File(self.filedir / self.normalized_projections_hdf_key)[
-            "projections"
-        ]["data"]
-        self._data = da.from_array(open_file)
-        self.data = self._data
+        hist, r, bins, percentile = self._dask_hist()
+        grp = self.hdf_key_norm
+        data_dict = {
+            self.hdf_key_norm_proj: self.data,
+            grp + self.hdf_key_bin_frequency: hist[0],
+            grp + self.hdf_key_bin_edges: hist[1],
+            grp + self.hdf_key_image_range: r,
+            grp + self.hdf_key_percentile: percentile,
+        }
+        self.dask_data_to_h5(data_dict, savedir=self.import_savedir)
+        self._dask_bin_centers(grp, write=True, savedir=self.import_savedir)
         Uploader.import_status_label.value = "Downsampling data in a pyramid"
+        self.filedir = self.import_savedir
         self._check_downsampled_data(label=Uploader.import_status_label)
         self.metadata_projections.set_attributes_from_metadata(self)
         self.metadata_prenorm = Metadata_SSRL62B_Prenorm()
@@ -1565,12 +1567,16 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         self.metadata_prenorm.metadata[
             "parent_metadata"
         ] = self.metadata.metadata.copy()
+        if Uploader.save_tiff_on_import_checkbox.value:
+            self.status_label.value = "Saving projections as .tiff."
+            self.saved_as_tiff = True
+            self.save_normalized_as_tiff()
+            self.metadata["saved_as_tiff"] = projections.saved_as_tiff
         self.metadata_prenorm.filedir = self.filedir
         self.metadata_prenorm.filepath = self.filedir / self.metadata_prenorm.filename
         self.metadata_prenorm.save_metadata()
-        self.metadata_prenorm.save_metadata_h5(
-            open_file,
-        )
+
+        self.hdf_file.close()
 
     def import_metadata(self):
         self.metadata = Metadata_SSRL62B_Raw(
@@ -1625,11 +1631,10 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         Uploader.import_status_label.value = "Converting to dask array"
         arr = da.from_array(arr, chunks={0: "auto", 1: -1, 2: -1})
         Uploader.import_status_label.value = "Saving in normalized_projections.hdf5"
+        data_dict = {self.hdf_key_raw_proj: arr}
         da.to_hdf5(
-            self.import_savedir / self.normalized_projections_hdf_key,
-            "/raw/projections",
-            arr,
-        )
+            self.import_savedir / self.normalized_projections_hdf_key, data_dict
+            )
 
     def import_filedir_flats(self, Uploader):
         tifffiles = self.metadata_references.metadata["filenames"]
@@ -1647,11 +1652,10 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         Uploader.import_status_label.value = "Converting to dask array"
         arr = da.from_array(arr, chunks={0: "auto", 1: -1, 2: -1})
         Uploader.import_status_label.value = "Saving in normalized_projections.hdf5"
+        data_dict = {self.hdf_key_raw_flats: arr}
         da.to_hdf5(
-            self.import_savedir / self.normalized_projections_hdf_key,
-            "/raw/flats",
-            arr,
-        )
+            self.import_savedir / self.normalized_projections_hdf_key, data_dict
+            )
 
     def import_filedir_darks(self, filedir):
         pass
@@ -1684,11 +1688,11 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         """
         self.flats = None
         self._data = None
-        open_file = h5py.File(
+        self.hdf_file = h5py.File(
             self.import_savedir / self.normalized_projections_hdf_key, "a"
         )
-        self.flats = open_file["raw"]["flats"]
-        self._data = open_file["raw"]["projections"]
+        self.flats = self.hdf_file[self.hdf_key_raw_flats]
+        self._data = self.hdf_file[self.hdf_key_raw_proj]
         self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
         projs = da.from_array(self._data).astype(np.float32)
         flats = da.from_array(self.flats).astype(np.float32)
@@ -2514,20 +2518,6 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         self.dataframe = s
 
     def set_attributes_from_metadata(self, projections):
-        # projections.scan_info = copy.deepcopy(self.metadata["scan_info"])
-        # projections.scan_info["FILES"] = [
-        #     pathlib.Path(file) for file in self.metadata["scan_info"]["FILES"]
-        # ]
-        # projections.scan_info_path = self.metadata["scan_info_path"]
-        # projections.run_script_path = pathlib.Path(self.metadata["run_script_path"])
-        projections.flats_filenames = [
-            pathlib.Path(file) for file in self.metadata["flats_filenames"]
-        ]
-        projections.data_filenames = [
-            pathlib.Path(file) for file in self.metadata["projections_filenames"]
-        ]
-        # projections.scan_type = self.metadata["scan_type"]
-        # projections.scan_order = self.metadata["scan_order"]
         projections.pxX = self.metadata["pxX"]
         projections.pxY = self.metadata["pxY"]
         projections.pxZ = self.metadata["pxZ"]
@@ -2536,19 +2526,12 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         projections.start_angle = self.metadata["start_angle"]
         projections.end_angle = self.metadata["end_angle"]
         projections.binning = self.metadata["binning"]
-        # projections.energies_list_float = self.metadata["all_raw_energies_float"]
-        # projections.energies_list_str = self.metadata["all_raw_energies_str"]
         projections.user_overwrite_energy = self.metadata["user_overwrite_energy"]
         projections.energy_str = self.metadata["energy_str"]
         projections.energy_float = self.metadata["energy_float"]
         projections.energy_units = self.metadata["energy_units"]
-        # projections.raw_pixel_sizes = self.metadata["all_raw_pixel_sizes"]
-        # projections.pixel_size_from_metadata = self.metadata[
-        #     "pixel_size_from_scan_info"
-        # ]
         projections.px_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
-        # projections.size_gb = self.metadata["normalized_projections_size_gb"]
         projections.import_savedir = pathlib.Path(
             self.metadata["normalized_projections_directory"]
         )
@@ -2641,6 +2624,7 @@ class Metadata_SSRL62B_Raw_Projections(Metadata):
         return self.imported_metadata
 
     def set_attributes_from_metadata(self, projections):
+        projections.binning = self.metadata["binnings"][0]
         projections.num_angles = self.metadata["num_angles"]
         projections.angles_deg = self.metadata["angles_deg"]
         projections.angles_rad = self.metadata["angles_rad"]
@@ -2655,6 +2639,8 @@ class Metadata_SSRL62B_Raw_Projections(Metadata):
         projections.energy_units = self.metadata["energy_units"]
         projections.pixel_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
+        projections.projections_exposure_time = self.metadata["average_exposure_time"]
+        projections.acquisition_name = self.metadata["acquisition_name"] 
 
     def set_metadata(self, projections):
         pass
@@ -2905,7 +2891,7 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
     def __init__(self):
         super().__init__()
         self.filename = "import_metadata.json"
-        self.metadata["metadata_type"] = "SSRL62C_Normalized"
+        self.metadata["metadata_type"] = "SSRL62B_Normalized"
         self.metadata["data_hierarchy_level"] = 1
         self.table_label.value = "SSRL 6-2B TomoPyUI-Imported Metadata"
 
@@ -2924,6 +2910,10 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
         self.metadata["energy_units"] = projections.energy_units
         self.metadata["pixel_size"] = projections.pixel_size
         self.metadata["pixel_units"] = projections.pixel_units
+        self.metadata["binning"] = projections.binning
+        self.metadata["average_exposure_time"] = projections.projections_exposure_time
+        self.metadata["acquisition_name"] = projections.acquisition_name
+        self.metadata["saved_as_tiff"] = projections.saved_as_tiff
 
     def metadata_to_DataFrame(self):
         # create headers and data for table
@@ -2932,14 +2922,7 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
         en_units = self.metadata["energy_units"]
         start_angle = self.metadata["start_angle"]
         end_angle = self.metadata["end_angle"]
-        exp_time_proj = f"{self.metadata['projections_exposure_time']:0.2f}"
-        exp_time_ref = f"{self.metadata['references_exposure_time']:0.2f}"
-        ds_vals = self.metadata["downsampled_values"]
-        ds_vals = [x[2] for x in ds_vals]
-        if self.metadata["user_overwrite_energy"]:
-            user_overwrite = "Yes"
-        else:
-            user_overwrite = "No"
+        exp_time_proj = f"{self.metadata['average_exposure_time']:0.2f}"
         if self.metadata["saved_as_tiff"]:
             save_as_tiff = "Yes"
         else:
@@ -2951,7 +2934,6 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
                 "Start θ (°)": f"{start_angle:0.1f}",
                 "End θ (°)": f"{end_angle:0.1f}",
                 # "Scan Type": self.metadata["scan_type"],
-                "Ref. Exp. Time": exp_time_ref,
                 "Proj. Exp. Time": exp_time_proj,
             },
             {
@@ -2961,9 +2943,7 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
                 "Binning": self.metadata["binning"],
             },
             {
-                "Energy Overwritten": user_overwrite,
                 ".tif Saved": save_as_tiff,
-                "Downsample Values": ds_vals,
             },
         ]
         middle_headers = [[]]
@@ -3030,20 +3010,6 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
         self.dataframe = s
 
     def set_attributes_from_metadata(self, projections):
-        # projections.scan_info = copy.deepcopy(self.metadata["scan_info"])
-        # projections.scan_info["FILES"] = [
-        #     pathlib.Path(file) for file in self.metadata["scan_info"]["FILES"]
-        # ]
-        # projections.scan_info_path = self.metadata["scan_info_path"]
-        # projections.run_script_path = pathlib.Path(self.metadata["run_script_path"])
-        projections.flats_filenames = [
-            pathlib.Path(file) for file in self.metadata["flats_filenames"]
-        ]
-        projections.data_filenames = [
-            pathlib.Path(file) for file in self.metadata["projections_filenames"]
-        ]
-        # projections.scan_type = self.metadata["scan_type"]
-        # projections.scan_order = self.metadata["scan_order"]
         projections.pxX = self.metadata["pxX"]
         projections.pxY = self.metadata["pxY"]
         projections.pxZ = self.metadata["pxZ"]
@@ -3052,30 +3018,15 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
         projections.start_angle = self.metadata["start_angle"]
         projections.end_angle = self.metadata["end_angle"]
         projections.binning = self.metadata["binning"]
-        # projections.energies_list_float = self.metadata["all_raw_energies_float"]
-        # projections.energies_list_str = self.metadata["all_raw_energies_str"]
-        projections.user_overwrite_energy = self.metadata["user_overwrite_energy"]
         projections.energy_str = self.metadata["energy_str"]
         projections.energy_float = self.metadata["energy_float"]
         projections.energy_units = self.metadata["energy_units"]
-        # projections.raw_pixel_sizes = self.metadata["all_raw_pixel_sizes"]
-        # projections.pixel_size_from_metadata = self.metadata[
-        #     "pixel_size_from_scan_info"
-        # ]
         projections.px_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
-        # projections.size_gb = self.metadata["normalized_projections_size_gb"]
-        projections.import_savedir = pathlib.Path(
-            self.metadata["normalized_projections_directory"]
-        )
-        projections.filedir_ds = pathlib.Path(
-            self.metadata["downsampled_projections_directory"]
-        )
-        if "flats_ind" in self.metadata:
-            projections.flats_ind = self.metadata["flats_ind"]
-        projections.ds_vals = self.metadata["downsampled_values"]
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
-
+        projections.num_angles = self.metadata["num_angles"]
+        projections.acquisition_name = self.metadata["acquisition_name"]
+        projections.exposure_time = self.metadata["average_exposure_time"]
 
 class Metadata_ALS_832_Raw(Metadata):
     def __init__(self):

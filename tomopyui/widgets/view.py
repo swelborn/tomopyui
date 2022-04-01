@@ -348,9 +348,9 @@ class BqImViewerBase(ABC):
         vmin = self.image_scale["image"].min
         vmax = self.image_scale["image"].max
         if self.from_hdf:
-            self.projections._load_hdf_normalized_data_into_memory()
-            self.original_images = self.projections.data
-        for image in self.original_images:
+            self.projections._load_hdf_ds_data_into_memory(self.ds_viewer_dropdown.value)
+            self.images = self.projections.data_ds
+        for image in self.images:
             im = ax.imshow(image, animated=True, vmin=vmin, vmax=vmax)
             ims.append([im])
         ani = animation.ArtistAnimation(
