@@ -14,7 +14,7 @@ from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
 from ipywidgets import *
 from abc import ABC, abstractmethod
 from tomopyui._sharedvars import *
-from tomopyui.widgets.view import BqImViewer_Import
+from tomopyui.widgets.view import BqImViewer_Projections_Parent
 from tomopyui.backend.io import (
     RawProjectionsHDF5_ALS832,
     RawProjectionsHDF5_APS,
@@ -93,7 +93,11 @@ class ImportBase(ABC):
         self.projections = self.prenorm_uploader.projections
         if self.projections.hdf_file is not None:
             self.projections._open_hdf_file_read_only()
+            self.projections._load_hdf_ds_data_into_memory()
+            self.projections._load_hdf_ds_data_into_memory()
         self.uploader = self.prenorm_uploader
+        self.Prep.projections = self.projections
+        self.Center.projections = self.projections
         self.Recon.projections = self.projections
         self.Align.projections = self.projections
         self.Recon.refresh_plots()
@@ -114,7 +118,11 @@ class ImportBase(ABC):
         self.projections = self.raw_uploader.projections
         if self.projections.hdf_file is not None:
             self.projections._open_hdf_file_read_only()
+            self.projections._load_hdf_ds_data_into_memory()
+            self.projections._load_hdf_ds_data_into_memory()
         self.uploader = self.raw_uploader
+        self.Prep.projections = self.projections
+        self.Center.projections = self.projections
         self.Recon.projections = self.projections
         self.Align.projections = self.projections
         self.Recon.refresh_plots()
@@ -369,7 +377,7 @@ class UploaderBase(ABC):
         )
 
         # Create data visualizer
-        self.viewer = BqImViewer_Import()
+        self.viewer = BqImViewer_Projections_Parent()
         self.viewer.create_app()
 
         # bool for whether or not metadata was imported
@@ -1000,7 +1008,7 @@ class ShiftsUploader(UploaderBase):
         super().__init__()
         self.Prep = Prep
         self.import_button.callback = Prep.add_shift  # callback to add shifts to list
-        self.projections = Prep.imported_projections
+        self.projections = Prep.projections
         self.filechooser.title = "Import shifts: "
         self.imported_metadata = False
         self.filetypes_to_look_for = ["sx.npy", "sy.npy", "alignment_metadata.json"]

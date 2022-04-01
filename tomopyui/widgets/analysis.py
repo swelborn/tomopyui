@@ -6,14 +6,14 @@ from ipywidgets import *
 from tomopyui._sharedvars import *
 from abc import ABC, abstractmethod
 from tomopyui.widgets.view import (
-    BqImViewer_Import_Analysis,
-    BqImViewer_Altered_Analysis,
-    BqImViewer_DataExplorer_AfterAnalysis,
+    BqImViewer_Projections_Parent,
+    BqImViewer_Projections_Child,
+    BqImViewer_Projections_Child,
 )
 from tomopyui.backend.align import TomoAlign
 from tomopyui.backend.recon import TomoRecon
 from tomopyui.backend.io import (
-    Projections_Prenormalized,
+    Projections_Child,
     Metadata_Align,
     Metadata_Recon,
 )
@@ -25,12 +25,13 @@ class AnalysisBase(ABC):
         self.Import = Import
         self.Center = Center
         self.projections = Import.projections
-        self.imported_viewer = BqImViewer_Import_Analysis(self)
+        self.altered_projections = Projections_Child(self.projections)
+        self.imported_viewer = BqImViewer_Projections_Parent()
         self.imported_viewer.create_app()
-        self.altered_viewer = BqImViewer_Altered_Analysis(self.imported_viewer, self)
+        self.altered_viewer = BqImViewer_Projections_Child(self.imported_viewer)
         self.altered_viewer.create_app()
         self.result_before_viewer = self.altered_viewer
-        self.result_after_viewer = BqImViewer_DataExplorer_AfterAnalysis(
+        self.result_after_viewer = BqImViewer_Projections_Child(
             self.result_before_viewer
         )
         self.wd = None
@@ -243,7 +244,10 @@ class AnalysisBase(ABC):
         )
 
     def refresh_plots(self):
-        self.imported_viewer.plot()
+        self.imported_viewer.plot(self.projections)
+        self.altered_projections.parent_projections = self.projections
+        self.altered_projections.copy_from_parent()
+        self.altered_viewer.plot(self.altered_projections)
 
     def set_observes(self):
 
@@ -332,7 +336,7 @@ class AnalysisBase(ABC):
         self.px_range_x = self.projections.px_range_x
         self.px_range_y = self.projections.px_range_y
         self.result_before_viewer = self.imported_viewer
-        self.result_after_viewer = BqImViewer_DataExplorer_AfterAnalysis(
+        self.result_after_viewer = BqImViewer_Projections_Child(
             self.result_before_viewer
         )
         self.use_imported_button.button_style = "success"
@@ -355,7 +359,7 @@ class AnalysisBase(ABC):
         self.px_range_x = self.altered_viewer.px_range_x
         self.px_range_y = self.altered_viewer.px_range_y
         self.result_before_viewer = self.altered_viewer
-        self.result_after_viewer = BqImViewer_DataExplorer_AfterAnalysis(
+        self.result_after_viewer = BqImViewer_Projections_Child(
             self.result_before_viewer
         )
         self.use_altered_button.button_style = "success"
@@ -650,7 +654,7 @@ class Align(AnalysisBase):
 
     def run(self):
         self.analysis = TomoAlign(self)
-        self.analysis_projections = Projections_Prenormalized()
+        self.analysis_projections = Projections_Child(self.projections)
         self.analysis_projections.data = self.analysis.projections_aligned
         self.analysis_projections.filedir = self.analysis.wd
         self.result_after_viewer.create_app()
@@ -816,7 +820,7 @@ class Recon(AnalysisBase):
 
     def run(self):
         self.analysis = TomoRecon(self)
-        self.analysis_projections = Projections_Prenormalized()
+        self.analysis_projections = Projections_Child(self.projections)
         self.analysis_projections.data = self.analysis.recon
         self.analysis_projections.filedir = pathlib.Path(self.analysis.wd)
         self.result_after_viewer.create_app()

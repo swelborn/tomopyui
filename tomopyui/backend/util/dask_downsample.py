@@ -2,6 +2,9 @@
 ## uses dask. Pretty disorganized, but it works for my use case. Could be expanded
 ## eventually.
 
+# TODO: currently, spline filter does not work properly - it is also splining the z axis
+# USE multiple 1d splines
+
 import dask
 import dask.array as da
 import dask_image
@@ -123,7 +126,7 @@ def pyramid_reduce_gaussian(
                     for i in range(len(bin_edges) - 1)
                 ]
             )
-            da.to_hdf5(h5_filepath, subgrp + IOBase.hdf_key_ds_bin_centers, bin_centers)
+            da.to_hdf5(h5_filepath, subgrp + IOBase.hdf_key_bin_centers, bin_centers)
             image = da.from_array(open_file[subgrp + IOBase.hdf_key_data])
         else:
             coarseneds.append(coarsened)
@@ -330,10 +333,8 @@ def zoom(
     output_shape = tuple([int(round(ii * jj)) for ii, jj in zip(input.shape, zoom)])
     if prefilter and order > 1:
         padded, npad = _prepad_for_spline_filter(input, mode, cval)
-        filtered = dask_image.ndinterp.spline_filter(
-            padded, order, output=np.float32, mode=mode
-        )
-
+        filtered = dask_image.ndinterp.spline_filter1d(padded, order, axis=1, mode=mode)
+        filtered = dask_image.ndinterp.spline_filter1d(padded, order, axis=2, mode=mode)
     return filtered
 
 
