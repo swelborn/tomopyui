@@ -219,7 +219,11 @@ class IOBase:
 
     def _dask_bin_centers(self, grp, write=False, savedir=None):
         tmp_filepath = copy.copy(self.filepath)
-        self.filedir = savedir
+        tmp_filedir = copy.copy(self.filedir)
+        if savedir is None:
+            self.filedir = self.import_savedir
+        else:
+            self.filedir = savedir
         self.filepath = self.filedir / self.normalized_projections_hdf_key
         self._open_hdf_file_append()
         bin_edges = da.from_array(self.hdf_file[grp + self.hdf_key_bin_edges])
@@ -230,7 +234,21 @@ class IOBase:
             data_dict = {grp + self.hdf_key_bin_centers: bin_centers}
             self.dask_data_to_h5(data_dict, savedir=savedir)
         self.filepath = tmp_filepath
+        self.filedir = tmp_filedir
         return bin_centers
+
+    def _dask_hist_and_save_data(self):
+        hist, r, bins, percentile = self._dask_hist()
+        grp = IOBase.hdf_key_norm + "/"
+        data_dict = {
+            self.hdf_key_norm_proj: self.data,
+            grp + self.hdf_key_bin_frequency: hist[0],
+            grp + self.hdf_key_bin_edges: hist[1],
+            grp + self.hdf_key_image_range: r,
+            grp + self.hdf_key_percentile: percentile,
+        }
+        self.dask_data_to_h5(data_dict, savedir=self.import_savedir)
+        self._dask_bin_centers(grp, write=True, savedir=self.import_savedir)
 
     def _check_downsampled_data(self, label=None):
         """
@@ -246,7 +264,6 @@ class IOBase:
         """
         filedir = self.filedir
         files = [pathlib.Path(f).name for f in os.scandir(filedir) if not f.is_dir()]
-        print(files)
         if self.normalized_projections_hdf_key in files:
             self._filepath = filedir / self.normalized_projections_hdf_key
             self.filepath = self._filepath
@@ -422,13 +439,6 @@ class ProjectionsBase(IOBase, ABC):
         name = self.aliases.get(name, name)
         return object.__getattribute__(self, name)
 
-    def save_normalized_as_npy(self):
-        """
-        Saves current self.data under the current self.filedir as
-        self.normalized_projections_npy_key
-        """
-        np.save(self.filedir / str(self.normalized_projections_npy_key), self.data)
-
     def save_normalized_as_tiff(self):
         """
         Saves current self.data under the current self.filedir as
@@ -459,6 +469,22 @@ class ProjectionsBase(IOBase, ABC):
             filedir / self.normalized_projections_hdf_key,
             data_dict,
         )
+
+    def make_import_savedir(self, folder_name):
+        """
+        Creates a save directory to put projections into.
+        """
+        self.import_savedir = pathlib.Path(self.filedir / folder_name)
+        if self.import_savedir.exists():
+            now = datetime.datetime.now()
+            dt_str = now.strftime("%Y%m%d-%H%M-")
+            save_name = dt_str + folder_name
+            self.import_savedir = pathlib.Path(self.filedir / save_name)
+            if self.import_savedir.exists():
+                dt_str = now.strftime("%Y%m%d-%H%M%S-")
+                save_name = dt_str + folder_name
+                self.import_savedir = pathlib.Path(self.filedir / save_name)
+        self.import_savedir.mkdir()
 
     @abstractmethod
     def import_metadata(self, filedir):
@@ -522,11 +548,14 @@ class Projections_Prenormalized(ProjectionsBase):
         Similar process to import_file_projections. This one will be triggered if the
         tiff folder checkbox is selected on the frontend.
         """
+        if Uploader.imported_metadata and not self.tiff_folder:
+            self.import_file_projections(Uploader)
+            return
         self.tic = time.perf_counter()
         Uploader.import_status_label.value = "Importing file directory."
         self.filedir = Uploader.filedir
         if not Uploader.imported_metadata:
-            self.set_import_savedir(str(self.metadata.metadata["energy_str"] + "eV"))
+            self.make_import_savedir(str(self.metadata.metadata["energy_str"] + "eV"))
             self.metadata.set_attributes_from_metadata_before_import(self)
         cwd = os.getcwd()
         os.chdir(self.filedir)
@@ -537,6 +566,7 @@ class Projections_Prenormalized(ProjectionsBase):
         self.save_data_and_metadata(Uploader)
         self._check_downsampled_data()
         os.chdir(cwd)
+        self.filepath = self.import_savedir / self.normalized_projections_hdf_key
 
     def import_file_projections(self, Uploader):
         """
@@ -550,16 +580,21 @@ class Projections_Prenormalized(ProjectionsBase):
         6. Sets metadata from data info after upload
         7. Saves in the import directory.
         """
+        if self.tiff_folder:
+            self.import_filedir_projections(Uploader)
+            return
         self.tic = time.perf_counter()
         Uploader.import_status_label.value = "Importing single file."
         self.imported = False
         self.filedir = Uploader.filedir
         self.filename = Uploader.filename
-        self._filepath = self.filedir / self.filename
-        self.filepath = self._filepath
+        if self.filename is None or self.filename == "":
+            self.filename = str(Uploader.images_in_dir[0].name)
+        self.filepath = self.filedir / self.filename
         if not Uploader.imported_metadata:
-            self.set_import_savedir(str(self.metadata.metadata["energy_str"] + "eV"))
+            self.make_import_savedir(str(self.metadata.metadata["energy_str"] + "eV"))
             self.metadata.set_attributes_from_metadata_before_import(self)
+            self.filedir = self.import_savedir
 
         # if import metadata is found in the directory, self.normalized_projections_npy_key
         # will be uploaded. This behavior is probably OK if we stick to this file
@@ -581,7 +616,6 @@ class Projections_Prenormalized(ProjectionsBase):
                     self.filedir / "normalized_projections.npy"
                 ).astype(np.float32)
             self.metadata.set_attributes_from_metadata(self)
-            self._check_downsampled_data()
             if Uploader.save_tiff_on_import_checkbox.value:
                 Uploader.import_status_label.value = "Saving projections as .tiff."
                 self.saved_as_tiff = True
@@ -590,15 +624,9 @@ class Projections_Prenormalized(ProjectionsBase):
             self.imported = True
 
         elif any([x in self.filename for x in [".tif", ".tiff"]]):
-            if self.tiff_folder:
-                self.import_filedir_projections(Uploader)
-                return
-            self._data = np.array(
-                dxchange.reader.read_tiff(self.filepath).astype(np.float32)
-            )
-            self._data = np.where(np.isfinite(self._data), self._data, 0)
+            self._data = dask_image.imread.imread(self.filepath).astype(np.float32)
+            self._data = da.where(da.isfinite(self._data), self._data, 0)
             self.data = self._data
-            self.metadata.set_metadata_from_attributes_after_import(self)
             self.save_data_and_metadata(Uploader)
             self.imported = True
 
@@ -606,48 +634,11 @@ class Projections_Prenormalized(ProjectionsBase):
             self._data = np.load(self.filepath).astype(np.float32)
             self._data = np.where(np.isfinite(self._data), self._data, 0)
             self.data = self._data
-            self.metadata.set_metadata_from_attributes_after_import(self)
             self.save_data_and_metadata(Uploader)
-            self._check_downsampled_data()
             self.imported = True
 
-    def get_img_shape(self, extension=None):
-        """
-        Gets the image shape of a tiff or npy with lazy loading.
-        """
-
-        if self.extension == ".tif" or self.extension == ".tiff":
-            allowed_extensions = [".tiff", ".tif"]
-            file_list = [
-                pathlib.PurePath(f) for f in os.scandir(self.filedir) if not f.is_dir()
-            ]
-            tiff_file_list = [
-                file.name
-                for file in file_list
-                if any(x in file.name for x in self.allowed_extensions)
-            ]
-            tiff_count_in_filedir = len(tiff_file_list)
-            with tf.TiffFile(self.filepath) as tif:
-                # if you select a file instead of a file path, it will try to
-                # bring in the full filedir
-                if tiff_count_in_filedir > 50:
-                    sizeX = tif.pages[0].tags["ImageWidth"].value
-                    sizeY = tif.pages[0].tags["ImageLength"].value
-                    sizeZ = tiff_count_in_filedir  # can maybe use this later
-                else:
-                    imagesize = tif.pages[0].tags["ImageDescription"]
-                    size = json.loads(imagesize.value)["shape"]
-                    sizeZ = size[0]
-                    sizeY = size[1]
-                    sizeX = size[2]
-
-        elif self.extension == ".npy":
-            size = np.load(self.filepath, mmap_mode="r").shape
-            sizeZ = size[0]
-            sizeY = size[1]
-            sizeX = size[2]
-
-        return (sizeZ, sizeY, sizeX)
+        self._check_downsampled_data()
+        self.filepath = self.import_savedir / self.normalized_projections_hdf_key
 
     def make_angles(self):
         """
@@ -666,29 +657,12 @@ class Projections_Prenormalized(ProjectionsBase):
         self.metadata = Metadata.parse_metadata_type(filepath)
         self.metadata.load_metadata()
 
-    def set_import_savedir(self, folder_name):
-        """
-        Creates a save directory to put projections into.
-        """
-        self.import_savedir = pathlib.Path(self.filedir / folder_name)
-        if self.import_savedir.exists():
-            now = datetime.datetime.now()
-            dt_str = now.strftime("%Y%m%d-%H%M-")
-            save_name = dt_str + folder_name
-            self.import_savedir = pathlib.Path(self.filedir / save_name)
-            if self.import_savedir.exists():
-                dt_str = now.strftime("%Y%m%d-%H%M%S-")
-                save_name = dt_str + folder_name
-                self.import_savedir = pathlib.Path(self.filedir / save_name)
-        self.import_savedir.mkdir()
-        self.filedir_ds = self.import_savedir / "downsampled"
-
     def save_data_and_metadata(self, Uploader):
         """
         Saves current data and metadata in import_savedir.
         """
         self.filedir = self.import_savedir
-        self.dask_data_to_h5({self.hdf_key_norm_proj: self.data})
+        self._dask_hist_and_save_data()
         self.saved_as_tiff = False
         if Uploader.save_tiff_on_import_checkbox.value:
             Uploader.import_status_label.value = "Saving projections as .tiff."
@@ -698,6 +672,7 @@ class Projections_Prenormalized(ProjectionsBase):
         self.metadata.filedir = self.filedir
         self.toc = time.perf_counter()
         self.metadata.metadata["import_time"] = self.toc - self.tic
+        self.metadata.set_metadata_from_attributes_after_import(self)
         self.metadata.save_metadata()
         Uploader.import_status_label.value = "Checking for downsampled data."
         self._check_downsampled_data(label=Uploader.import_status_label)
@@ -718,17 +693,6 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         self.flats_ind = None
         self.darks = None
         self.normalized = False
-
-    def check_import_savedir_exists(self, filedir_name):
-        if self.import_savedir.exists():
-            now = datetime.datetime.now()
-            dt_str = now.strftime("%Y%m%d-%H%M-")
-            save_name = dt_str + filedir_name
-            self.import_savedir = pathlib.Path(self.filedir / save_name)
-            if self.import_savedir.exists():
-                dt_str = now.strftime("%Y%m%d-%H%M%S-")
-                save_name = dt_str + filedir_name
-                self.import_savedir = pathlib.Path(self.filedir / save_name)
 
     def normalize_nf(self):
         """
@@ -1403,17 +1367,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 self.data = self._data
 
                 self.status_label.value = "Saving projections as .npy for faster IO."
-                hist, r, bins, percentile = self._dask_hist()
-                grp = IOBase.hdf_key_norm + "/"
-                data_dict = {
-                    self.hdf_key_norm_proj: self.data,
-                    grp + self.hdf_key_bin_frequency: hist[0],
-                    grp + self.hdf_key_bin_edges: hist[1],
-                    grp + self.hdf_key_image_range: r,
-                    grp + self.hdf_key_percentile: percentile,
-                }
-                self.dask_data_to_h5(data_dict, savedir=self.import_savedir)
-                self._dask_bin_centers(grp, write=True, savedir=self.import_savedir)
+                self._dask_hist_and_save_data()
                 self.saved_as_tiff = False
                 self.filedir = self.import_savedir
                 if Uploader.save_tiff_on_import_checkbox.value:
@@ -1536,8 +1490,7 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         self.metadata.save_metadata()
         save_filedir_name = str(self.metadata_projections.metadata["energy_str"] + "eV")
         self.import_savedir = self.metadata_projections.filedir / save_filedir_name
-        self.check_import_savedir_exists(save_filedir_name)
-        self.import_savedir.mkdir()
+        self.make_import_savedir(save_filedir_name)
         self.import_filedir_projections(Uploader)
         self.import_filedir_flats(Uploader)
         self.filedir = self.import_savedir
@@ -1632,9 +1585,7 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         arr = da.from_array(arr, chunks={0: "auto", 1: -1, 2: -1})
         Uploader.import_status_label.value = "Saving in normalized_projections.hdf5"
         data_dict = {self.hdf_key_raw_proj: arr}
-        da.to_hdf5(
-            self.import_savedir / self.normalized_projections_hdf_key, data_dict
-            )
+        da.to_hdf5(self.import_savedir / self.normalized_projections_hdf_key, data_dict)
 
     def import_filedir_flats(self, Uploader):
         tifffiles = self.metadata_references.metadata["filenames"]
@@ -1653,9 +1604,7 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         arr = da.from_array(arr, chunks={0: "auto", 1: -1, 2: -1})
         Uploader.import_status_label.value = "Saving in normalized_projections.hdf5"
         data_dict = {self.hdf_key_raw_flats: arr}
-        da.to_hdf5(
-            self.import_savedir / self.normalized_projections_hdf_key, data_dict
-            )
+        da.to_hdf5(self.import_savedir / self.normalized_projections_hdf_key, data_dict)
 
     def import_filedir_darks(self, filedir):
         pass
@@ -2640,7 +2589,7 @@ class Metadata_SSRL62B_Raw_Projections(Metadata):
         projections.pixel_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
         projections.projections_exposure_time = self.metadata["average_exposure_time"]
-        projections.acquisition_name = self.metadata["acquisition_name"] 
+        projections.acquisition_name = self.metadata["acquisition_name"]
 
     def set_metadata(self, projections):
         pass
@@ -3027,6 +2976,7 @@ class Metadata_SSRL62B_Prenorm(Metadata_SSRL62B_Raw_Projections):
         projections.num_angles = self.metadata["num_angles"]
         projections.acquisition_name = self.metadata["acquisition_name"]
         projections.exposure_time = self.metadata["average_exposure_time"]
+
 
 class Metadata_ALS_832_Raw(Metadata):
     def __init__(self):
@@ -3752,3 +3702,42 @@ def rescale_parallel_pool(n, images, ds_factor_list):
 #                     file_type.append("projection")
 
 #     return files_grouped, file_type
+
+
+# def get_img_shape(self, extension=None):
+#     """
+#     Gets the image shape of a tiff or npy with lazy loading.
+#     """
+
+#     if self.extension == ".tif" or self.extension == ".tiff":
+#         allowed_extensions = [".tiff", ".tif"]
+#         file_list = [
+#             pathlib.PurePath(f) for f in os.scandir(self.filedir) if not f.is_dir()
+#         ]
+#         tiff_file_list = [
+#             file.name
+#             for file in file_list
+#             if any(x in file.name for x in self.allowed_extensions)
+#         ]
+#         tiff_count_in_filedir = len(tiff_file_list)
+#         with tf.TiffFile(self.filepath) as tif:
+#             # if you select a file instead of a file path, it will try to
+#             # bring in the full filedir
+#             if tiff_count_in_filedir > 50:
+#                 sizeX = tif.pages[0].tags["ImageWidth"].value
+#                 sizeY = tif.pages[0].tags["ImageLength"].value
+#                 sizeZ = tiff_count_in_filedir  # can maybe use this later
+#             else:
+#                 imagesize = tif.pages[0].tags["ImageDescription"]
+#                 size = json.loads(imagesize.value)["shape"]
+#                 sizeZ = size[0]
+#                 sizeY = size[1]
+#                 sizeX = size[2]
+
+#     elif self.extension == ".npy":
+#         size = np.load(self.filepath, mmap_mode="r").shape
+#         sizeZ = size[0]
+#         sizeY = size[1]
+#         sizeX = size[2]
+
+#     return (sizeZ, sizeY, sizeX)

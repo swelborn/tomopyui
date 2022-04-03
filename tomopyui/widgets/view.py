@@ -348,7 +348,9 @@ class BqImViewerBase(ABC):
         vmin = self.image_scale["image"].min
         vmax = self.image_scale["image"].max
         if self.from_hdf:
-            self.projections._load_hdf_ds_data_into_memory(self.ds_viewer_dropdown.value)
+            self.projections._load_hdf_ds_data_into_memory(
+                self.ds_viewer_dropdown.value
+            )
             self.images = self.projections.data_ds
         for image in self.images:
             im = ax.imshow(image, animated=True, vmin=vmin, vmax=vmax)
@@ -742,10 +744,9 @@ class BqImViewer_Projections_Child(BqImViewer_Projections_Parent):
 
 
 class BqImViewer_Center(BqImViewer_Projections_Parent):
-    def __init__(self, Center):
+    def __init__(self):
         super().__init__()
-        self.Center = Center
-        self.center_line_on = False
+        self.center_line_on = True
         self.center_line = bq.Lines(
             x=[0.5, 0.5],
             y=[0, 1],
@@ -753,23 +754,40 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
             stroke_width=3,
             scales={"x": self.scale_x, "y": self.scale_y},
         )
-        self.center_line_button = Button(
-            icon="align-center",
-            layout=self.button_layout,
-            style=self.button_font,
-            tooltip=("Turn on center of rotation line"),
+        self.slice_line = bq.Lines(
+            x=[0, 1],
+            y=[0.5, 0.5],
+            colors="green",
+            stroke_width=3,
+            scales={"x": self.scale_x, "y": self.scale_y},
         )
-        self.center_line_button.on_click(self.center_line_on_update)
-        self.all_buttons.insert(-2, self.center_line_button)
+        self.slice_line_slider = IntSlider(
+            value=0,
+            min=0,
+            max=self.images.shape[0] - 1,
+            step=1,
+        )
+        self.slice_line_slider.observe(self._slice_slider_update, names="value")
+        self.fig.marks = (
+            self.plotted_image,
+            self.center_line,
+            self.slice_line,
+        )
+
+    def _slice_slider_update(self, change):
+        self.slice_line.y = [
+            change.new / self.pxY,
+            change.new / self.pxY,
+        ]
 
     def create_app(self):
-
         self.button_box = HBox(
             self.all_buttons,
             layout=self.footer_layout,
         )
-        footer2 = VBox(
+        self.footer2 = VBox(
             [
+                HBox([self.slice_line_slider], layout=Layout(justify_content="center")),
                 self.button_box,
                 HBox(
                     [
@@ -789,27 +807,13 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
             ],
             layout=self.footer_layout,
         )
-        footer = VBox([self.footer1, footer2])
-        self.app = VBox([self.header, self.center, footer])
-
-    # Rectangle selector button
-    def center_line_on_update(self, *args):
-        if self.center_line_on is False:
-            self.center_line_on = True
-            self.center_line_button.button_style = "success"
-            self.fig.marks = (
-                self.plotted_image,
-                self.center_line,
-            )
-        else:
-            self.center_line_on = False
-            self.center_line_button.button_style = ""
-            self.fig.marks = (self.plotted_image,)
+        self.footer = VBox([self.footer1, self.footer2])
+        self.app = VBox([self.header, self.center, self.footer])
 
     def plot(self, projections):
         super().plot(projections)
-        self.center_line_on = False
-        self.center_line_on_update()
+        self.slice_line_slider.max = self.pxY - 1
+        self.slice_line_slider.value = int((self.pxY - 1) / 2)
 
 
 class BqImViewer_Center_Recon(BqImViewer_Projections_Parent):
@@ -827,7 +831,7 @@ class BqImViewer_Center_Recon(BqImViewer_Projections_Parent):
         self.hist.vmin = np.min(self.images)
         self.hist.vmax = np.max(self.images)
         self.image_index_slider.max = self.images.shape[0] - 1
-        self.image_index_slider.value = 0
+        self.image_index_slider.value = int(self.images.shape[0] / 2)
         self.hist.refresh_histogram(self.images)
         self.hist.rm_high_low_int(None)
 
@@ -1118,7 +1122,7 @@ class BqImHist:
             self.vmin, self.vmax = self.init_vmin, self.init_vmax
             self.selector.selected = [float(self.vmin), float(self.vmax)]
         else:
-            self.vmin, self.vmax = np.percentile(self.images, q=(0.5, 99.5))
+            self.vmin, self.vmax = np.percentile(self.viewer.images, q=(0.5, 99.5))
             self.selector.selected = [self.vmin, self.vmax]
 
 

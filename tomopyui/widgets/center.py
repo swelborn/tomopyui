@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 
 # astra_cuda_recon_algorithm_kwargs, tomopy_recon_algorithm_kwargs,
 # and tomopy_filter_names, extend_description_style
@@ -42,7 +43,6 @@ class Center:
     """
 
     def __init__(self, Import):
-
         self.Import = Import
         self.projections = Import.projections
         self.Import.Center = self
@@ -52,15 +52,15 @@ class Center:
         self.search_step = 0.5
         self.search_range = 5
         self.cen_range = None
+        self.use_ds = True
         self.num_iter = int(1)
         self.algorithm = "gridrec"
         self.filter = "parzen"
         self.metadata = {}
-        self.projection_viewer = BqImViewer_Center(self)
-        self.projection_viewer.create_app()
+        self.viewer = BqImViewer_Center()
+        self.viewer.create_app()
         self.rec_viewer = BqImViewer_Center_Recon()
         self.rec_viewer.create_app()
-
         self._init_widgets()
         self._set_observes()
         self.make_tab()
@@ -69,7 +69,6 @@ class Center:
         """
         Sets `Center` metadata.
         """
-
         self.metadata["center"] = self.current_center
         self.metadata["center_guess"] = self.center_guess
         self.metadata["index_to_try"] = self.index_to_try
@@ -158,21 +157,30 @@ class Center:
             icon="",
             layout=Layout(width="auto", justify_content="center"),
         )
+        self.use_ds_checkbox = Checkbox(
+            description="Use viewer downsampling: ",
+            value=True,
+            disabled=False,
+            style=extend_description_style,
+        )
+
+    def _use_ds_data(self, change):
+        self.use_ds = self.use_ds_checkbox.value
 
     def _center_update(self, change):
         self.current_center = change.new
         self.center_guess = change.new
-        self.projection_viewer.center_line.x = [
-            change.new / self.projection_viewer.pxX,
-            change.new / self.projection_viewer.pxX,
+        self.viewer.center_line.x = [
+            change.new / self.viewer.pxX,
+            change.new / self.viewer.pxX,
         ]
         self.set_metadata()
 
     def _center_guess_update(self, change):
         self.center_guess = change.new
-        self.projection_viewer.center_line.x = [
-            change.new / self.projection_viewer.pxX,
-            change.new / self.projection_viewer.pxX,
+        self.viewer.center_line.x = [
+            change.new / self.viewer.pxX,
+            change.new / self.viewer.pxX,
         ]
         self.set_metadata()
 
@@ -211,16 +219,42 @@ class Center:
         self.filter = change.new
         self.set_metadata()
 
+    def _slice_slider_update(self, change):
+        self.viewer.slice_line.y = [
+            change.new / self.viewer.pxY,
+            change.new / self.viewer.pxY,
+        ]
+        self.index_to_try_textbox.value = int(change.new)
+
     def _center_textbox_slider_update(self, change):
         self.center_textbox.value = self.cen_range[change.new]
         self.center_guess_textbox.value = self.cen_range[change.new]
-        self.projection_viewer.center_line.x = [
-            self.cen_range[change.new] / self.projection_viewer.pxX,
-            self.cen_range[change.new] / self.projection_viewer.pxX,
+        self.viewer.center_line.x = [
+            self.cen_range[change.new] / self.viewer.pxX,
+            self.cen_range[change.new] / self.viewer.pxX,
         ]
         self.current_center = self.center_textbox.value
-
         self.set_metadata()
+
+    def _set_observes(self):
+        self.center_textbox.observe(self._center_update, names="value")
+        self.center_guess_textbox.observe(self._center_guess_update, names="value")
+        self.load_rough_center.on_click(self._load_rough_center_onclick)
+        self.index_to_try_textbox.observe(self._index_to_try_update, names="value")
+        self.num_iter_textbox.observe(self._num_iter_update, names="value")
+        self.search_range_textbox.observe(self._search_range_update, names="value")
+        self.search_step_textbox.observe(self._search_step_update, names="value")
+        self.algorithms_dropdown.observe(self._update_algorithm, names="value")
+        self.filters_dropdown.observe(self._update_filters, names="value")
+        self.find_center_button.on_click(self.find_center_on_click)
+        self.find_center_vo_button.on_click(self.find_center_vo_on_click)
+        self.find_center_manual_button.on_click(self.find_center_manual_on_click)
+        # Callback for index going to center
+        self.rec_viewer.image_index_slider.observe(
+            self._center_textbox_slider_update, names="value"
+        )
+        self.viewer.slice_line_slider.observe(self._slice_slider_update, names="value")
+        self.use_ds_checkbox.observe(self._use_ds_data, names="value")
 
     def find_center_on_click(self, change):
         """
@@ -229,35 +263,35 @@ class Center:
         This method has worked better for me, if I use a good index_to_try
         and center_guess.
         """
-        prj_imgs = self.Import.projections.prj_imgs
-        angles_rad = self.Import.projections.angles_rad
-
         self.find_center_button.button_style = "info"
         self.find_center_button.icon = "fa-spin fa-cog fa-lg"
         self.find_center_button.description = "Importing data..."
-        if self.Import.projections.imported is True:
-            prj_imgs = self.Import.projections.prj_imgs
-            angles_rad = self.Import.projections.angles_rad
-            self.Import.log.info("Finding center...")
-            self.Import.log.info(f"Using index: {self.index_to_try}")
-            self.find_center_button.description = "Finding center..."
-            self.find_center_button.button_style = "info"
-            self.current_center = find_center(
-                prj_imgs,
-                angles_rad,
-                ratio=0.9,
-                ind=self.index_to_try,
-                init=self.center_guess,
-            )
-            self.center_textbox.value = self.current_center
-            self.Import.log.info(f"Found center. {self.current_center}")
-            self.find_center_button.description = "Found center."
-            self.find_center_button.icon = "fa-check-square"
-            self.find_center_button.button_style = "success"
+        ds_value = self.viewer.ds_viewer_dropdown.value
+        if self.use_ds:
+            if ds_value == -1:
+                prj_imgs = self.projections.data
+            else:
+                self.projections._load_hdf_ds_data_into_memory(pyramid_level=ds_value)
+                prj_imgs = self.projections.data_ds
+        elif ds_value == -1:
+            prj_imgs = self.projections.data
         else:
-            self.find_center_button.description = "Please import some data first."
-            self.find_center_button.icon = "exclamation-triangle"
-            self.find_center_button.button_style = "warning"
+            self.projections._load_hdf_normalized_data_into_memory()
+            prj_imgs = self.projections.data
+        angles_rad = self.projections.angles_rad
+        self.find_center_button.description = "Finding center..."
+        self.find_center_button.button_style = "info"
+        self.current_center = find_center(
+            prj_imgs,
+            angles_rad,
+            ratio=0.9,
+            ind=self.index_to_try,
+            init=self.center_guess,
+        )
+        self.center_textbox.value = self.current_center
+        self.find_center_button.description = "Found center."
+        self.find_center_button.icon = "fa-check-square"
+        self.find_center_button.button_style = "success"
 
     def find_center_vo_on_click(self, change):
         """
@@ -265,11 +299,23 @@ class Center:
         `tomopy.recon.rotation.find_center_vo`. Note: this method has not worked
         well for me.
         """
-        prj_imgs = self.Import.projections.prj_imgs
-        angles_rad = self.Import.projections.angles_rad
         self.find_center_vo_button.button_style = "info"
         self.find_center_vo_button.icon = "fa-spin fa-cog fa-lg"
         self.find_center_vo_button.description = "Importing data..."
+        ds_value = self.viewer.ds_viewer_dropdown.value
+        if self.use_ds:
+            if ds_value == -1:
+                prj_imgs = self.projections.data
+            else:
+                self.projections._load_hdf_ds_data_into_memory(pyramid_level=ds_value)
+                prj_imgs = self.projections.data_ds
+        elif ds_value == -1:
+            prj_imgs = self.projections.data
+        else:
+            self.projections._load_hdf_normalized_data_into_memory()
+            prj_imgs = self.projections.data
+        angles_rad = self.projections.angles_rad
+
         if self.Import.projections.imported is True:
             self.Import.log.info("Finding center using Vo method...")
             self.Import.log.info(f"Using index: {self.index_to_try}")
@@ -294,62 +340,62 @@ class Center:
         Creates a :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` +
         :doc:`histogram <mpl-interactions:examples/hist>` plot
         """
+
         self.find_center_manual_button.button_style = "info"
         self.find_center_manual_button.icon = "fas fa-cog fa-spin fa-lg"
         self.find_center_manual_button.description = "Starting reconstruction."
+        ds_value = self.viewer.ds_viewer_dropdown.value
 
-        prj_imgs = self.Import.projections.prj_imgs
-        angles_rad = self.Import.projections.angles_rad
+        if self.use_ds:
+            if ds_value == -1:
+                prj_imgs = self.projections.data
+            else:
+                self.projections._load_hdf_ds_data_into_memory(pyramid_level=ds_value)
+                prj_imgs = self.projections.data_ds
+        elif ds_value == -1:
+            prj_imgs = self.projections.data
+        else:
+            self.projections._load_hdf_normalized_data_into_memory()
+            prj_imgs = self.projections.data
+
+        angles_rad = self.projections.angles_rad
+        ds_factor = np.power(2, int(ds_value + 1))
+        _center_guess = copy.deepcopy(self.center_guess) / ds_factor
+        _search_range = copy.deepcopy(self.search_range) / ds_factor
+        _search_step = copy.deepcopy(self.search_step) / ds_factor
+        _index_to_try = int(copy.deepcopy(self.index_to_try) / ds_factor)
         cen_range = [
-            self.center_guess - self.search_range,
-            self.center_guess + self.search_range,
-            self.search_step,
+            _center_guess - _search_range,
+            _center_guess + _search_range,
+            _search_step,
         ]
-
         # reconstruct, but also pull the centers used out to map to center
         # textbox
-        self.rec, self.cen_range = write_center(
+        self.rec, cen_range = write_center(
             prj_imgs,
             angles_rad,
             cen_range=cen_range,
-            ind=self.index_to_try,
+            ind=_index_to_try,
             mask=True,
             algorithm=self.algorithm,
             filter_name=self.filter,
             num_iter=self.num_iter,
         )
+        self.cen_range = [ds_factor * cen for cen in cen_range]
         if self.rec is None:
             self.find_center_manual_button.button_style = "warning"
             self.find_center_manual_button.icon = ""
             self.find_center_manual_button.description = (
                 "Your projections do not have associated theta values."
             )
-
         self.rec_viewer.plot(self.rec)
+
         self.find_center_manual_button.button_style = "success"
         self.find_center_manual_button.icon = "fa-check-square"
         self.find_center_manual_button.description = "Finished reconstruction."
 
-    def _set_observes(self):
-        self.center_textbox.observe(self._center_update, names="value")
-        self.center_guess_textbox.observe(self._center_guess_update, names="value")
-        self.load_rough_center.on_click(self._load_rough_center_onclick)
-        self.index_to_try_textbox.observe(self._index_to_try_update, names="value")
-        self.num_iter_textbox.observe(self._num_iter_update, names="value")
-        self.search_range_textbox.observe(self._search_range_update, names="value")
-        self.search_step_textbox.observe(self._search_step_update, names="value")
-        self.algorithms_dropdown.observe(self._update_algorithm, names="value")
-        self.filters_dropdown.observe(self._update_filters, names="value")
-        self.find_center_button.on_click(self.find_center_on_click)
-        self.find_center_vo_button.on_click(self.find_center_vo_on_click)
-        self.find_center_manual_button.on_click(self.find_center_manual_on_click)
-        # Callback for index going to center
-        self.rec_viewer.image_index_slider.observe(
-            self._center_textbox_slider_update, names="value"
-        )
-
     def refresh_plots(self):
-        self.projection_viewer.plot(self.projections)
+        self.viewer.plot(self.projections)
         self._load_rough_center_onclick(None)
 
     def make_tab(self):
@@ -383,7 +429,7 @@ class Center:
         self.manual_center_vbox = VBox(
             [
                 HBox(
-                    [self.projection_viewer.app, self.rec_viewer.app],
+                    [self.viewer.app, self.rec_viewer.app],
                     layout=Layout(justify_content="center"),
                 ),
                 HBox(
@@ -399,6 +445,7 @@ class Center:
                         self.search_step_textbox,
                         self.algorithms_dropdown,
                         self.filters_dropdown,
+                        self.use_ds_checkbox,
                     ],
                     layout=Layout(
                         display="flex",
