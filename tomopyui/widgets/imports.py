@@ -522,6 +522,7 @@ class PrenormUploader(UploaderBase):
             options=self.px_size_units_dropdown_opts,
             disabled=True,
             style=extend_description_style,
+            layout=Layout(width="auto"),
         )
         self.energy_textbox = FloatText(
             value=8000,
@@ -534,6 +535,7 @@ class PrenormUploader(UploaderBase):
             options=["eV", "keV"],
             disabled=True,
             style=extend_description_style,
+            layout=Layout(width="auto"),
         )
         self.binning_dropdown = Dropdown(
             value=2,
@@ -541,6 +543,7 @@ class PrenormUploader(UploaderBase):
             options=[("1", 1), ("2", 2), ("4", 4)],
             disabled=True,
             style=extend_description_style,
+            layout=Layout(width="auto"),
         )
         self.angular_resolution_textbox = FloatText(
             value=0.25,
@@ -599,13 +602,9 @@ class PrenormUploader(UploaderBase):
         self.metadata_widget_box = VBox(
             [
                 self.metadata_input_output_label,
-                HBox(
-                    [
-                        self.start_angle_textbox,
-                        self.angle_end_textbox,
-                        self.angular_resolution_textbox,
-                    ]
-                ),
+                self.start_angle_textbox,
+                self.angle_end_textbox,
+                self.angular_resolution_textbox,
                 HBox(
                     [
                         self.px_size_textbox,
@@ -901,11 +900,13 @@ class PrenormUploader(UploaderBase):
         """
 
         with self.metadata_table_output:
-            # self.metadata_table_output.clear_output(wait=True)
-            # if self.imported_metadata:
-            #     [display(m) for m in self.dataframes if m is not None]
-            # else:
-            #     self.create_and_display_metadata_tables()
+            self.metadata_table_output.clear_output(wait=True)
+            if self.imported_metadata:
+                self.metadata_input_output.clear_output()
+                self.create_and_display_metadata_tables()
+            else:
+                self.metadata_input_output.clear_output()
+
             display(self.import_status_label)
         if self.filename == "" or self.filename is None:
             self.projections.import_filedir_projections(self)
