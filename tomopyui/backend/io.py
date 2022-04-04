@@ -219,7 +219,9 @@ class IOBase:
             data = self.hdf_file[self.hdf_key_norm_proj][:]
         x = px_range[0]
         y = px_range[1]
+        print(x)
         data = self.hdf_file[self.hdf_key_norm_proj][:, y[0] : y[1], x[0] : x[1]]
+        print(data.shape)
         return data
 
     @_check_and_open_hdf
@@ -555,14 +557,19 @@ class Projections_Child(ProjectionsBase):
         self.parent_projections._unload_hdf_normalized_and_ds()
         self._data = self.parent_projections._return_data(px_range)
         self.data = self._data
+        print(self.data)
+        print(self.data.shape)
         self.parent_projections._close_hdf_file()
+        print(self.data.shape)
 
     def get_parent_data_ds_from_hdf(self, pyramid_level, px_range=None):
         self.data = None
         self._data = None
         self.parent_projections._unload_hdf_normalized_and_ds()
-        self.data_ds = self.parent_projections.return_data_ds(pyramid_level, px_range)
+        self.data_ds = self.parent_projections._return_ds_data(pyramid_level, px_range)
+        print(self.data_ds.shape)
         self.parent_projections._close_hdf_file()
+        print(self.data_ds.shape)
 
     def import_file_projections(self):
         pass
@@ -3582,7 +3589,10 @@ class Metadata_Align(Metadata):
 
     def set_attributes_from_metadata(self, Align):
         Align.downsample = self.metadata["opts"]["downsample"]
-        Align.ds_factor = self.metadata["opts"]["downsample_factor"]
+        if "ds_factor" in self.metadata["opts"]:
+            Align.ds_factor = self.metadata["opts"]["ds_factor"]
+        if "downsample_factor" in self.metadata["opts"]:
+            Align.ds_factor = self.metadata["opts"]["downsample_factor"]
         if "pyramid_level" in self.metadata["opts"]:
             Align.pyramid_level = self.metadata["opts"]["pyramid_level"]
         Align.num_iter = self.metadata["opts"]["num_iter"]

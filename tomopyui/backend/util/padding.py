@@ -6,7 +6,7 @@ import numpy as np
 def pad_projections(prj, pad):
     npad = ((0, 0), ((pad[1]), pad[1]), (pad[0], pad[0]))
     prj = np.pad(prj, npad, mode="constant", constant_values=0)
-    return prj, pad
+    return prj
 
 
 def trim_padding(prj):

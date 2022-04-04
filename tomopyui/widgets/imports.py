@@ -682,7 +682,7 @@ class PrenormUploader(UploaderBase):
             self.filename = str(self.images_in_dir[ind].name)
             self.projections.filename = str(self.images_in_dir[ind].name)
             self.create_and_display_metadata_tables()
-            # self.import_button.enable()
+            self.import_button.enable()
         else:
             self.import_button.disable()
 
