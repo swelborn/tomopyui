@@ -8,6 +8,7 @@ from ipywidgets import *
 from tomopy.recon.rotation import find_center_vo, find_center, find_center_pc
 from tomopyui.widgets.view import BqImViewer_Center, BqImViewer_Center_Recon
 from tomopyui.backend.util.center import write_center
+from tomopyui.widgets.helpers import ReactiveTextButton
 
 
 class Center:
@@ -99,13 +100,26 @@ class Center:
             disabled=False,
             style=extend_description_style,
         )
-        self.find_center_button = Button(
-            description="Click to automatically find center (image entropy).",
-            disabled=False,
-            button_style="info",
-            tooltip="",
-            icon="",
-            layout=Layout(width="auto", justify_content="center"),
+        self.find_center_button = ReactiveTextButton(
+            self.find_center_on_click,
+            "Click to automatically find center (image entropy).",
+            "Automatically finding center (image entropy).",
+            "Found center.",
+            warning="Please import some data first.",
+        )
+        self.find_center_vo_button = ReactiveTextButton(
+            self.find_center_vo_on_click,
+            "Click to automatically find center (Vo).",
+            f"Automatically finding center using slice {self.index_to_try}.",
+            "Found center.",
+            warning="Please import some data first.",
+        )
+        self.find_center_manual_button = ReactiveTextButton(
+            self.find_center_manual_on_click,
+            "Click to find center by plotting.",
+            f"Reconstructing slice {self.index_to_try}.",
+            "Now search for the center using the slider above.",
+            warning="Your projections do not have associated theta values.",
         )
         self.index_to_try_textbox = IntText(
             description="Slice to use: ",
@@ -140,22 +154,6 @@ class Center:
             options=[key for key in tomopy_filter_names],
             value=self.filter,
             description="Filter:",
-        )
-        self.find_center_vo_button = Button(
-            description="Click to automatically find center (Vo).",
-            disabled=False,
-            button_style="info",
-            tooltip="Vo's method",
-            icon="",
-            layout=Layout(width="auto", justify_content="center"),
-        )
-        self.find_center_manual_button = Button(
-            description="Click to find center by plotting.",
-            disabled=False,
-            button_style="info",
-            tooltip="Start center-finding reconstruction with this button.",
-            icon="",
-            layout=Layout(width="auto", justify_content="center"),
         )
         self.use_ds_checkbox = Checkbox(
             description="Use viewer downsampling: ",
@@ -246,9 +244,6 @@ class Center:
         self.search_step_textbox.observe(self._search_step_update, names="value")
         self.algorithms_dropdown.observe(self._update_algorithm, names="value")
         self.filters_dropdown.observe(self._update_filters, names="value")
-        self.find_center_button.on_click(self.find_center_on_click)
-        self.find_center_vo_button.on_click(self.find_center_vo_on_click)
-        self.find_center_manual_button.on_click(self.find_center_manual_on_click)
         # Callback for index going to center
         self.rec_viewer.image_index_slider.observe(
             self._center_textbox_slider_update, names="value"
@@ -256,31 +251,15 @@ class Center:
         self.viewer.slice_line_slider.observe(self._slice_slider_update, names="value")
         self.use_ds_checkbox.observe(self._use_ds_data, names="value")
 
-    def find_center_on_click(self, change):
+    def find_center_on_click(self, *args):
         """
         Callback to button for attempting to find center automatically using
         `tomopy.recon.rotation.find_center`. Takes index_to_try and center_guess.
         This method has worked better for me, if I use a good index_to_try
         and center_guess.
         """
-        self.find_center_button.button_style = "info"
-        self.find_center_button.icon = "fa-spin fa-cog fa-lg"
-        self.find_center_button.description = "Importing data..."
-        ds_value = self.viewer.ds_viewer_dropdown.value
-        if self.use_ds:
-            if ds_value == -1:
-                prj_imgs = self.projections.data
-            else:
-                self.projections._load_hdf_ds_data_into_memory(pyramid_level=ds_value)
-                prj_imgs = self.projections.data_ds
-        elif ds_value == -1:
-            prj_imgs = self.projections.data
-        else:
-            self.projections._load_hdf_normalized_data_into_memory()
-            prj_imgs = self.projections.data
+        prj_imgs, ds_value = self.get_ds_projections()
         angles_rad = self.projections.angles_rad
-        self.find_center_button.description = "Finding center..."
-        self.find_center_button.button_style = "info"
         self.current_center = find_center(
             prj_imgs,
             angles_rad,
@@ -289,50 +268,22 @@ class Center:
             init=self.center_guess,
         )
         self.center_textbox.value = self.current_center
-        self.find_center_button.description = "Found center."
-        self.find_center_button.icon = "fa-check-square"
-        self.find_center_button.button_style = "success"
 
-    def find_center_vo_on_click(self, change):
+    def find_center_vo_on_click(self, *args):
         """
         Callback to button for attempting to find center automatically using
         `tomopy.recon.rotation.find_center_vo`. Note: this method has not worked
         well for me.
         """
-        self.find_center_vo_button.button_style = "info"
-        self.find_center_vo_button.icon = "fa-spin fa-cog fa-lg"
-        self.find_center_vo_button.description = "Importing data..."
-        ds_value = self.viewer.ds_viewer_dropdown.value
-        if self.use_ds:
-            if ds_value == -1:
-                prj_imgs = self.projections.data
-            else:
-                self.projections._load_hdf_ds_data_into_memory(pyramid_level=ds_value)
-                prj_imgs = self.projections.data_ds
-        elif ds_value == -1:
-            prj_imgs = self.projections.data
-        else:
-            self.projections._load_hdf_normalized_data_into_memory()
-            prj_imgs = self.projections.data
+        prj_imgs, ds_value = self.get_ds_projections()
         angles_rad = self.projections.angles_rad
-
-        if self.Import.projections.imported is True:
-            self.Import.log.info("Finding center using Vo method...")
-            self.Import.log.info(f"Using index: {self.index_to_try}")
-            self.find_center_vo_button.description = "Finding center using Vo method..."
-            self.find_center_vo_button.button_style = "info"
+        try:
             self.current_center = find_center_vo(prj_imgs, ncore=1)
             self.center_textbox.value = self.current_center
-            self.Import.log.info(f"Found center. {self.current_center}")
-            self.find_center_vo_button.description = "Found center."
-            self.find_center_vo_button.icon = "fa-check-square"
-            self.find_center_vo_button.button_style = "success"
-        else:
-            self.find_center_vo_button.description = "Please import some data first."
-            self.find_center_vo_button.button_style = "warning"
-            self.find_center_vo_button.icon = "exclamation-triangle"
+        except Excepton:
+            self.find_center_vo_button.warning()
 
-    def find_center_manual_on_click(self, change):
+    def find_center_manual_on_click(self, *args):
         """
         Reconstructs at various centers when you click the button, and plots
         the results with a slider so one can view. TODO: see X example.
@@ -340,26 +291,12 @@ class Center:
         Creates a :doc:`hyperslicer <mpl-interactions:examples/hyperslicer>` +
         :doc:`histogram <mpl-interactions:examples/hist>` plot
         """
-
-        self.find_center_manual_button.button_style = "info"
-        self.find_center_manual_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.find_center_manual_button.description = "Starting reconstruction."
-        ds_value = self.viewer.ds_viewer_dropdown.value
-
-        if self.use_ds:
-            if ds_value == -1:
-                prj_imgs = self.projections.data
-            else:
-                self.projections._load_hdf_ds_data_into_memory(pyramid_level=ds_value)
-                prj_imgs = self.projections.data_ds
-        elif ds_value == -1:
-            prj_imgs = self.projections.data
-        else:
-            self.projections._load_hdf_normalized_data_into_memory()
-            prj_imgs = self.projections.data
-
+        prj_imgs, ds_value = self.get_ds_projections()
+        print(ds_value)
         angles_rad = self.projections.angles_rad
+        print(angles_rad)
         ds_factor = np.power(2, int(ds_value + 1))
+        print(ds_factor)
         _center_guess = copy.deepcopy(self.center_guess) / ds_factor
         _search_range = copy.deepcopy(self.search_range) / ds_factor
         _search_step = copy.deepcopy(self.search_step) / ds_factor
@@ -383,20 +320,31 @@ class Center:
         )
         self.cen_range = [ds_factor * cen for cen in cen_range]
         if self.rec is None:
-            self.find_center_manual_button.button_style = "warning"
-            self.find_center_manual_button.icon = ""
-            self.find_center_manual_button.description = (
-                "Your projections do not have associated theta values."
-            )
+            self.find_center_manual_button.warning()
+            return
         self.rec_viewer.plot(self.rec)
 
-        self.find_center_manual_button.button_style = "success"
-        self.find_center_manual_button.icon = "fa-check-square"
-        self.find_center_manual_button.description = "Finished reconstruction."
+    def get_ds_projections(self):
+        ds_value = self.viewer.ds_viewer_dropdown.value
+        if self.use_ds:
+            if ds_value == -1:
+                prj_imgs = self.projections.data
+            else:
+                self.projections._load_hdf_ds_data_into_memory(pyramid_level=ds_value)
+                prj_imgs = self.projections.data_ds
+        elif ds_value == -1:
+            prj_imgs = self.projections.data
+        else:
+            self.projections._load_hdf_normalized_data_into_memory()
+            prj_imgs = self.projections.data
+        return prj_imgs, ds_value
 
     def refresh_plots(self):
         self.viewer.plot(self.projections)
         self._load_rough_center_onclick(None)
+        self.find_center_button.enable()
+        self.find_center_manual_button.enable()
+        self.find_center_vo_button.enable()
 
     def make_tab(self):
         """
@@ -407,7 +355,7 @@ class Center:
         self.automatic_center_vbox = VBox(
             [
                 HBox(
-                    [self.find_center_button, self.find_center_vo_button],
+                    [self.find_center_button.button, self.find_center_vo_button.button],
                     layout=Layout(justify_content="center"),
                 ),
                 HBox(
@@ -433,7 +381,7 @@ class Center:
                     layout=Layout(justify_content="center"),
                 ),
                 HBox(
-                    [self.find_center_manual_button],
+                    [self.find_center_manual_button.button],
                     layout=Layout(justify_content="center"),
                 ),
                 HBox(

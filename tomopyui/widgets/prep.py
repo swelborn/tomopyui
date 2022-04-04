@@ -8,8 +8,6 @@ from ipywidgets import *
 from abc import ABC, abstractmethod
 from functools import partial
 from tomopyui._sharedvars import *
-from tomopyui.backend.align import TomoAlign
-from tomopyui.backend.recon import TomoRecon
 from tomopyui.backend.io import Projections_Child
 from tomopyui.widgets.imports import ShiftsUploader, TwoEnergyUploader
 from tomopyui.widgets.view import (
