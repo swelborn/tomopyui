@@ -206,23 +206,24 @@ class IOBase:
         pyramid_level = self.hdf_key_ds + str(pyramid_level) + "/"
         ds_data_key = pyramid_level + self.hdf_key_data
         if px_range is None:
-            data_ds = self.hdf_file[ds_data_key][:]
+            self.data_returned = self.hdf_file[ds_data_key][:]
         else:
             x = px_range[0]
             y = px_range[1]
-            data_ds = self.hdf_file[ds_data_key][:, y[0] : y[1], x[0] : x[1]]
-        return data_ds
+            self.data_returned = self.hdf_file[ds_data_key]
+            self.data_returned = copy.deepcopy(
+                self.data_returned[:, y[0] : y[1], x[0] : x[1]]
+            )
 
     @_check_and_open_hdf
     def _return_data(self, px_range=None):
         if px_range is None:
-            data = self.hdf_file[self.hdf_key_norm_proj][:]
+            self.data_returned = self.hdf_file[self.hdf_key_norm_proj][:]
         x = px_range[0]
         y = px_range[1]
-        print(x)
-        data = self.hdf_file[self.hdf_key_norm_proj][:, y[0] : y[1], x[0] : x[1]]
-        print(data.shape)
-        return data
+        self.data_returned = self.hdf_file[self.hdf_key_norm_proj][
+            :, y[0] : y[1], x[0] : x[1]
+        ]
 
     @_check_and_open_hdf
     def _delete_downsampled_data(self):
@@ -555,7 +556,8 @@ class Projections_Child(ProjectionsBase):
         """
         self.data_ds = None
         self.parent_projections._unload_hdf_normalized_and_ds()
-        self._data = self.parent_projections._return_data(px_range)
+        self.parent_projections._return_data(px_range)
+        self._data = self.parent_projections.data_returned
         self.data = self._data
         print(self.data)
         print(self.data.shape)
@@ -566,7 +568,8 @@ class Projections_Child(ProjectionsBase):
         self.data = None
         self._data = None
         self.parent_projections._unload_hdf_normalized_and_ds()
-        self.data_ds = self.parent_projections._return_ds_data(pyramid_level, px_range)
+        self.parent_projections._return_ds_data(pyramid_level, px_range)
+        self.data_ds = self.parent_projections.data_returned
         print(self.data_ds.shape)
         self.parent_projections._close_hdf_file()
         print(self.data_ds.shape)
@@ -3531,6 +3534,9 @@ class Metadata_Align(Metadata):
         self.set_metadata_obj_specific(Align)
 
     def set_metadata_obj_specific(self, Align):
+        self.metadata["opts"][
+            "shift_full_dataset_after"
+        ] = Align.shift_full_dataset_after
         self.metadata["opts"]["upsample_factor"] = Align.upsample_factor
         self.metadata["opts"]["pre_alignment_iters"] = Align.pre_alignment_iters
         self.metadata["use_subset_correlation"] = Align.use_subset_correlation
@@ -3611,6 +3617,10 @@ class Metadata_Align(Metadata):
         self.set_attributes_object_specific(Align)
 
     def set_attributes_object_specific(self, Align):
+        if "shift_full_dataset_after" in self.metadata["opts"]:
+            Align.shift_full_dataset_after = self.metadata["opts"][
+                "shift_full_dataset_after"
+            ]
         Align.upsample_factor = self.metadata["opts"]["upsample_factor"]
         Align.pre_alignment_iters = self.metadata["opts"]["pre_alignment_iters"]
         Align.subset_x = self.metadata["subset_range_x"]

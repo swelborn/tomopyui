@@ -185,14 +185,7 @@ class RunRecon(RunAnalysisBase):
     def save_data_after(self):
         super()._save_data_after()
         if self.metadata.metadata["save_opts"]["recon"]:
-            if self.metadata.metadata["save_opts"]["npy"]:
-                np.save(self.wd_subdir / "recon", self.recon)
             if self.metadata.metadata["save_opts"]["tiff"]:
-                tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
-            if (
-                not self.metadata.metadata["save_opts"]["tiff"]
-                and not self.metadata.metadata["save_opts"]["npy"]
-            ):
                 tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
         self.analysis_parent.run_list.append({self.wd_subdir: self.metadata})
 
@@ -375,30 +368,15 @@ class RunAlign(RunAnalysisBase):
                     self.wd_subdir / "normalized_projections.tif",
                     self.projections.data,
                 )
-            if (
-                not self.metadata.metadata["save_opts"]["tiff"]
-                and not self.metadata.metadata["save_opts"]["npy"]
-            ):
-                np.save(
-                    self.wd_subdir / "normalized_projections",
-                    self.projections_aligned,
-                )
         if self.metadata.metadata["save_opts"]["recon"] and self.current_align_is_cuda:
-            if self.metadata.metadata["save_opts"]["npy"]:
-                np.save(self.wd_subdir / "recon", self.recon)
+
             if self.metadata.metadata["save_opts"]["tiff"]:
                 tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
-            if (
-                not self.metadata.metadata["save_opts"]["tiff"]
-                and not self.metadata.metadata["save_opts"]["npy"]
-            ):
-                tf.imwrite(self.wd_subdir / "last_recon.tif", self.recon)
+
         self.analysis_parent.run_list.append({str(self.wd_subdir.stem): self.metadata})
 
     def run(self):
-        """
-        
-        """
+        """ """
 
         metadata_list = self.make_metadata_list()
         for i in range(len(metadata_list)):
