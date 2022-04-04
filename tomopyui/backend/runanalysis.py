@@ -86,24 +86,10 @@ class RunAnalysisBase(ABC):
         if self.metadata.metadata["save_opts"]["tomo_before"]:
             save_str = "projections_before_" + self.savedir_suffix
             save_str_tif = "projections_before_" + self.savedir_suffix + ".tif"
-            if self.metadata.metadata["save_opts"]["npy"]:
-                np.save(
-                    self.metadata.filedir / save_str,
-                    self.projections.data,
-                )
-            if self.metadata.metadata["save_opts"]["tiff"]:
-                tf.imwrite(
-                    self.metadata.filedir / save_str_tif,
-                    self.projections.data,
-                )
-            if (
-                not self.metadata.metadata["save_opts"]["tiff"]
-                and not self.metadata.metadata["save_opts"]["npy"]
-            ):
-                tf.imwrite(
-                    self.metadata.filedir / save_str_tif,
-                    self.projections.data,
-                )
+            tf.imwrite(
+                self.metadata.filedir / save_str_tif,
+                self.projections.data,
+            )
 
     def make_metadata_list(self):
         """
@@ -129,16 +115,15 @@ class RunAnalysisBase(ABC):
         return metadata_list
 
     def init_projections(self):
-        self.px_range = tuple(self.px_range_x, self.px_range_y)
-        if downsample:
-            # CHANGE ON FRONTEND
-            self.pyramid_level = self.analysis_parent.viewer.ds_viewer_dropdown.value
+        self.px_range = (self.px_range_x, self.px_range_y)
+        if self.downsample:
+            pass
         else:
             self.pyramid_level = -1
         self.ds_factor = np.power(2, int(self.pyramid_level + 1))  # will be 1 for no ds
         self.px_range_x_ds = [int(x / self.ds_factor) for x in self.px_range_x]
         self.px_range_y_ds = [int(y / self.ds_factor) for y in self.px_range_y]
-        self.px_range_ds = tuple(self.px_range_x_ds, self.px_range_y_ds)
+        self.px_range_ds = (self.px_range_x_ds, self.px_range_y_ds)
         if self.pyramid_level == -1:
             self.projections.get_parent_data_from_hdf(self.px_range_ds)
             self.prjs = self.projections.data
@@ -157,6 +142,9 @@ class RunAnalysisBase(ABC):
         self.center = self.center / self.ds_factor
 
         # Pad
+        self.pad_ds = tuple([int(x / self.ds_factor) for x in self.pad])
+        print(self.pad_ds)
+        print(self.prjs.shape)
         self.prjs = pad_projections(self.prjs, self.pad_ds)
 
     def _save_data_after(self):
@@ -371,7 +359,7 @@ class RunAlign(RunAnalysisBase):
 
     def save_data_after(self):
         super()._save_data_after()
-
+        print("trying to save after")
         self.metadata.metadata["sx"] = list(self.sx)
         self.metadata.metadata["sy"] = list(self.sy)
         self.metadata.metadata["convergence"] = list(self.conv)
@@ -409,15 +397,18 @@ class RunAlign(RunAnalysisBase):
 
     def run(self):
         """
-        Reconstructs a TomoData object using options in GUI.
+        
         """
 
         metadata_list = self.make_metadata_list()
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
+            print(f"iter {i}")
             self.init_projections()
+            print(self.prjs.shape)
             tic = perf_counter()
             self.align()
+            print("finished alignemtn")
             # make new dataset and pad/shift it
             self._shift_prjs_after_alignment()
             toc = perf_counter()
