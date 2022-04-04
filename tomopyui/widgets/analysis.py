@@ -37,6 +37,7 @@ class AnalysisBase(ABC):
         self.downsample = False
         self.ds_factor = 4
         self.copy_hists = True
+        self.shift_full_dataset_after = False
         self.pyramid_level = 1
         self.num_iter = 10
         self.center = Center.current_center
@@ -145,6 +146,10 @@ class AnalysisBase(ABC):
             description="Copy parent histograms", value=True
         )
         self.save_opts_checkboxes.append(self.copy_parent_hists_checkbox)
+        self.shift_data_after_checkbox = Checkbox(
+            description="Shift full dataset after:", value=True
+        )
+        self.save_opts_checkboxes.append(self.shift_data_after_checkbox)
 
         # -- Method Options -------------------------------------------------------
         self.methods_opts = {
@@ -246,6 +251,9 @@ class AnalysisBase(ABC):
 
         # Copy parent histograms
         self.copy_parent_hists_checkbox.observe(self.update_copy_hist, names="value")
+
+        # Shift dataset after
+        self.copy_parent_hists_checkbox.observe(self.update_shift_data, names="value")
 
         # Downsampling
         self.downsample_checkbox.observe(self._downsample_turn_on)
@@ -371,8 +379,13 @@ class AnalysisBase(ABC):
 
     # -- Options ----------------------------------------------------------
 
+    # Copy histogram from parent
     def update_copy_hist(self, change):
         self.copy_hists = change.new
+        self.metadata.set_metadata(self)
+
+    def update_shift_data(self, change):
+        self.shift_full_dataset_after = change.new
         self.metadata.set_metadata(self)
 
     # Number of iterations
@@ -639,11 +652,8 @@ class Align(AnalysisBase):
 
     def run(self):
         self.analysis = RunAlign(self)
-        self.analysis_projections = Projections_Child(self.projections)
-        self.analysis_projections.data = self.analysis.projections_aligned
-        self.analysis_projections.filedir = self.analysis.wd
         self.result_after_viewer.create_app()
-        self.result_after_viewer.plot(self.analysis_projections)
+        self.result_after_viewer.plot(self.analysis.projections, ds=self.downsample)
         self.plot_result()
 
     def make_tab(self):
