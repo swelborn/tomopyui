@@ -201,6 +201,28 @@ class IOBase:
         self.data = self._data
 
     @_check_and_open_hdf
+    def _return_ds_data(self, pyramid_level=0, px_range=None):
+
+        pyramid_level = self.hdf_key_ds + str(pyramid_level) + "/"
+        ds_data_key = pyramid_level + self.hdf_key_data
+        if px_range is None:
+            data_ds = self.hdf_file[ds_data_key][:]
+        else:
+            x = px_range[0]
+            y = px_range[1]
+            data_ds = self.hdf_file[ds_data_key][:, y[0] : y[1], x[0] : x[1]]
+        return data_ds
+
+    @_check_and_open_hdf
+    def _return_data(self, px_range=None):
+        if px_range is None:
+            data = self.hdf_file[self.hdf_key_norm_proj][:]
+        x = px_range[0]
+        y = px_range[1]
+        data = self.hdf_file[self.hdf_key_norm_proj][:, y[0] : y[1], x[0] : x[1]]
+        return data
+
+    @_check_and_open_hdf
     def _delete_downsampled_data(self):
         if self.hdf_key_ds in self.hdf_file:
             del self.hdf_file[self.hdf_key_ds]
@@ -521,6 +543,27 @@ class Projections_Child(ProjectionsBase):
         self._data = copy.deepcopy(self.parent_projections.data[:])
         self.data = self._data
 
+    def get_parent_data_from_hdf(self, px_range=None):
+        """
+        Gets data from hdf file and stores it in self.data.
+        Parameters
+        ----------
+        px_range: tuple
+            tuple of two two-element lists - (px_range_x, px_range_y)
+        """
+        self.data_ds = None
+        self.parent_projections._unload_hdf_normalized_and_ds()
+        self._data = self.parent_projections._return_data(px_range)
+        self.data = self._data
+        self.parent_projections._close_hdf_file()
+
+    def get_parent_data_ds_from_hdf(self, pyramid_level, px_range=None):
+        self.data = None
+        self._data = None
+        self.parent_projections._unload_hdf_normalized_and_ds()
+        self.data_ds = self.parent_projections.return_data_ds(pyramid_level, px_range)
+        self.parent_projections._close_hdf_file()
+
     def import_file_projections(self):
         pass
 
@@ -562,6 +605,7 @@ class Projections_Prenormalized(ProjectionsBase):
         self._data = dask_image.imread.imread("*.tif").astype(np.float32)
         self.data = self._data
         self.metadata.set_metadata_from_attributes_after_import(self)
+        print(self.metadata.metadata)
         self.filedir = self.import_savedir
         self.save_data_and_metadata(Uploader)
         self._check_downsampled_data()
@@ -611,16 +655,16 @@ class Projections_Prenormalized(ProjectionsBase):
                     "Detected metadata and npy file in this directory,"
                     + " uploading normalized_projections.npy"
                 )
-                self.metadata.set_attributes_from_metadata(self)
                 self._data = np.load(
                     self.filedir / "normalized_projections.npy"
                 ).astype(np.float32)
-            self.metadata.set_attributes_from_metadata(self)
+                self.data = self._data
             if Uploader.save_tiff_on_import_checkbox.value:
                 Uploader.import_status_label.value = "Saving projections as .tiff."
                 self.saved_as_tiff = True
                 self.save_normalized_as_tiff()
                 self.metadata.metadata["saved_as_tiff"] = True
+            self.metadata.set_attributes_from_metadata(self)
             self.imported = True
 
         elif any([x in self.filename for x in [".tif", ".tiff"]]):
@@ -3443,11 +3487,12 @@ class Metadata_Prep(Metadata):
 
 class Metadata_Align(Metadata):
     """
-    Works with both Align and TomoAlign instances.
+    Works with both Align and RunAlign instances.
     """
 
     def __init__(self):
         super().__init__()
+        self.filename = "alignment_metadata.json"
         self.metadata["opts"] = {}
         self.metadata["methods"] = {}
         self.metadata["save_opts"] = {}
@@ -3456,12 +3501,13 @@ class Metadata_Align(Metadata):
     def set_metadata(self, Align):
         self.metadata["metadata_type"] = "Align"
         self.metadata["opts"]["downsample"] = Align.downsample
-        self.metadata["opts"]["downsample_factor"] = Align.ds_factor
+        self.metadata["opts"]["ds_factor"] = Align.ds_factor
+        self.metadata["opts"]["pyramid_level"] = Align.pyramid_level
         self.metadata["opts"]["num_iter"] = Align.num_iter
         self.metadata["opts"]["center"] = Align.center
         self.metadata["opts"]["pad"] = (
-            Align.paddingX,
-            Align.paddingY,
+            Align.padding_x,
+            Align.padding_y,
         )
         self.metadata["opts"]["extra_options"] = Align.extra_options
         self.metadata["methods"] = Align.methods_opts
@@ -3470,6 +3516,9 @@ class Metadata_Align(Metadata):
         self.metadata["px_range_y"] = Align.px_range_y
         self.metadata["parent_filedir"] = Align.projections.filedir
         self.metadata["parent_filename"] = Align.projections.filename
+        self.metadata["copy_hists_from_parent"] = Align.copy_hists
+        self.metadata["angles_rad"] = list(Align.projections.angles_rad)
+        self.metadata["angles_deg"] = list(Align.projections.angles_deg)
         self.metadata["angle_start"] = Align.projections.angles_deg[0]
         self.metadata["angle_end"] = Align.projections.angles_deg[-1]
         self.set_metadata_obj_specific(Align)
@@ -3534,10 +3583,12 @@ class Metadata_Align(Metadata):
     def set_attributes_from_metadata(self, Align):
         Align.downsample = self.metadata["opts"]["downsample"]
         Align.ds_factor = self.metadata["opts"]["downsample_factor"]
+        if "pyramid_level" in self.metadata["opts"]:
+            Align.pyramid_level = self.metadata["opts"]["pyramid_level"]
         Align.num_iter = self.metadata["opts"]["num_iter"]
         Align.center = self.metadata["opts"]["center"]
-        (Align.paddingX, Align.paddingY) = self.metadata["opts"]["pad"]
-        Align.pad = (Align.paddingX, Align.paddingY)
+        (Align.padding_x, Align.padding_y) = self.metadata["opts"]["pad"]
+        Align.pad = (Align.padding_x, Align.padding_y)
         Align.extra_options = self.metadata["opts"]["extra_options"]
         Align.methods_opts = self.metadata["methods"]
         Align.save_opts = self.metadata["save_opts"]
@@ -3562,6 +3613,7 @@ class Metadata_Recon(Metadata_Align):
     def set_metadata(self, Recon):
         super().set_metadata(Recon)
         self.metadata["metadata_type"] = "Recon"
+        self.filename = "recon_metadata.json"
         self.table_label.value = "Reconstruction Metadata"
 
     def set_metadata_obj_specific(self, Recon):

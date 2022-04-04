@@ -10,8 +10,7 @@ from tomopyui.widgets.view import (
     BqImViewer_Projections_Child,
     BqImViewer_Projections_Child,
 )
-from tomopyui.backend.align import TomoAlign
-from tomopyui.backend.recon import TomoRecon
+from tomopyui.backend.runanalysis import RunAlign, RunRecon
 from tomopyui.backend.io import (
     Projections_Child,
     Metadata_Align,
@@ -25,7 +24,6 @@ class AnalysisBase(ABC):
         self.Import = Import
         self.Center = Center
         self.projections = Import.projections
-        self.altered_projections = Projections_Child(self.projections)
         self.imported_viewer = BqImViewer_Projections_Parent()
         self.imported_viewer.create_app()
         self.altered_viewer = BqImViewer_Projections_Child(self.imported_viewer)
@@ -37,16 +35,18 @@ class AnalysisBase(ABC):
         self.wd = None
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
-        self.ds_factor = 0.5
-        self.num_iter = 1
+        self.ds_factor = 4
+        self.copy_hists = True
+        self.pyramid_level = 1
+        self.num_iter = 10
         self.center = Center.current_center
         self.upsample_factor = 50
         self.extra_options = {}
         self.num_batches = 20
         self.px_range_x = (0, 10)
         self.px_range_y = (0, 10)
-        self.paddingX = 10
-        self.paddingY = 10
+        self.padding_x = 10
+        self.padding_y = 10
         self.use_subset_correlation = False
         self.pre_alignment_iters = 1
         self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
@@ -99,18 +99,6 @@ class AnalysisBase(ABC):
             self.after_analysis_plot_header, style=self.header_font_style
         )
 
-        # -- Button for using imported dataset  ---------------------------------
-        self.use_imported_button = Button(
-            description="Click here to use the imported data for analysis.",
-            layout=Layout(width="auto"),
-        )
-
-        # -- Button for using edited dataset  ---------------------------------
-        self.use_altered_button = Button(
-            description="Click here to use the altered data for analysis.",
-            layout=Layout(width="auto"),
-        )
-
         # -- Button to load metadata ----------------------------------------------
         self.load_metadata_button = Button(
             description="Click to load metadata.",
@@ -121,19 +109,12 @@ class AnalysisBase(ABC):
             layout=Layout(width="auto", justify_content="center"),
         )
 
-        # -- Plotting -------------------------------------------------------------
-        self.set_range_button = Button(
-            description="Click to set current range to analysis range.",
-            layout=Layout(width="auto"),
-        )
-
         self.viewer_hbox = HBox(
             [
                 VBox(
                     [
                         self.import_plot_header,
                         self.imported_viewer.app,
-                        self.use_imported_button,
                     ],
                     layout=Layout(align_items="center"),
                 ),
@@ -141,7 +122,6 @@ class AnalysisBase(ABC):
                     [
                         self.altered_plot_header,
                         self.altered_viewer.app,
-                        self.use_altered_button,
                     ],
                     layout=Layout(align_items="center"),
                 ),
@@ -160,6 +140,11 @@ class AnalysisBase(ABC):
         self.save_opts_checkboxes = self.create_checkboxes_from_opt_list(
             self.save_opts_list, self.save_opts
         )
+        # Copy parent histograms?
+        self.copy_parent_hists_checkbox = Checkbox(
+            description="Copy parent histograms", value=True
+        )
+        self.save_opts_checkboxes.append(self.copy_parent_hists_checkbox)
 
         # -- Method Options -------------------------------------------------------
         self.methods_opts = {
@@ -194,15 +179,12 @@ class AnalysisBase(ABC):
 
         # Downsampling
         self.downsample_checkbox = Checkbox(description="Downsample?", value=False)
-        self.ds_factor_textbox = BoundedFloatText(
-            value=self.ds_factor,
-            min=0.001,
-            max=1.0,
-            description="Downsample factor:",
+        self.ds_factor_dropdown = Dropdown(
+            options=[("Original", -1), (2, 0), (4, 1), (8, 2)],
+            description="Downsample factor: ",
             disabled=True,
             style=extend_description_style,
         )
-
         # Phase cross correlation subset (from altered projections)
         self.use_subset_correlation_checkbox = Checkbox(
             description="Phase Corr. Subset?", value=False
@@ -216,17 +198,17 @@ class AnalysisBase(ABC):
         )
 
         # X Padding
-        self.paddingX_textbox = IntText(
+        self.padding_x_textbox = IntText(
             description="Padding X (px): ",
             style=extend_description_style,
-            value=self.paddingX,
+            value=self.padding_x,
         )
 
         # Y Padding
-        self.paddingY_textbox = IntText(
+        self.padding_y_textbox = IntText(
             description="Padding Y (px): ",
             style=extend_description_style,
-            value=self.paddingY,
+            value=self.padding_y,
         )
 
         # Pre-alignment iterations
@@ -245,20 +227,14 @@ class AnalysisBase(ABC):
 
     def refresh_plots(self):
         self.imported_viewer.plot(self.projections)
-        self.altered_projections.parent_projections = self.projections
-        self.altered_projections.copy_from_parent()
-        self.altered_viewer.plot(self.altered_projections)
+        self.altered_projections = Projections_Child(self.projections)
+        self.altered_viewer.projections = self.altered_projections
+        self.altered_viewer.copy_parent_projections(None)
 
     def set_observes(self):
 
         # -- Radio to turn on tab ---------------------------------------------
         self.open_accordions_button.on_click(self.activate_tab)
-
-        # -- Button for using imported dataset  ---------------------------------
-        self.use_imported_button.on_click(self.use_imported)
-
-        # -- Button for using edited dataset  ---------------------------------
-        self.use_altered_button.on_click(self.use_altered)
 
         # -- Load metadata button ---------------------------------------------
         self.load_metadata_button.on_click(self._load_metadata_all_on_click)
@@ -268,20 +244,24 @@ class AnalysisBase(ABC):
         # Center
         self.center_textbox.observe(self.update_center_textbox, names="value")
 
+        # Copy parent histograms
+        self.copy_parent_hists_checkbox.observe(self.update_copy_hist, names="value")
+
         # Downsampling
         self.downsample_checkbox.observe(self._downsample_turn_on)
-        self.ds_factor_textbox.observe(
-            self.update_downsample_factor_dict, names="value"
+        self.altered_viewer.ds_viewer_dropdown.observe(
+            self.update_ds_factor_from_viewer, names="value"
         )
+        self.ds_factor_dropdown.observe(self.update_ds_factor, names="value")
 
         # Phase cross correlation subset (from altered projections)
         self.use_subset_correlation_checkbox.observe(self._use_subset_correlation)
 
         # X Padding
-        self.paddingX_textbox.observe(self.update_x_padding, names="value")
+        self.padding_x_textbox.observe(self.update_x_padding, names="value")
 
         # Y Padding
-        self.paddingY_textbox.observe(self.update_y_padding, names="value")
+        self.padding_y_textbox.observe(self.update_y_padding, names="value")
 
         # Pre-alignment iterations
         self.pre_alignment_iters_textbox.observe(
@@ -309,7 +289,6 @@ class AnalysisBase(ABC):
             self.options_accordion.selected_index = 0
             self.methods_accordion.selected_index = 0
             self.viewer_accordion.selected_index = 0
-            self.log.info("Activated alignment.")
             self.accordions_open = True
         else:
             self.open_accordions_button.icon = "fa-lock-open"
@@ -323,48 +302,48 @@ class AnalysisBase(ABC):
             self.viewer_accordion.selected_index = None
             self.log.info("Deactivated alignment.")
 
-    # -- Button for using imported dataset  ---------------------------------
-    def use_imported(self, *args):
-        self.use_altered_button.icon = ""
-        self.use_altered_button.button_style = ""
-        self.use_imported_button.button_style = "info"
-        self.use_imported_button.description = "Creating analysis projections"
-        self.use_imported_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections.data = copy.deepcopy(self.Import.projections.data)
-        self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
-        self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
-        self.px_range_x = self.projections.px_range_x
-        self.px_range_y = self.projections.px_range_y
-        self.result_before_viewer = self.imported_viewer
-        self.result_after_viewer = BqImViewer_Projections_Child(
-            self.result_before_viewer
-        )
-        self.use_imported_button.button_style = "success"
-        self.use_imported_button.description = (
-            "You can now align/reconstruct your data."
-        )
-        self.use_imported_button.icon = "fa-check-square"
+    # # -- Button for using imported dataset  ---------------------------------
+    # def use_imported(self, *args):
+    #     self.use_altered_button.icon = ""
+    #     self.use_altered_button.button_style = ""
+    #     self.use_imported_button.button_style = "info"
+    #     self.use_imported_button.description = "Creating analysis projections"
+    #     self.use_imported_button.icon = "fas fa-cog fa-spin fa-lg"
+    #     self.projections.data = copy.deepcopy(self.Import.projections.data)
+    #     self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
+    #     self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
+    #     self.px_range_x = self.projections.px_range_x
+    #     self.px_range_y = self.projections.px_range_y
+    #     self.result_before_viewer = self.imported_viewer
+    #     self.result_after_viewer = BqImViewer_Projections_Child(
+    #         self.result_before_viewer
+    #     )
+    #     self.use_imported_button.button_style = "success"
+    #     self.use_imported_button.description = (
+    #         "You can now align/reconstruct your data."
+    #     )
+    #     self.use_imported_button.icon = "fa-check-square"
 
     # -- Button for using edited dataset  ---------------------------------
-    def use_altered(self, *args):
-        self.use_imported_button.icon = ""
-        self.use_imported_button.button_style = ""
-        self.use_altered_button.button_style = "info"
-        self.use_altered_button.description = "Creating analysis projections"
-        self.use_altered_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.projections._data = self.altered_viewer.original_images
-        self.projections.data = self.altered_viewer.original_images
-        self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
-        self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
-        self.px_range_x = self.altered_viewer.px_range_x
-        self.px_range_y = self.altered_viewer.px_range_y
-        self.result_before_viewer = self.altered_viewer
-        self.result_after_viewer = BqImViewer_Projections_Child(
-            self.result_before_viewer
-        )
-        self.use_altered_button.button_style = "success"
-        self.use_altered_button.description = "You can now align/reconstruct your data."
-        self.use_altered_button.icon = "fa-check-square"
+    # def use_altered(self, *args):
+    #     self.use_imported_button.icon = ""
+    #     self.use_imported_button.button_style = ""
+    #     self.use_altered_button.button_style = "info"
+    #     self.use_altered_button.description = "Creating analysis projections"
+    #     self.use_altered_button.icon = "fas fa-cog fa-spin fa-lg"
+    #     self.projections._data = self.altered_viewer.original_images
+    #     self.projections.data = self.altered_viewer.original_images
+    #     self.projections.angles_rad = copy.deepcopy(self.Import.projections.angles_rad)
+    #     self.projections.angles_deg = copy.deepcopy(self.Import.projections.angles_deg)
+    #     self.px_range_x = self.altered_viewer.px_range_x
+    #     self.px_range_y = self.altered_viewer.px_range_y
+    #     self.result_before_viewer = self.altered_viewer
+    #     self.result_after_viewer = BqImViewer_Projections_Child(
+    #         self.result_before_viewer
+    #     )
+    #     self.use_altered_button.button_style = "success"
+    #     self.use_altered_button.description = "You can now align/reconstruct your data."
+    #     self.use_altered_button.icon = "fa-check-square"
 
     # -- Load metadata button ---------------------------------------------
     def _load_metadata_all_on_click(self, change):
@@ -373,7 +352,6 @@ class AnalysisBase(ABC):
         self.load_metadata_button.description = "Importing metadata."
         self.load_metadata_align()
         self.metadata.set_attributes_from_metadata()
-        # self = _set_widgets_from_load_metadata(self)
         self.set_observes()
         self.load_metadata_button.button_style = "success"
         self.load_metadata_button.icon = "fa-check-square"
@@ -393,6 +371,10 @@ class AnalysisBase(ABC):
 
     # -- Options ----------------------------------------------------------
 
+    def update_copy_hist(self, change):
+        self.copy_hists = change.new
+        self.metadata.set_metadata(self)
+
     # Number of iterations
     def update_num_iter(self, change):
         self.num_iter = int(change.new)
@@ -408,14 +390,13 @@ class AnalysisBase(ABC):
     def _downsample_turn_on(self, change):
         if change.new is True:
             self.downsample = True
-            self.ds_factor = self.ds_factor_textbox.value
-            self.ds_factor_textbox.disabled = False
+            self.pyramid_level = self.altered_viewer.ds_viewer_dropdown.value
+            self.ds_factor_dropdown.disabled = False
             self.metadata.set_metadata(self)
         if change.new is False:
             self.downsample = False
             self.ds_factor = 1
-            self.ds_factor_textbox.value = 1
-            self.ds_factor_textbox.disabled = True
+            self.ds_factor_dropdown.disabled = True
             self.metadata.set_metadata(self)
 
     # Phase cross correlation subset (from altered projections)
@@ -423,8 +404,12 @@ class AnalysisBase(ABC):
         self.use_subset_correlation = change.new
         self.metadata.set_metadata(self)
 
-    def update_downsample_factor_dict(self, change):
-        self.ds_factor = change.new
+    def update_ds_factor_from_viewer(self, *args):
+        self.ds_factor_dropdown.value = self.altered_viewer.ds_viewer_dropdown.value
+
+    def update_ds_factor(self, *args):
+        self.pyramid_level = self.ds_factor_dropdown.value
+        self.ds_factor = np.power(2, int(self.pyramid_level + 1))
         self.metadata.set_metadata(self)
 
     # Batch size
@@ -437,12 +422,12 @@ class AnalysisBase(ABC):
 
     # X Padding
     def update_x_padding(self, change):
-        self.paddingX = change.new
+        self.padding_x = change.new
         self.metadata.set_metadata(self)
 
     # Y Padding
     def update_y_padding(self, change):
-        self.paddingY = change.new
+        self.padding_y = change.new
         self.metadata.set_metadata(self)
 
     # Pre-alignment iterations
@@ -500,10 +485,10 @@ class AnalysisBase(ABC):
     #     self.num_batches_textbox.value = self.num_batches
 
     #     # X Padding
-    #     self.paddingX_textbox.value = self.paddingX
+    #     self.padding_x_textbox.value = self.padding_x
 
     #     # Y Padding
-    #     self.paddingY_textbox.value = self.paddingY
+    #     self.padding_y_textbox.value = self.padding_y
 
     #     # Extra options
     #     self.extra_options_textbox.value = str(self.extra_options)
@@ -580,7 +565,7 @@ class Align(AnalysisBase):
         self.metadata = Metadata_Align()
         self.subset_range_x = None
         self.subset_range_y = None
-        self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", "npy"]
+        self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", "hdf"]
         self.Import.Align = self
         self.init_widgets()
         self.set_observes()
@@ -653,7 +638,7 @@ class Align(AnalysisBase):
         self.metadata.set_metadata(self)
 
     def run(self):
-        self.analysis = TomoAlign(self)
+        self.analysis = RunAlign(self)
         self.analysis_projections = Projections_Child(self.projections)
         self.analysis_projections.data = self.analysis.projections_aligned
         self.analysis_projections.filedir = self.analysis.wd
@@ -725,10 +710,10 @@ class Align(AnalysisBase):
                         self.center_textbox,
                         self.upsample_factor_textbox,
                         self.num_batches_textbox,
-                        self.paddingX_textbox,
-                        self.paddingY_textbox,
+                        self.padding_x_textbox,
+                        self.padding_y_textbox,
                         self.downsample_checkbox,
-                        self.ds_factor_textbox,
+                        self.ds_factor_dropdown,
                         self.extra_options_textbox,
                         self.use_subset_correlation_checkbox,
                         self.pre_alignment_iters_textbox,
@@ -819,7 +804,7 @@ class Recon(AnalysisBase):
         self.metadata.set_metadata(self)
 
     def run(self):
-        self.analysis = TomoRecon(self)
+        self.analysis = RunRecon(self)
         self.analysis_projections = Projections_Child(self.projections)
         self.analysis_projections.data = self.analysis.recon
         self.analysis_projections.filedir = pathlib.Path(self.analysis.wd)
@@ -888,10 +873,10 @@ class Recon(AnalysisBase):
                     [
                         self.num_iterations_textbox,
                         self.center_textbox,
-                        self.paddingX_textbox,
-                        self.paddingY_textbox,
+                        self.padding_x_textbox,
+                        self.padding_y_textbox,
                         self.downsample_checkbox,
-                        self.ds_factor_textbox,
+                        self.ds_factor_dropdown,
                         self.extra_options_textbox,
                     ],
                     layout=Layout(

@@ -767,18 +767,11 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
             max=self.images.shape[0] - 1,
             step=1,
         )
-        self.slice_line_slider.observe(self._slice_slider_update, names="value")
         self.fig.marks = (
             self.plotted_image,
             self.center_line,
             self.slice_line,
         )
-
-    def _slice_slider_update(self, change):
-        self.slice_line.y = [
-            change.new / self.pxY,
-            change.new / self.pxY,
-        ]
 
     def create_app(self):
         self.button_box = HBox(
@@ -827,11 +820,9 @@ class BqImViewer_Center_Recon(BqImViewer_Projections_Parent):
         self.ds_factor = self.ds_viewer_dropdown.value
         self.current_image_ind = 0
         self.change_aspect_ratio()
-        self.plotted_image.image = self.images[0]
-        self.hist.vmin = np.min(self.images)
-        self.hist.vmax = np.max(self.images)
         self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = int(self.images.shape[0] / 2)
+        self.plotted_image.image = self.images[self.image_index_slider.value]
         self.hist.refresh_histogram(self.images)
         self.hist.rm_high_low_int(None)
 

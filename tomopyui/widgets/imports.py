@@ -682,7 +682,7 @@ class PrenormUploader(UploaderBase):
             self.filename = str(self.images_in_dir[ind].name)
             self.projections.filename = str(self.images_in_dir[ind].name)
             self.create_and_display_metadata_tables()
-            self.import_button.enable()
+            # self.import_button.enable()
         else:
             self.import_button.disable()
 
@@ -752,9 +752,19 @@ class PrenormUploader(UploaderBase):
                 sizeX = size[2]
 
             elif image.suffix == ".hdf5" or image.suffix == ".h5":
-                sizeZ = 1
-                sizeY = 1
-                sizeX = 1
+                self.projections.filepath = self.filedir / str(image)
+                try:
+                    self.projections._open_hdf_file_read_only()
+                    self.projections._unload_hdf_normalized_and_ds()
+                    size = self.projections.data.shape
+                    sizeZ = size[0]
+                    sizeY = size[1]
+                    sizeX = size[2]
+                    self.projections._close_hdf_file()
+                except Exception:
+                    sizeZ = 1
+                    sizeY = 1
+                    sizeX = 1
 
             size_tuple = (sizeZ, sizeY, sizeX)
             size_list.append(size_tuple)
@@ -855,10 +865,11 @@ class PrenormUploader(UploaderBase):
             )
             self.metadata_already_displayed = False
             if self.projections.metadatas != []:
-                [
+                for metadata in self.projections.metadatas:
+                    metadata.filepath = copy.copy(self.metadata_filepath)
+                    metadata.load_metadata()
                     metadata.set_attributes_from_metadata(self.projections)
-                    for metadata in self.projections.metadatas
-                ]
+
                 self.create_and_display_metadata_tables()
                 self.metadata_already_displayed = True
                 self.imported_metadata = True
