@@ -576,6 +576,7 @@ class BqImViewer_Projections_Parent(BqImViewerBase):
             self.images = self.projections.data_ds
         else:
             self.ds_viewer_dropdown.value = -1
+            self.ds_viewer_dropdown.options = [("Original", -1)]
             self.original_images = self.projections.data
             self.images = self.original_images
         self.set_state_on_plot()
@@ -585,7 +586,8 @@ class BqImViewer_Projections_Child(BqImViewer_Projections_Parent):
     def __init__(self, viewer_parent):
         self.viewer_parent = viewer_parent
         super().__init__()
-
+        self.subset_x = None
+        self.subset_y = None
         # Copy from plotter
         self.copy_button = Button(
             icon="file-import",
@@ -718,8 +720,8 @@ class BqImViewer_Projections_Child(BqImViewer_Projections_Parent):
         upperY = int(self.px_range[1, 1] * y_len + self.px_range_y[0])
         self.printed_range_x = [lowerX, upperX]
         self.printed_range_y = [lowerY, upperY]
-        self.subset_range_x = [x - self.px_range_x[0] for x in self.printed_range_x]
-        self.subset_range_y = [y - self.px_range_y[0] for y in self.printed_range_y]
+        self.subset_x = [x - self.px_range_x[0] for x in self.printed_range_x]
+        self.subset_y = [y - self.px_range_y[0] for y in self.printed_range_y]
         self.update_px_range_status_bar()
 
     # Rectangle selector button
@@ -729,14 +731,14 @@ class BqImViewer_Projections_Child(BqImViewer_Projections_Parent):
             self.fig.interaction.color = "magenta"
             self.rectangle_selector_on = True
             self.rectangle_selector_button.button_style = "success"
-            self.Analysis.use_subset_correlation_checkbox.value = True
+            # self.Analysis.use_subset_correlation_checkbox.value = True
         else:
             self.rectangle_selector_button.button_style = ""
             self.rectangle_selector_on = False
             self.status_bar_xrange.value = ""
             self.status_bar_yrange.value = ""
             self.fig.interaction = self.msg_interaction
-            self.Analysis.use_subset_correlation_checkbox.value = False
+            # self.Analysis.use_subset_correlation_checkbox.value = False
 
     def update_px_range_status_bar(self):
         self.status_bar_xrange.value = (
@@ -1005,6 +1007,7 @@ class BqImHist:
         self.refresh_histogram(self.viewer.images)
         self.fig.layout.width = "100px"
         self.fig.layout.height = viewer.fig.layout.height
+        self.copied_hist = False
 
     def reset_state(self):
         self.vmin = self.init_vmin
@@ -1016,7 +1019,7 @@ class BqImHist:
 
     def refresh_histogram(self, images=None):
         if self.precomputed_hist is not None:
-            if self.viewer.from_hdf:
+            if self.viewer.from_hdf or self.copied_hist:
                 self.refresh_histogram_from_hdf()
             else:
                 self.refresh_histogram_from_downsampled_folder()
@@ -1128,7 +1131,7 @@ class BqImHist_Child(BqImHist):
 
     def copy_parent_hist(self):
         self.precomputed_hist = copy.copy(self.viewer_parent.hist.precomputed_hist)
-
+        self.copied_hist = True
         # self.selector = bq.interacts.BrushIntervalSelector(
         #     orientation="vertical",
         #     scale=self.viewer_parent.hist.x_sc,

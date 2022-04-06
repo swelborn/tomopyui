@@ -796,10 +796,10 @@ class PrepMethod:
 
 def shift_projections(projections, sx, sy):
     new_prj_imgs = copy.deepcopy(projections)
-    pad_x = np.max(np.abs(sx))
-    pad_y = np.max(np.abs(sy))
+    pad_x = int(np.ceil(np.max(np.abs(sx))))
+    pad_y = int(np.ceil(np.max(np.abs(sy))))
     pad = (pad_x, pad_y)
-    new_prj_imgs, pad = pad_projections(new_prj_imgs, pad)
+    new_prj_imgs = pad_projections(new_prj_imgs, pad)
     new_prj_imgs = shift_prj_cp(
         new_prj_imgs,
         sx,

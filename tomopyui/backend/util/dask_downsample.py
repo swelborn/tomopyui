@@ -80,7 +80,10 @@ def pyramid_reduce_gaussian(
 
     if compute:
         return_da = False
-
+    if not isinstance(image, da.Array):
+        image = da.from_array(image, chunks = "auto")
+    else:
+        image = image.rechunk(chunks="auto")
     for i in range(pyramid_levels):
         pad_on_levels = _check_divisible(image, 2)
         if pad_on_levels is not None:

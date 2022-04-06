@@ -28,16 +28,13 @@ class AnalysisBase(ABC):
         self.imported_viewer.create_app()
         self.altered_viewer = BqImViewer_Projections_Child(self.imported_viewer)
         self.altered_viewer.create_app()
-        self.result_before_viewer = self.altered_viewer
-        self.result_after_viewer = BqImViewer_Projections_Child(
-            self.result_before_viewer
-        )
+        self.result_after_viewer = BqImViewer_Projections_Child(self.altered_viewer)
         self.wd = None
         self.log_handler, self.log = Import.log_handler, Import.log
         self.downsample = False
         self.ds_factor = 4
         self.copy_hists = True
-        self.shift_full_dataset_after = False
+        self.shift_full_dataset_after = True
         self.pyramid_level = 1
         self.num_iter = 10
         self.center = Center.current_center
@@ -46,8 +43,8 @@ class AnalysisBase(ABC):
         self.num_batches = 20
         self.px_range_x = (0, 10)
         self.px_range_y = (0, 10)
-        self.padding_x = 10
-        self.padding_y = 10
+        self.padding_x = 50
+        self.padding_y = 20
         self.use_subset_correlation = False
         self.pre_alignment_iters = 1
         self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
@@ -147,7 +144,7 @@ class AnalysisBase(ABC):
         )
         self.save_opts_checkboxes.append(self.copy_parent_hists_checkbox)
         self.shift_data_after_checkbox = Checkbox(
-            description="Shift full dataset after:", value=True
+            description="Shift full dataset after", value=True
         )
         self.save_opts_checkboxes.append(self.shift_data_after_checkbox)
 
@@ -537,7 +534,7 @@ class AnalysisBase(ABC):
                     VBox(
                         [
                             self.before_analysis_plot_header,
-                            self.result_before_viewer.app,
+                            self.altered_viewer.app,
                         ],
                         layout=Layout(align_items="center"),
                     ),
@@ -576,8 +573,8 @@ class Align(AnalysisBase):
     def __init__(self, Import, Center):
         super().init_attributes(Import, Center)
         self.metadata = Metadata_Align()
-        self.subset_range_x = None
-        self.subset_range_y = None
+        self.subset_x = None
+        self.subset_y = None
         self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", "hdf"]
         self.Import.Align = self
         self.init_widgets()
@@ -650,10 +647,20 @@ class Align(AnalysisBase):
         self.progress_total.max = change.new
         self.metadata.set_metadata(self)
 
+    def update_subset(self):
+        self.subset_x = self.altered_viewer.subset_x
+        self.subset_y = self.altered_viewer.subset_y
+
     def run(self):
+        self.metadata = Metadata_Align()
+        self.metadata.set_metadata(self)
         self.analysis = RunAlign(self)
         self.result_after_viewer.create_app()
-        self.result_after_viewer.plot(self.analysis.projections, ds=self.downsample)
+        if self.copy_hists:
+            self.result_after_viewer.hist.copy_parent_hist()
+        self.result_after_viewer.link_plotted_projections()
+        self.result_after_viewer.link_plotted_projections_button.disabled = False
+        self.result_after_viewer.plot(self.analysis.projections, ds=False)
         self.plot_result()
 
     def make_tab(self):
@@ -814,12 +821,11 @@ class Recon(AnalysisBase):
         self.metadata.set_metadata(self)
 
     def run(self):
+        self.metadata = Metadata_Recon()
+        self.metadata.set_metadata(self)
         self.analysis = RunRecon(self)
-        self.analysis_projections = Projections_Child(self.projections)
-        self.analysis_projections.data = self.analysis.recon
-        self.analysis_projections.filedir = pathlib.Path(self.analysis.wd)
         self.result_after_viewer.create_app()
-        self.result_after_viewer.plot(self.analysis_projections)
+        self.result_after_viewer.plot(self.analysis.projections, ds=False)
         self.plot_result()
 
     def make_tab(self):

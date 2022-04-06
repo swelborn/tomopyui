@@ -166,13 +166,23 @@ class IOBase:
 
     @_check_and_open_hdf
     def _load_hdf_normalized_data_into_memory(self):
+        # load normalized data into memory
         self._data = self.hdf_file[self.hdf_key_norm_proj][:]
         self.data = self._data
-        self.hist = {
-            key: self.hdf_file[self.hdf_key_norm + key][:]
-            for key in self.hdf_keys_ds_hist
-        }
         pyramid_level = self.hdf_key_ds + str(0) + "/"
+        try: 
+            self.hist = {
+                key: self.hdf_file[self.hdf_key_norm + key][:]
+                for key in self.hdf_keys_ds_hist
+            }
+        except KeyError:
+            # load downsampled histograms if regular histograms don't work
+            self.hist = {
+            key: self.hdf_file[pyramid_level + key][:] for key in self.hdf_keys_ds_hist
+            }
+            for key in self.hdf_keys_ds_hist_scalar:
+                self.hist[key] = self.hdf_file[pyramid_level + key][()]
+        
         ds_data_key = pyramid_level + self.hdf_key_data
         self.data_ds = self.hdf_file[ds_data_key]
 
@@ -180,9 +190,6 @@ class IOBase:
     def _unload_hdf_normalized_and_ds(self):
         self._data = self.hdf_file[self.hdf_key_norm_proj]
         self.data = self._data
-        self.hist = {
-            key: self.hdf_file[self.hdf_key_norm + key] for key in self.hdf_keys_ds_hist
-        }
         pyramid_level = self.hdf_key_ds + str(0) + "/"
         ds_data_key = pyramid_level + self.hdf_key_data
         self.data_ds = self.hdf_file[ds_data_key]
@@ -219,11 +226,22 @@ class IOBase:
     def _return_data(self, px_range=None):
         if px_range is None:
             self.data_returned = self.hdf_file[self.hdf_key_norm_proj][:]
-        x = px_range[0]
-        y = px_range[1]
-        self.data_returned = self.hdf_file[self.hdf_key_norm_proj][
-            :, y[0] : y[1], x[0] : x[1]
-        ]
+        else:
+            x = px_range[0]
+            y = px_range[1]
+            self.data_returned = self.hdf_file[self.hdf_key_norm_proj][
+                :, y[0] : y[1], x[0] : x[1]
+            ]
+
+    @_check_and_open_hdf
+    def _return_hist(self, pyramid_level=0):
+        pyramid_level = self.hdf_key_ds + str(pyramid_level) + "/"
+        ds_data_key = pyramid_level + self.hdf_key_data
+        self.hist_returned = {
+            key: self.hdf_file[pyramid_level + key][:] for key in self.hdf_keys_ds_hist
+        }
+        for key in self.hdf_keys_ds_hist_scalar:
+            self.hist_returned[key] = self.hdf_file[pyramid_level + key][()]
 
     @_check_and_open_hdf
     def _delete_downsampled_data(self):
@@ -473,7 +491,7 @@ class ProjectionsBase(IOBase, ABC):
 
     def dask_data_to_h5(self, data_dict, savedir=None):
         """
-        Brings lazy dask arrays to hdf5 under /exchange under current filedir.
+        Brings lazy dask arrays to hdf5.
 
         Parameters
         ----------
@@ -489,7 +507,6 @@ class ProjectionsBase(IOBase, ABC):
         for key in data_dict:
             if not isinstance(data_dict[key], da.Array):
                 data_dict[key] = da.from_array(data_dict[key])
-
         da.to_hdf5(
             filedir / self.normalized_projections_hdf_key,
             data_dict,
@@ -528,7 +545,6 @@ class Projections_Child(ProjectionsBase):
     def __init__(self, parent_projections):
         super().__init__()
         self.parent_projections = parent_projections
-        # self.copy_from_parent()
 
     def copy_from_parent(self):
         self.parent_projections._unload_hdf_normalized_and_ds()
@@ -559,20 +575,19 @@ class Projections_Child(ProjectionsBase):
         self.parent_projections._return_data(px_range)
         self._data = self.parent_projections.data_returned
         self.data = self._data
-        print(self.data)
-        print(self.data.shape)
         self.parent_projections._close_hdf_file()
-        print(self.data.shape)
 
     def get_parent_data_ds_from_hdf(self, pyramid_level, px_range=None):
-        self.data = None
-        self._data = None
         self.parent_projections._unload_hdf_normalized_and_ds()
         self.parent_projections._return_ds_data(pyramid_level, px_range)
         self.data_ds = self.parent_projections.data_returned
-        print(self.data_ds.shape)
         self.parent_projections._close_hdf_file()
-        print(self.data_ds.shape)
+
+    def get_parent_hists(self, pyramid_level):
+        self.parent_projections._unload_hdf_normalized_and_ds()
+        self.parent_projections._return_hist(pyramid_level)
+        self.hist = self.parent_projections.hist_returned
+        self.parent_projections._close_hdf_file()
 
     def import_file_projections(self):
         pass
@@ -612,15 +627,19 @@ class Projections_Prenormalized(ProjectionsBase):
             self.metadata.set_attributes_from_metadata_before_import(self)
         cwd = os.getcwd()
         os.chdir(self.filedir)
-        self._data = dask_image.imread.imread("*.tif").astype(np.float32)
+        try:
+            self._data = dask_image.imread.imread("*.tif").astype(np.float32)
+        except:
+            self._data = dask_image.imread.imread("*.tiff").astype(np.float32)
         self.data = self._data
         self.metadata.set_metadata_from_attributes_after_import(self)
-        print(self.metadata.metadata)
         self.filedir = self.import_savedir
         self.save_data_and_metadata(Uploader)
         self._check_downsampled_data()
         os.chdir(cwd)
         self.filepath = self.import_savedir / self.normalized_projections_hdf_key
+        self.hdf_file = h5py.File(self.filepath)
+        self._close_hdf_file()
 
     def import_file_projections(self, Uploader):
         """
@@ -660,6 +679,11 @@ class Projections_Prenormalized(ProjectionsBase):
                     "Detected metadata and hdf5 file in this directory,"
                     + " uploading normalized_projections.hdf5"
                 )
+                self.hdf_file = h5py.File(self.filepath)
+                self._data = self.hdf_file[self.hdf_key_norm_proj][:]
+                self.data = self._data
+                self._check_downsampled_data()
+
             elif ".npy" in files:
                 Uploader.import_status_label.value = (
                     "Detected metadata and npy file in this directory,"
@@ -683,6 +707,9 @@ class Projections_Prenormalized(ProjectionsBase):
             self.data = self._data
             self.save_data_and_metadata(Uploader)
             self.imported = True
+            self.filepath = self.import_savedir / self.normalized_projections_hdf_key
+            self.hdf_file = h5py.File(self.filepath)
+            self._close_hdf_file()
 
         elif ".npy" in self.filename:
             self._data = np.load(self.filepath).astype(np.float32)
@@ -690,9 +717,9 @@ class Projections_Prenormalized(ProjectionsBase):
             self.data = self._data
             self.save_data_and_metadata(Uploader)
             self.imported = True
-
-        self._check_downsampled_data()
-        self.filepath = self.import_savedir / self.normalized_projections_hdf_key
+            self.filepath = self.import_savedir / self.normalized_projections_hdf_key
+            self.hdf_file = h5py.File(self.filepath)
+            self._close_hdf_file()
 
     def make_angles(self):
         """
@@ -1162,7 +1189,6 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             for energy in self.energies_list_float
         ]
         Uploader.energy_select_multiple.options = self.energies_list_str
-        Uploader.energy_select_multiple.value = [self.energies_list_str[0]]
         if len(self.energies_list_str) > 10:
             Uploader.energy_select_multiple.rows = 10
         else:
@@ -1420,7 +1446,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 )
                 self.data = self._data
 
-                self.status_label.value = "Saving projections as .npy for faster IO."
+                self.status_label.value = "Calculating histogram of raw data and saving."
                 self._dask_hist_and_save_data()
                 self.saved_as_tiff = False
                 self.filedir = self.import_savedir
@@ -1428,7 +1454,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                     self.status_label.value = "Saving projections as .tiff."
                     self.saved_as_tiff = True
                     self.save_normalized_as_tiff()
-                self.status_label.value = "Downsampling data for faster viewing."
+                self.status_label.value = "Downsampling data."
                 self._check_downsampled_data()
                 self.status_label.value = "Saving metadata."
                 self.data_hierarchy_level = 1
@@ -2535,9 +2561,9 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         projections.energy_units = self.metadata["energy_units"]
         projections.px_size = self.metadata["pixel_size"]
         projections.pixel_units = self.metadata["pixel_units"]
-        projections.import_savedir = pathlib.Path(
-            self.metadata["normalized_projections_directory"]
-        )
+        # projections.import_savedir = pathlib.Path(
+        #     self.metadata["normalized_projections_directory"]
+        # )
         if "downsampled_projections_directory" in self.metadata:
             projections.filedir_ds = pathlib.Path(
                 self.metadata["downsampled_projections_directory"]
@@ -3522,8 +3548,8 @@ class Metadata_Align(Metadata):
         self.metadata["opts"]["extra_options"] = Align.extra_options
         self.metadata["methods"] = Align.methods_opts
         self.metadata["save_opts"] = Align.save_opts
-        self.metadata["px_range_x"] = Align.px_range_x
-        self.metadata["px_range_y"] = Align.px_range_y
+        self.metadata["px_range_x"] = Align.altered_viewer.px_range_x
+        self.metadata["px_range_y"] = Align.altered_viewer.px_range_y
         self.metadata["parent_filedir"] = Align.projections.filedir
         self.metadata["parent_filename"] = Align.projections.filename
         self.metadata["copy_hists_from_parent"] = Align.copy_hists
@@ -3540,8 +3566,8 @@ class Metadata_Align(Metadata):
         self.metadata["opts"]["upsample_factor"] = Align.upsample_factor
         self.metadata["opts"]["pre_alignment_iters"] = Align.pre_alignment_iters
         self.metadata["use_subset_correlation"] = Align.use_subset_correlation
-        self.metadata["subset_range_x"] = Align.subset_range_x
-        self.metadata["subset_range_y"] = Align.subset_range_y
+        self.metadata["subset_x"] = Align.altered_viewer.subset_x
+        self.metadata["subset_y"] = Align.altered_viewer.subset_y
         self.metadata["opts"]["num_batches"] = Align.num_batches
 
     def metadata_to_DataFrame(self):
@@ -3601,6 +3627,8 @@ class Metadata_Align(Metadata):
             Align.ds_factor = self.metadata["opts"]["downsample_factor"]
         if "pyramid_level" in self.metadata["opts"]:
             Align.pyramid_level = self.metadata["opts"]["pyramid_level"]
+        if "copy_hists_from_parent" in self.metadata:
+            Align.copy_hists = self.metadata["copy_hists_from_parent"]
         Align.num_iter = self.metadata["opts"]["num_iter"]
         Align.center = self.metadata["opts"]["center"]
         (Align.padding_x, Align.padding_y) = self.metadata["opts"]["pad"]
@@ -3623,8 +3651,8 @@ class Metadata_Align(Metadata):
             ]
         Align.upsample_factor = self.metadata["opts"]["upsample_factor"]
         Align.pre_alignment_iters = self.metadata["opts"]["pre_alignment_iters"]
-        Align.subset_x = self.metadata["subset_range_x"]
-        Align.subset_y = self.metadata["subset_range_y"]
+        Align.subset_x = self.metadata["subset_x"]
+        Align.subset_y = self.metadata["subset_y"]
         Align.use_subset_correlation = self.metadata["use_subset_correlation"]
         Align.num_batches = self.metadata["opts"]["num_batches"]
 

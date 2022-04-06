@@ -8,6 +8,7 @@ import os
 import json
 import tifffile as tf
 import copy
+import h5py
 
 from ipyfilechooser import FileChooser
 from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
@@ -417,7 +418,6 @@ class UploaderBase(ABC):
         change
             This comes from the callback of the quick search textbox. change.new is
             a str. To inspect what else comes with change.new, you can edit this by
-            putting print(change) at the top of this function.
         """
         path = pathlib.Path(change.new)
         self.import_button.disable()
@@ -736,6 +736,7 @@ class PrenormUploader(UploaderBase):
                     try:
                         imagesize = tif.pages[0].tags["ImageDescription"]
                         size = json.loads(imagesize.value)["shape"]
+                        sizeX = size[2]
                     except Exception:
                         sizeZ = self.tiff_count_in_folder
                         sizeY = tif.pages[0].tags["ImageLength"].value
@@ -754,14 +755,13 @@ class PrenormUploader(UploaderBase):
             elif image.suffix == ".hdf5" or image.suffix == ".h5":
                 self.projections.filepath = self.filedir / str(image)
                 try:
-                    self.projections._open_hdf_file_read_only()
-                    self.projections._unload_hdf_normalized_and_ds()
-                    size = self.projections.data.shape
-                    sizeZ = size[0]
-                    sizeY = size[1]
-                    sizeX = size[2]
-                    self.projections._close_hdf_file()
-                except Exception:
+                    with h5py.File(self.projections.filepath) as f:
+                        size = f[self.projections.hdf_key_norm_proj].shape
+                        sizeZ = size[0]
+                        sizeY = size[1]
+                        sizeX = size[2]
+                except Exception as e:
+                    print(e)
                     sizeZ = 1
                     sizeY = 1
                     sizeX = 1
@@ -865,11 +865,16 @@ class PrenormUploader(UploaderBase):
             )
             self.metadata_already_displayed = False
             if self.projections.metadatas != []:
-                for metadata in self.projections.metadatas:
+                parent = {}
+                for i, metadata in enumerate(self.projections.metadatas):
                     metadata.filepath = copy.copy(self.metadata_filepath)
-                    metadata.load_metadata()
+                    if i == 0: 
+                        metadata.load_metadata()
+                    else:
+                        metadata.metadata = parent
                     metadata.set_attributes_from_metadata(self.projections)
-
+                    if "parent_metadata" in metadata.metadata:
+                        parent = metadata.metadata["parent_metadata"].copy()
                 self.create_and_display_metadata_tables()
                 self.metadata_already_displayed = True
                 self.imported_metadata = True
@@ -1238,6 +1243,9 @@ class RawUploader_SSRL62B(UploaderBase):
         tic = time.perf_counter()
         self.projections.import_data(self)
         toc = time.perf_counter()
+        self.projections.metadatas = Metadata.get_metadata_hierarchy(
+                self.projections.metadata.filedir / self.projections.metadata.filename
+            )
         self.import_status_label.value = f"Import and normalization took {toc-tic:.0f}s"
         self.projections.filedir = self.projections.import_savedir
         self.viewer.plot(self.projections)
@@ -1400,6 +1408,9 @@ class RawUploader_SSRL62C(UploaderBase):
         tic = time.perf_counter()
         self.projections.import_filedir_all(self)
         toc = time.perf_counter()
+        self.projections.metadatas = Metadata.get_metadata_hierarchy(
+                self.projections.metadata.filedir / self.projections.metadata.filename
+            )
         self.projections.status_label.value = (
             f"Import and normalization took {toc-tic:.0f}s"
         )
@@ -1529,6 +1540,9 @@ class RawUploader_ALS832(UploaderBase):
         tic = time.perf_counter()
         self.projections.import_file_all(self)
         toc = time.perf_counter()
+        self.projections.metadatas = Metadata.get_metadata_hierarchy(
+                self.projections.metadata.filedir / self.projections.metadata.filename
+            )
         self.import_status_label.value = f"Import and normalization took {toc-tic:.0f}s"
         self.viewer.plot(self.projections)
 
