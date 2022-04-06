@@ -54,8 +54,8 @@ def align_joint(RunAlign):
     RunAlign.conv = np.zeros((num_iter))
     subset_x = RunAlign.subset_x
     subset_y = RunAlign.subset_y
-    subset_x = [int(x) + pad_ds[0] for x in subset_x]
-    subset_y = [int(y) + pad_ds[1] for y in subset_y]
+    print(subset_y)
+
     # Initialize projection images plot
     scale_x = bq.LinearScale(min=0, max=1)
     scale_y = bq.LinearScale(min=1, max=0)
@@ -176,9 +176,9 @@ def align_joint(RunAlign):
             recon_iterations = 1
 
         # for progress bars
-        RunAlign.Align.progress_shifting.value = 0
-        RunAlign.Align.progress_reprj.value = 0
-        RunAlign.Align.progress_phase_cross_corr.value = 0
+        RunAlign.analysis_parent.progress_shifting.value = 0
+        RunAlign.analysis_parent.progress_reprj.value = 0
+        RunAlign.analysis_parent.progress_phase_cross_corr.value = 0
         _rec = RunAlign.recon
         # TODO: handle reconstruction-type parsing elsewhere
         if method_str == "SIRT_Plugin":
@@ -236,7 +236,7 @@ def align_joint(RunAlign):
                 )
 
         RunAlign.recon[np.isnan(RunAlign.recon)] = 0
-        RunAlign.Align.progress_total.value = n + 1
+        RunAlign.analysis_parent.progress_total.value = n + 1
         # break up reconstruction into batches along z axis
         RunAlign.recon = np.array_split(RunAlign.recon, num_batches, axis=0)
         # may not need a copy.
@@ -254,7 +254,7 @@ def align_joint(RunAlign):
             sim,
             center,
             RunAlign.angles_rad,
-            progress=RunAlign.Align.progress_reprj,
+            progress=RunAlign.analysis_parent.progress_reprj,
         )
         sim = np.concatenate(sim, axis=1)
         # only flip the simulated datasets if using normal tomopy algorithm
@@ -280,7 +280,7 @@ def align_joint(RunAlign):
             subset_y=subset_y,
             blur=True,
             pad=RunAlign.pad_ds,
-            progress=RunAlign.Align.progress_phase_cross_corr,
+            progress=RunAlign.analysis_parent.progress_phase_cross_corr,
         )
         RunAlign.shift = np.concatenate(shift_cpu, axis=1)
         # Shifting.
@@ -301,7 +301,7 @@ def align_joint(RunAlign):
             RunAlign.pad_ds,
             center,
             downsample_factor=RunAlign.ds_factor,
-            progress=RunAlign.Align.progress_shifting,
+            progress=RunAlign.analysis_parent.progress_shifting,
         )
         RunAlign.conv[n] = np.linalg.norm(err)
         # update images
@@ -310,7 +310,7 @@ def align_joint(RunAlign):
         # update plot lines
         line_conv.x = np.arange(0, n + 1)
         line_conv.y = RunAlign.conv[range(n + 1)]
-        line.y = [RunAlign.sx, RunAlign.sy]
+        line.y = [RunAlign.sx * RunAlign.ds_factor, RunAlign.sy * RunAlign.ds_factor]
         RunAlign.recon = np.concatenate(RunAlign.recon, axis=0)
         mempool = cp.get_default_memory_pool()
         mempool.free_all_blocks()
@@ -319,11 +319,11 @@ def align_joint(RunAlign):
     RunAlign.prjs *= scl
     RunAlign.recon = circ_mask(RunAlign.recon, 0)
     if downsample:
-        RunAlign.sx /= RunAlign.ds_factor
-        RunAlign.sy /= RunAlign.ds_factor
-        RunAlign.shift /= RunAlign.ds_factor
+        RunAlign.sx *= RunAlign.ds_factor
+        RunAlign.sy *= RunAlign.ds_factor
+        RunAlign.shift *= RunAlign.ds_factor
 
-    RunAlign.pad = tuple([int(x / RunAlign.ds_factor) for x in RunAlign.pad_ds])
+    RunAlign.pad = tuple([int(x * RunAlign.ds_factor) for x in RunAlign.pad_ds])
     return RunAlign
 
 

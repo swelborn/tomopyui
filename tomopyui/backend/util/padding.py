@@ -25,6 +25,26 @@ def trim_padding(prj):
     # not sure why +1 here.
 
     return result
+    
+def trim_padding_wrt_shift(prj, sx, sy, init_padding):
+
+    minxs = np.min(sx)
+    maxxs = np.max(sx)
+    minys = np.min(sy)
+    maxys = np.max(sy)
+    x_total = prj.shape[2]
+    y_total = prj.shape[1]
+    x_begin_init = init_padding[0] - 1
+    x_begin_shift = int(np.floor(x_begin_init + minxs))
+    y_begin_init = init_padding[1] - 1
+    y_begin_shift = int(np.floor(y_begin_init + minys))
+    x_end_init = x_total - init_padding[0] - 1
+    x_end_shift = int(np.ceil(x_end_init + maxys))
+    y_end_init = y_total - init_padding[1] - 1
+    y_end_shift = int(np.ceil(y_end_init + maxys))
+    result = prj[:, y_begin_shift : y_end_shift, x_begin_shift : x_end_shift]
+
+    return result
 
 
 # https://stackoverflow.com/questions/24806174/is-there-an-opposite-inverse-to-numpy-pad-function

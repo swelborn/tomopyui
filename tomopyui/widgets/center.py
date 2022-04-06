@@ -50,8 +50,8 @@ class Center:
         self.current_center = self.Import.prenorm_uploader.projections.pxX / 2
         self.center_guess = None
         self.index_to_try = None
-        self.search_step = 0.5
-        self.search_range = 5
+        self.search_step = 10
+        self.search_range = 100
         self.cen_range = None
         self.use_ds = True
         self.num_iter = int(1)
@@ -158,7 +158,7 @@ class Center:
         self.use_ds_checkbox = Checkbox(
             description="Use viewer downsampling: ",
             value=True,
-            disabled=False,
+            disabled=True,
             style=extend_description_style,
         )
 
@@ -292,11 +292,8 @@ class Center:
         :doc:`histogram <mpl-interactions:examples/hist>` plot
         """
         prj_imgs, ds_value = self.get_ds_projections()
-        print(ds_value)
         angles_rad = self.projections.angles_rad
-        print(angles_rad)
         ds_factor = np.power(2, int(ds_value + 1))
-        print(ds_factor)
         _center_guess = copy.deepcopy(self.center_guess) / ds_factor
         _search_range = copy.deepcopy(self.search_range) / ds_factor
         _search_step = copy.deepcopy(self.search_step) / ds_factor

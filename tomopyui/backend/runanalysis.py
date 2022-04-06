@@ -6,6 +6,7 @@ import numpy as np
 import pathlib
 import tomopy
 import matplotlib.pyplot as plt
+import time
 
 from abc import ABC, abstractmethod
 from copy import copy, deepcopy
@@ -42,7 +43,7 @@ class RunAnalysisBase(ABC):
         self.recon = None
         self.analysis_parent = analysis_parent
         self.parent_projections = analysis_parent.projections
-        self.projections = Projections_Child(self.parent_projections)
+        self.projections = Projections_Child(analysis_parent.projections)
         self.metadata.set_metadata(analysis_parent)
         self.metadata.set_attributes_from_metadata(self)
         self.wd_parent = self.metadata.metadata["parent_filedir"]
@@ -132,9 +133,6 @@ class RunAnalysisBase(ABC):
                 self.pyramid_level, self.px_range_ds
             )
             self.prjs = self.projections.data_ds
-        if self.use_subset_correlation:
-            self.subset_x = [int(x / self.ds_factor) for x in self.subset_x]
-            self.subset_y = [int(y / self.ds_factor) for y in self.subset_y]
 
         # center of rotation change to fit new range
         self.center = self.center - self.px_range_x_ds[0]
@@ -143,14 +141,11 @@ class RunAnalysisBase(ABC):
 
         # Pad
         self.pad_ds = tuple([int(x / self.ds_factor) for x in self.pad])
-        print(self.pad_ds)
-        print(self.prjs.shape)
         self.prjs = pad_projections(self.prjs, self.pad_ds)
 
     def _save_data_after(self):
         self.make_wd_subdir()
         self.metadata.filedir = self.wd_subdir
-        self.metadata.save_metadata()
 
     def make_wd_subdir(self):
         """
@@ -188,6 +183,7 @@ class RunRecon(RunAnalysisBase):
             if self.metadata.metadata["save_opts"]["tiff"]:
                 tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
         self.analysis_parent.run_list.append({self.wd_subdir: self.metadata})
+        self.metadata.save_metadata()
 
     def reconstruct(self):
 
@@ -266,16 +262,13 @@ class RunRecon(RunAnalysisBase):
         return self
 
     def run(self):
-        """
-        Reconstructs a TomoData object using options in GUI.
-        """
-
         metadata_list = super().make_metadata_list()
         super().init_projections()
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
             tic = time.perf_counter()
             self.reconstruct()
+            self.projections.data = self.recon
             toc = time.perf_counter()
             self.metadata.metadata["analysis_time"] = {
                 "seconds": toc - tic,
@@ -298,6 +291,17 @@ class RunAlign(RunAnalysisBase):
         self.metadata = self.metadata_class()
         self.savedir_suffix = "alignment"
         super().__init__(Align)
+
+    def init_projections(self):
+        super().init_projections()
+        if self.use_subset_correlation:
+            self.subset_x = [int(x / self.ds_factor) for x in self.subset_x]
+            self.subset_y = [int(y / self.ds_factor) for y in self.subset_y]
+            self.subset_x = [int(x) + self.pad_ds[0] for x in self.subset_x]
+            self.subset_y = [int(y) + self.pad_ds[1] for y in self.subset_y]
+        else:
+            self.subset_x = None
+            self.subset_y = None
 
     def align(self):
         """
@@ -336,23 +340,25 @@ class RunAlign(RunAnalysisBase):
 
     def _shift_prjs_after_alignment(self):
         if self.shift_full_dataset_after:
-            if not self.downsample:
-                self.projections.data = self.prjs
-                return
             self.projections.get_parent_data_from_hdf(None)
             if self.current_align_is_cuda:
-                self.projections.data = shift_projections(
+                self.projections._data = shift_projections(
                     self.projections.data, self.sx, self.sy
                 )
+                self.projections.data = self.projections._data
             else:
                 # TODO: make shift projections without cupy
                 pass
         else:
-            self.projections.data = self.prjs
+            self.projections._data = self.prjs
+            self.projections.data = self.projections._data
+
+    # def _copy_parent_hists(self):
+    #     if self.copy_hists:
+    #         self.projections.get_parent_hists(0)
 
     def save_data_after(self):
         super()._save_data_after()
-        print("trying to save after")
         self.metadata.metadata["sx"] = list(self.sx)
         self.metadata.metadata["sy"] = list(self.sy)
         self.metadata.metadata["convergence"] = list(self.conv)
@@ -361,7 +367,7 @@ class RunAlign(RunAnalysisBase):
                 self.projections.filepath = (
                     self.wd_subdir / "normalized_projections.hdf5"
                 )
-                data_dict = {self.hdf_key_norm_proj: self.projections.data}
+                data_dict = {self.projections.hdf_key_norm_proj: self.projections.data}
                 self.projections.dask_data_to_h5(data_dict)
             if self.metadata.metadata["save_opts"]["tiff"]:
                 tf.imwrite(
@@ -374,6 +380,7 @@ class RunAlign(RunAnalysisBase):
                 tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
 
         self.analysis_parent.run_list.append({str(self.wd_subdir.stem): self.metadata})
+        self.metadata.save_metadata()
 
     def run(self):
         """ """
@@ -381,14 +388,12 @@ class RunAlign(RunAnalysisBase):
         metadata_list = self.make_metadata_list()
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
-            print(f"iter {i}")
             self.init_projections()
-            print(self.prjs.shape)
             tic = perf_counter()
             self.align()
-            print("finished alignemtn")
             # make new dataset and pad/shift it
             self._shift_prjs_after_alignment()
+            # self._copy_parent_hists()
             toc = perf_counter()
             self.metadata.metadata["analysis_time"] = {
                 "seconds": toc - tic,
