@@ -170,7 +170,7 @@ class IOBase:
         self._data = self.hdf_file[self.hdf_key_norm_proj][:]
         self.data = self._data
         pyramid_level = self.hdf_key_ds + str(0) + "/"
-        try: 
+        try:
             self.hist = {
                 key: self.hdf_file[self.hdf_key_norm + key][:]
                 for key in self.hdf_keys_ds_hist
@@ -178,11 +178,12 @@ class IOBase:
         except KeyError:
             # load downsampled histograms if regular histograms don't work
             self.hist = {
-            key: self.hdf_file[pyramid_level + key][:] for key in self.hdf_keys_ds_hist
+                key: self.hdf_file[pyramid_level + key][:]
+                for key in self.hdf_keys_ds_hist
             }
             for key in self.hdf_keys_ds_hist_scalar:
                 self.hist[key] = self.hdf_file[pyramid_level + key][()]
-        
+
         ds_data_key = pyramid_level + self.hdf_key_data
         self.data_ds = self.hdf_file[ds_data_key]
 
@@ -665,6 +666,7 @@ class Projections_Prenormalized(ProjectionsBase):
             self.filename = str(Uploader.images_in_dir[0].name)
         self.filepath = self.filedir / self.filename
         if not Uploader.imported_metadata:
+            "trying to make importsavedir"
             self.make_import_savedir(str(self.metadata.metadata["energy_str"] + "eV"))
             self.metadata.set_attributes_from_metadata_before_import(self)
             self.filedir = self.import_savedir
@@ -673,17 +675,14 @@ class Projections_Prenormalized(ProjectionsBase):
         # will be uploaded. This behavior is probably OK if we stick to this file
         # structure
         if Uploader.imported_metadata:
-            files = self._file_finder(self.filedir, [".npy", ".hdf5", ".h5"])
-            if any([x in files for x in [".h5", ".hdf5"]]):
+            files = [
+                pathlib.Path(f).name for f in os.scandir(self.filedir) if not f.is_dir()
+            ]
+            if self.normalized_projections_hdf_key in files:
                 Uploader.import_status_label.value = (
                     "Detected metadata and hdf5 file in this directory,"
                     + " uploading normalized_projections.hdf5"
                 )
-                self.hdf_file = h5py.File(self.filepath)
-                self._data = self.hdf_file[self.hdf_key_norm_proj][:]
-                self.data = self._data
-                self._check_downsampled_data()
-
             elif ".npy" in files:
                 Uploader.import_status_label.value = (
                     "Detected metadata and npy file in this directory,"
@@ -1446,7 +1445,9 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 )
                 self.data = self._data
 
-                self.status_label.value = "Calculating histogram of raw data and saving."
+                self.status_label.value = (
+                    "Calculating histogram of raw data and saving."
+                )
                 self._dask_hist_and_save_data()
                 self.saved_as_tiff = False
                 self.filedir = self.import_savedir
@@ -1768,7 +1769,6 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         self.metadata.load_metadata_h5(self.filepath)
         self.metadata.set_attributes_from_metadata(self)
         self.import_status_label.value = "Importing"
-        self.metadata.set_attributes_from_metadata(self)
         (
             self._data,
             self.flats,
@@ -1795,13 +1795,9 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         self.import_savedir.mkdir()
         self.import_status_label.value = "Normalizing"
         self.normalize()
-        _metadata = self.metadata.metadata.copy()
-        self.import_status_label.value = "Saving projections as npy for faster IO"
-        self.filedir = self.import_savedir
-        self.save_normalized_as_npy()
-        self._check_downsampled_data()
-        self.toc = time.perf_counter()
-        self.metadata = self.save_normalized_metadata(self.toc - self.tic, _metadata)
+        self.data = da.from_array(self.data, chunks={0: "auto", 1: -1, 2: -1})
+        self.import_status_label.value = "Saving projections as hdf"
+        self.save_data_and_metadata(Uploader)
 
     def import_metadata(self, filepath=None):
         if filepath is None:
@@ -1836,6 +1832,25 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         metadata.set_metadata(self)
         metadata.save_metadata()
         return metadata
+
+    def save_data_and_metadata(self, Uploader):
+        """
+        Saves current data and metadata in import_savedir.
+        """
+        self.filedir = self.import_savedir
+        self._dask_hist_and_save_data()
+        self.saved_as_tiff = False
+        _metadata = self.metadata.metadata.copy()
+        if Uploader.save_tiff_on_import_checkbox.value:
+            Uploader.import_status_label.value = "Saving projections as .tiff."
+            self.saved_as_tiff = True
+            self.save_normalized_as_tiff()
+            self.metadata.metadata["saved_as_tiff"] = True
+        self.metadata.filedir = self.filedir
+        self.toc = time.perf_counter()
+        self.metadata = self.save_normalized_metadata(self.toc - self.tic, _metadata)
+        Uploader.import_status_label.value = "Checking for downsampled data."
+        self._check_downsampled_data(label=Uploader.import_status_label)
 
 
 class RawProjectionsHDF5_APS(RawProjectionsHDF5_ALS832):

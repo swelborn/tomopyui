@@ -565,7 +565,7 @@ class BqImViewer_Projections_Parent(BqImViewerBase):
         self.projections = projections
         self.filedir = self.projections.filedir
         self.px_size = self.projections.px_size
-        self.check_npy_or_hdf(self.projections)
+        self.check_npy_or_hdf(projections)
         if ds is True:
             self.projections._check_downsampled_data()
             self.ds_viewer_dropdown.value = (

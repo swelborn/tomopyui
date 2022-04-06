@@ -761,7 +761,6 @@ class PrenormUploader(UploaderBase):
                         sizeY = size[1]
                         sizeX = size[2]
                 except Exception as e:
-                    print(e)
                     sizeZ = 1
                     sizeY = 1
                     sizeX = 1
@@ -868,7 +867,7 @@ class PrenormUploader(UploaderBase):
                 parent = {}
                 for i, metadata in enumerate(self.projections.metadatas):
                     metadata.filepath = copy.copy(self.metadata_filepath)
-                    if i == 0: 
+                    if i == 0:
                         metadata.load_metadata()
                     else:
                         metadata.metadata = parent
@@ -931,6 +930,7 @@ class PrenormUploader(UploaderBase):
         self.import_status_label.value = (
             "Plotting data (downsampled for viewer to 0.25x)."
         )
+        self.projections._check_downsampled_data()
         self.viewer.plot(self.projections)
         self.Import.use_raw_button.reset_state()
         self.Import.use_prenorm_button.reset_state()
@@ -1244,8 +1244,8 @@ class RawUploader_SSRL62B(UploaderBase):
         self.projections.import_data(self)
         toc = time.perf_counter()
         self.projections.metadatas = Metadata.get_metadata_hierarchy(
-                self.projections.metadata.filedir / self.projections.metadata.filename
-            )
+            self.projections.metadata.filedir / self.projections.metadata.filename
+        )
         self.import_status_label.value = f"Import and normalization took {toc-tic:.0f}s"
         self.projections.filedir = self.projections.import_savedir
         self.viewer.plot(self.projections)
@@ -1409,8 +1409,8 @@ class RawUploader_SSRL62C(UploaderBase):
         self.projections.import_filedir_all(self)
         toc = time.perf_counter()
         self.projections.metadatas = Metadata.get_metadata_hierarchy(
-                self.projections.metadata.filedir / self.projections.metadata.filename
-            )
+            self.projections.metadata.filedir / self.projections.metadata.filename
+        )
         self.projections.status_label.value = (
             f"Import and normalization took {toc-tic:.0f}s"
         )
@@ -1541,8 +1541,8 @@ class RawUploader_ALS832(UploaderBase):
         self.projections.import_file_all(self)
         toc = time.perf_counter()
         self.projections.metadatas = Metadata.get_metadata_hierarchy(
-                self.projections.metadata.filedir / self.projections.metadata.filename
-            )
+            self.projections.metadata.filedir / self.projections.metadata.filename
+        )
         self.import_status_label.value = f"Import and normalization took {toc-tic:.0f}s"
         self.viewer.plot(self.projections)
 
