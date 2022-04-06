@@ -54,7 +54,6 @@ def align_joint(RunAlign):
     RunAlign.conv = np.zeros((num_iter))
     subset_x = RunAlign.subset_x
     subset_y = RunAlign.subset_y
-    print(subset_y)
 
     # Initialize projection images plot
     scale_x = bq.LinearScale(min=0, max=1)
