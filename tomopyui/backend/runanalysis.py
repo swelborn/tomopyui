@@ -134,14 +134,14 @@ class RunAnalysisBase(ABC):
             )
             self.prjs = self.projections.data_ds
 
-        # center of rotation change to fit new range
-        self.center = self.center - self.px_range_x_ds[0]
-        self.center = self.center + self.pad[0]
-        self.center = self.center / self.ds_factor
-
         # Pad
         self.pad_ds = tuple([int(x / self.ds_factor) for x in self.pad])
         self.prjs = pad_projections(self.prjs, self.pad_ds)
+
+        # center of rotation change to fit new range
+        self.center = self.center / self.ds_factor
+        self.center = self.center - self.px_range_x_ds[0]
+        self.center = self.center + self.pad_ds[0]
 
     def _save_data_after(self):
         self.make_wd_subdir()
