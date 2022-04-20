@@ -903,38 +903,48 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         # Chunk the projections such that they will be divided by the nearest flat
         # The first chunk of data will be divided by the first flat.
         # The first chunk of data is likely smaller than the others.
-        proj_locations = [
-            int(np.ceil((flat_loc[i] + flat_loc[i + 1]) / 2))
-            for i in range(len(flat_loc) - 1)
-        ]
-        chunk_setup = [int(np.ceil(proj_locations[0]))]
-        for i in range(len(proj_locations) - 1):
-            chunk_setup.append(proj_locations[i + 1] - proj_locations[i])
-        chunk_setup.append(projs.shape[0] - sum(chunk_setup))
-        chunk_setup = tuple(chunk_setup)
-        projs_rechunked = projs.rechunk({0: chunk_setup, 1: -1, 2: -1})  # chunk data
-        projs_rechunked = projs_rechunked - dark
-        if status_label is not None:
-            status_label.value = f"Dividing by flatfields and taking -log."
 
         # Don't know if putting @staticmethod above a decorator will mess it up, so this
         # fct is inside. This is kind of funky. TODO.
-
         @dask.delayed
         def divide_arrays(x, ind):
             y = denominator[ind]
             return np.true_divide(x, y)
 
-        blocks = projs_rechunked.to_delayed().ravel()
-        results = [
-            da.from_delayed(
-                divide_arrays(b, i),
-                shape=(chunksize, projs_rechunked.shape[1], projs_rechunked.shape[2]),
-                dtype=np.float32,
-            )
-            for i, (b, chunksize) in enumerate(zip(blocks, chunk_setup))
-        ]
-        arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
+        if len(flat_loc) != 1:
+            proj_locations = [
+                int(np.ceil((flat_loc[i] + flat_loc[i + 1]) / 2))
+                for i in range(len(flat_loc) - 1)
+            ]
+            chunk_setup = [int(np.ceil(proj_locations[0]))]
+            for i in range(len(proj_locations) - 1):
+                chunk_setup.append(proj_locations[i + 1] - proj_locations[i])
+            chunk_setup.append(projs.shape[0] - sum(chunk_setup))
+            chunk_setup = tuple(chunk_setup)
+            projs_rechunked = projs.rechunk(
+                {0: chunk_setup, 1: -1, 2: -1}
+            )  # chunk data
+            projs_rechunked = projs_rechunked - dark
+            if status_label is not None:
+                status_label.value = f"Dividing by flatfields and taking -log."
+            blocks = projs_rechunked.to_delayed().ravel()
+            results = [
+                da.from_delayed(
+                    divide_arrays(b, i),
+                    shape=(
+                        chunksize,
+                        projs_rechunked.shape[1],
+                        projs_rechunked.shape[2],
+                    ),
+                    dtype=np.float32,
+                )
+                for i, (b, chunksize) in enumerate(zip(blocks, chunk_setup))
+            ]
+            arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
+        else:
+            # if only 1 set of flats was taken, just divide normally.
+            arr = projs / flats_reduced
+
         arr = arr.rechunk((num_exposures_per_proj, -1, -1))
         arr = RawProjectionsBase.average_chunks(arr).astype(np.float32)
         arr = -da.log(arr)
