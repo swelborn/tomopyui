@@ -1053,6 +1053,7 @@ class BqImHist:
         self.selector.observe(self.update_crange_selector, "selected")
         self.fig.marks = [self.hist]
         self.fig.interaction = self.selector
+        self.rm_high_low_int(None)
 
     def refresh_histogram_from_hdf(self):
         self.ds_factor = self.viewer.ds_factor
