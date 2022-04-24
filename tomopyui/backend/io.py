@@ -21,12 +21,13 @@ import dask_image.imread
 
 from abc import ABC, abstractmethod
 from tomopy.sim.project import angles as angle_maker
-from tomopyui.backend.util.dxchange.reader import read_ole_metadata, read_xrm
+from tomopyui.backend.util.dxchange.reader import read_ole_metadata, read_xrm, read_txrm
 from tomopyui.backend.util.dask_downsample import pyramid_reduce_gaussian
 from skimage.transform import rescale
 from joblib import Parallel, delayed
 from ipywidgets import *
 from functools import partial
+from skimage.util import img_as_float32
 
 
 class IOBase:
@@ -253,6 +254,14 @@ class IOBase:
         if self.hdf_file:
             self.hdf_file.close()
 
+    def _np_hist(self):
+        r = [np.min(self.data), np.max(self.data)]
+        bins = 200 if self.data.size > 200 else self.data.size
+        hist = np.histogram(self.data, range=r, bins=bins)
+        percentile = np.percentile(self.data.flatten(), q=(0.5, 99.5))
+        bin_edges = hist[1]
+        return hist, r, bins, percentile
+
     def _dask_hist(self):
         r = [da.min(self.data), da.max(self.data)]
         bins = 200 if self.data.size > 200 else self.data.size
@@ -284,6 +293,21 @@ class IOBase:
     def _dask_hist_and_save_data(self):
         hist, r, bins, percentile = self._dask_hist()
         grp = IOBase.hdf_key_norm + "/"
+        data_dict = {
+            self.hdf_key_norm_proj: self.data,
+            grp + self.hdf_key_bin_frequency: hist[0],
+            grp + self.hdf_key_bin_edges: hist[1],
+            grp + self.hdf_key_image_range: r,
+            grp + self.hdf_key_percentile: percentile,
+        }
+        self.dask_data_to_h5(data_dict, savedir=self.import_savedir)
+        self._dask_bin_centers(grp, write=True, savedir=self.import_savedir)
+
+    def _np_hist_and_save_data(self):
+        hist, r, bins, percentile = self._np_hist()
+        grp = IOBase.hdf_key_norm + "/"
+        # self._data = da.from_array(self.data)
+        # self.data = self._data
         data_dict = {
             self.hdf_key_norm_proj: self.data,
             grp + self.hdf_key_bin_frequency: hist[0],
@@ -1079,10 +1103,22 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                     line = f.readline()
                     if line.startswith(";;"):
                         self.run_script_path = file
-        (
-            self.flats_filenames,
-            self.data_filenames,
-        ) = self.get_all_data_filenames()
+        self.angles_from_filenames = True
+        if self.scan_info["REFEVERYEXPOSURES"] == 1 and self.scan_type == "ENERGY_TOMO":
+            (
+                self.flats_filenames,
+                self.data_filenames,
+            ) = self.get_all_data_filenames_filedir(Uploader.filedir)
+            self.angles_from_filenames = False
+            self.from_txrm = True
+            self.from_xrm = False
+        else:
+            (
+                self.flats_filenames,
+                self.data_filenames,
+            ) = self.get_all_data_filenames()
+            self.txrm = False
+            self.from_xrm = True
         # assume that the first projection is the same as the rest for metadata
         self.scan_info["PROJECTION_METADATA"] = self.read_xrms_metadata(
             [self.data_filenames[0]]
@@ -1093,7 +1129,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         if self.angles_from_filenames:
             self.get_angles_from_filenames()
         else:
-            self.get_angles_from_metadata()
+            self.get_angles_from_txrm()
         self.pxZ = len(self.angles_rad)
         self.pxY = self.scan_info["PROJECTION_METADATA"][0]["image_height"]
         self.pxX = self.scan_info["PROJECTION_METADATA"][0]["image_width"]
@@ -1124,7 +1160,10 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             Uploader.energy_select_multiple.value = (
                 Uploader.energy_select_multiple.options[0],
             )
-        self.import_from_run_script(Uploader)
+        if self.from_xrm:
+            self.import_from_run_script(Uploader)
+        elif self.from_txrm:
+            self.import_from_txrm(Uploader)
         self.imported = True
 
     def import_filedir_projections(self, filedir):
@@ -1255,6 +1294,47 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         ]
         return flats, projs
 
+    def get_all_data_filenames_filedir(self, filedir):
+        """
+        Grabs the flats and projections filenames from scan info.
+
+        Returns
+        -------
+        flats: list of pathlib.Path
+            All flat file names in self.scan_info["FILES"]
+        projs: list of pathlib.Path
+            All projection file names in self.scan_info["FILES"]
+        """
+        txrm_files = self._file_finder(filedir, [".txrm"])
+        xrm_files = self._file_finder(filedir, [".xrm"])
+        txrm_files = [filedir / file for file in txrm_files]
+        xrm_files = [filedir / file for file in xrm_files]
+        if any(["ref_" in str(file) for file in txrm_files]):
+            flats = [
+                file.parent / file.name
+                for file in txrm_files
+                if "ref_" in file.name
+            ]
+        else:
+            flats = [
+                file.parent / file.name
+                for file in xrm_files
+                if "ref_" in file.name
+            ]
+        if any(["tomo_" in str(file) for file in txrm_files]):
+            projs = [
+                file.parent / file.name
+                for file in txrm_files
+                if "tomo_" in file.name
+            ]
+        else:
+            projs = [
+                file.parent / file.name
+                for file in xrm_files
+                if "tomo_" in file.name
+            ]
+        return flats, projs
+
     def get_angles_from_filenames(self):
         """
         Grabs the angles from the file names in scan_info.
@@ -1288,6 +1368,13 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 seen.add(item)
                 result.append(item)
         self.angles_rad = result
+        self.angles_deg = [x * 180 / np.pi for x in self.angles_rad]
+
+    def get_angles_from_txrm(self):
+        """
+        Gets the angles from the raw image metadata.
+        """
+        self.angles_rad = self.scan_info["PROJECTION_METADATA"][0]["thetas"]
         self.angles_deg = [x * 180 / np.pi for x in self.angles_rad]
 
     def read_xrms_metadata(self, xrm_list):
@@ -1339,6 +1426,106 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             Uploader.upload_progress.value += 1
         data_stack = np.flip(data_stack, axis=1)
         return data_stack, metadatas
+
+    def load_txrm(self, txrm_filepath):
+        data, metadata = read_txrm(str(txrm_filepath))
+        data = img_as_float32(data)
+        return data, metadata
+
+    def import_from_txrm(self, Uploader):
+        """
+        Script to upload selected data from selected txrm energies.
+
+        If an energy is selected on the frontend, it will be added to the queue to
+        upload and normalize.
+
+        This reads the run script in the folder. Each time "set e" is in the run script,
+        this means that the energy is changing and signifies a new tomography.
+
+        Parameters
+        ----------
+        Uploader: `Uploader`
+            Should have an upload_progress, status_label, and progress_output attribute.
+            This is for the progress bar and information during the upload progression.
+        """
+        parent_metadata = self.metadata.metadata.copy()
+        if "data_hierarchy_level" not in parent_metadata:
+            try:
+                with open(self.filepath) as f:
+                    parent_metadata = json.load(
+                        self.run_script_path.parent / "raw_metadata.json"
+                    )
+            except Exception:
+                pass
+        for energy in self.selected_energies:
+            _tmp_filedir = copy.deepcopy(self.filedir)
+            self.metadata = Metadata_SSRL62C_Prenorm()
+            self.metadata.set_parent_metadata(parent_metadata)
+            Uploader.upload_progress.value = 0
+            self.energy_str = energy
+            self.energy_float = float(energy)
+            self.px_size = self.calculate_px_size(float(energy), self.binning)
+            Uploader.progress_output.clear_output()
+            self.energy_label = Label(
+                f"{energy} eV", layout=Layout(justify_content="center")
+            )
+            with Uploader.progress_output:
+                display(Uploader.upload_progress)
+                display(self.energy_label)
+            # Getting filename from specific energy
+            self.flats_filename = [
+                file.parent / file.name for file in self.flats_filenames if energy in file.name and "ref_" in file.name
+            ]
+            self.data_filename = [
+                file.parent / file.name for file in self.data_filenames if energy in file.name and "tomo_" in file.name
+            ]
+            self.status_label = Label(
+                "Uploading txrm.", layout=Layout(justify_content="center")
+            )
+            self.flats, self.scan_info["FLAT_METADATA"] = self.load_txrm(
+                self.flats_filename[0]
+            )
+            self._data, self.scan_info["PROJECTION_METADATA"] = self.load_txrm(
+                self.data_filename[0]
+            )
+            self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
+
+            energy_filedir_name = str(energy + "eV")
+            self.import_savedir = self.filedir / energy_filedir_name
+            # TODO clean this with method
+            if self.import_savedir.exists():
+                now = datetime.datetime.now()
+                dt_str = now.strftime("%Y%m%d-%H%M-")
+                save_name = dt_str + energy_filedir_name
+                self.import_savedir = pathlib.Path(self.filedir / save_name)
+                if self.import_savedir.exists():
+                    dt_str = now.strftime("%Y%m%d-%H%M%S-")
+                    save_name = dt_str + energy_filedir_name
+                    self.import_savedir = pathlib.Path(self.filedir / save_name)
+            self.import_savedir.mkdir()
+            self.status_label.value = "Normalizing."
+            self.normalize()
+            self.data = self._data
+            self.status_label.value = (
+                "Calculating histogram of raw data and saving."
+            )
+            self._np_hist_and_save_data()
+            self.saved_as_tiff = False
+            self.filedir = self.import_savedir
+            if Uploader.save_tiff_on_import_checkbox.value:
+                self.status_label.value = "Saving projections as .tiff."
+                self.saved_as_tiff = True
+                self.save_normalized_as_tiff()
+            self.status_label.value = "Downsampling data."
+            self._check_downsampled_data()
+            self.status_label.value = "Saving metadata."
+            self.data_hierarchy_level = 1
+            self.metadata.set_metadata(self)
+            self.metadata.filedir = self.import_savedir
+            self.metadata.filename = "import_metadata.json"
+            self.metadata.save_metadata()
+            self.filedir = _tmp_filedir
+            self._close_hdf_file()
 
     def import_from_run_script(self, Uploader):
         """
@@ -2273,12 +2460,23 @@ class Metadata_SSRL62C_Raw(Metadata):
         self.metadata["start_angle"] = float(projections.angles_deg[0])
         self.metadata["end_angle"] = float(projections.angles_deg[-1])
         self.metadata["binning"] = projections.binning
-        self.metadata["projections_exposure_time"] = projections.scan_info[
-            "PROJECTION_METADATA"
-        ][0]["exposure_time"]
-        self.metadata["references_exposure_time"] = projections.scan_info[
-            "FLAT_METADATA"
-        ][0]["exposure_time"]
+        if isinstance(projections.scan_info["PROJECTION_METADATA"], list):
+            self.metadata["projections_exposure_time"] = projections.scan_info[
+                "PROJECTION_METADATA"
+            ][0]["exposure_time"]
+        else:
+            self.metadata["projections_exposure_time"] = projections.scan_info[
+                "PROJECTION_METADATA"
+            ]["exposure_time"]
+        if isinstance(projections.scan_info["FLAT_METADATA"], list):
+            self.metadata["references_exposure_time"] = projections.scan_info[
+                "FLAT_METADATA"
+            ][0]["exposure_time"]
+        else:
+            self.metadata["references_exposure_time"] = projections.scan_info[
+                "FLAT_METADATA"
+            ]["exposure_time"]
+
         self.metadata["all_raw_energies_float"] = projections.energies_list_float
         self.metadata["all_raw_energies_str"] = projections.energies_list_str
         self.metadata["all_raw_pixel_sizes"] = projections.raw_pixel_sizes

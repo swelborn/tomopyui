@@ -467,9 +467,9 @@ def read_txrm(file_name, slice_range=None):
         )
         array_of_images[i] = _read_ole_image(ole, img_string, metadata)[slice_range[1:]]
 
-    reference = metadata["reference"]
-    if reference is not None:
-        metadata["reference"] = reference[slice_range[1:]]
+    # reference = metadata["reference"]
+    # if reference is not None:
+    #     metadata["reference"] = reference[slice_range[1:]]
 
     _log_imported_data(file_name, array_of_images)
 
@@ -528,9 +528,12 @@ def read_ole_metadata(ole):
             ole, "AcquisitionSettings/CCDPixelSize", "<f"
         ),
         "data_type": _read_ole_value(ole, "ImageInfo/DataType", "<1I"),
-        "exposure_time": _read_ole_value(ole, "ImageInfo/ExpTimes", "<f"),
-        "images_per_projection": _read_ole_value(
-            ole, "ImageInfo/ImagesPerProjection", "<1I"
+        # "exposure_time": _read_ole_value(ole, "ImageInfo/ExpTimes", "<f"),
+        "exposure_time": _read_ole_arr(
+            ole, "ImageInfo/ExpTimes", "<{0}f".format(number_of_images)
+        ),
+        "images_per_projection": _read_ole_arr(
+            ole, "ImageInfo/ImagesPerProjection", "<{0}I".format(number_of_images)
         ),
         "images_taken": _read_ole_value(ole, "ImageInfo/ImagesTaken", "<1I"),
         "camera_binning": _read_ole_value(ole, "ImageInfo/CameraBinning", "<1I"),
@@ -550,10 +553,12 @@ def read_ole_metadata(ole):
             ole, "ImageInfo/ZPosition", "<{0}f".format(number_of_images)
         ),
     }
-    metadata["x_positions"] = float(metadata["x_positions"])
-    metadata["y_positions"] = float(metadata["y_positions"])
-    metadata["z_positions"] = float(metadata["z_positions"])
-    metadata["thetas"] = float(metadata["thetas"])
+    metadata["exposure_time"] = [float(x) for x in metadata["exposure_time"]]
+    metadata["images_per_projection"] = [int(x) for x in metadata["images_per_projection"]]
+    metadata["x_positions"] = [float(x) for x in metadata["x_positions"]]
+    metadata["y_positions"] = [float(y) for y in metadata["y_positions"]]
+    metadata["z_positions"] = [float(z) for z in metadata["z_positions"]]
+    metadata["thetas"] = [float(theta) for theta in metadata["thetas"]]
     # special case to remove trailing null characters
     return metadata
 
