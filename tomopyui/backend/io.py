@@ -572,7 +572,7 @@ class Projections_Child(ProjectionsBase):
         self.parent_projections = parent_projections
 
     def copy_from_parent(self):
-        self.parent_projections._unload_hdf_normalized_and_ds()
+        # self.parent_projections._unload_hdf_normalized_and_ds()
         self._data = self.parent_projections.data
         self.data = self._data
         self.data_ds = self.parent_projections.data_ds
@@ -1470,7 +1470,6 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 f"{energy} eV", layout=Layout(justify_content="center")
             )
             with Uploader.progress_output:
-                display(Uploader.upload_progress)
                 display(self.energy_label)
             # Getting filename from specific energy
             self.flats_filename = [
@@ -1505,6 +1504,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             self.import_savedir.mkdir()
             self.status_label.value = "Normalizing."
             self.normalize()
+            self._data = np.flip(self._data, axis=1)
             self.data = self._data
             self.status_label.value = (
                 "Calculating histogram of raw data and saving."
@@ -2672,8 +2672,14 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         en_units = self.metadata["energy_units"]
         start_angle = self.metadata["start_angle"]
         end_angle = self.metadata["end_angle"]
-        exp_time_proj = f"{self.metadata['projections_exposure_time']:0.2f}"
-        exp_time_ref = f"{self.metadata['references_exposure_time']:0.2f}"
+        if isinstance(self.metadata['projections_exposure_time'], list):
+            exp_time_proj = f"{self.metadata['projections_exposure_time'][0]:0.2f}"
+        else:
+            exp_time_proj = f"{self.metadata['projections_exposure_time']:0.2f}"
+        if isinstance(self.metadata['references_exposure_time'], list):
+            exp_time_ref = f"{self.metadata['references_exposure_time'][0]:0.2f}"
+        else:
+            exp_time_ref = f"{self.metadata['references_exposure_time']:0.2f}"
         # ds_vals = self.metadata["downsampled_values"]
         # ds_vals = [x[2] for x in ds_vals]
         if self.metadata["user_overwrite_energy"]:

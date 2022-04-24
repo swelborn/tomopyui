@@ -4,6 +4,7 @@ import copy
 import pathlib
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import time
 
 from abc import ABC, abstractmethod
 from bqplot_image_gl import ImageGL
@@ -477,7 +478,6 @@ class BqImViewerBase(ABC):
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.hist.refresh_histogram()
-        self.projections._close_hdf_file()
 
     def get_ds_factor_from_dropdown(self):
         ds_factor = self.ds_viewer_dropdown.value
@@ -561,16 +561,19 @@ class BqImViewer_Projections_Parent(BqImViewerBase):
         footer = VBox([self.footer1, footer2])
         self.app = VBox([self.header, self.center, footer])
 
-    def plot(self, projections, ds=True):
+    def plot(self, projections, ds=True, no_check=False):
         self.projections = projections
         self.filedir = self.projections.filedir
         self.px_size = self.projections.px_size
-        self.check_npy_or_hdf(projections)
-        if ds is True:
+        if ds and not no_check:
             self.projections._check_downsampled_data()
             self.ds_viewer_dropdown.value = (
                 0 if any([0 == x[1] for x in self.ds_viewer_dropdown.options]) else -1
             )
+            self.hist.precomputed_hist = self.projections.hist
+            self.original_images = self.projections.data
+            self.images = self.projections.data_ds
+        elif ds and no_check:
             self.hist.precomputed_hist = self.projections.hist
             self.original_images = self.projections.data
             self.images = self.projections.data_ds
@@ -579,6 +582,7 @@ class BqImViewer_Projections_Parent(BqImViewerBase):
             self.ds_viewer_dropdown.options = [("Original", -1)]
             self.original_images = self.projections.data
             self.images = self.original_images
+        self.check_npy_or_hdf(projections)
         self.set_state_on_plot()
 
 
@@ -649,18 +653,19 @@ class BqImViewer_Projections_Child(BqImViewer_Projections_Parent):
 
         self.app = VBox([self.header, self.center, footer])
 
-    def plot(self, projections, ds=True):
-        super().plot(projections, ds=ds)
+    def plot(self, projections, ds=True, no_check=True):
+        super().plot(projections, ds=ds, no_check=no_check)
         self.rm_high_low_int_button.disabled = False
         self.subset_px_range_x = self.px_range_x
         self.subset_px_range_y = self.px_range_y
 
-    def copy_parent_projections(self, *args):
+    def copy_parent_projections(self, no_check=True, *args, **kwargs):
+        tic = time.perf_counter()
         self.copying = True
         self.projections.parent_projections = self.viewer_parent.projections
         self.projections.copy_from_parent()
         self.hist.copy_parent_hist()
-        self.plot(self.projections)
+        self.plot(self.projections, ds=True, no_check=no_check)
         self.hist.refresh_histogram()
         self.link_plotted_projections_button.button_style = "info"
         self.link_plotted_projections_button.disabled = False
@@ -809,8 +814,8 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
         self.footer = VBox([self.footer1, self.footer2])
         self.app = VBox([self.header, self.center, self.footer])
 
-    def plot(self, projections):
-        super().plot(projections)
+    def plot(self, projections, no_check=True):
+        super().plot(projections, no_check=no_check)
         self.slice_line_slider.max = self.pxY - 1
         self.slice_line_slider.value = int((self.pxY - 1) / 2)
 

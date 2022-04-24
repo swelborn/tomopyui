@@ -95,7 +95,7 @@ class ImportBase(ABC):
         if self.projections.hdf_file is not None:
             self.projections._open_hdf_file_read_only()
             self.projections._load_hdf_ds_data_into_memory()
-            self.projections._load_hdf_ds_data_into_memory()
+        # self.projections._check_downsampled_data()
         self.uploader = self.prenorm_uploader
         self.Prep.projections = self.projections
         self.Center.projections = self.projections
@@ -105,6 +105,7 @@ class ImportBase(ABC):
         self.Align.refresh_plots()
         self.Center.refresh_plots()
         self.Prep.refresh_plots()
+        self.projections._close_hdf_file()
 
     def enable_raw(self, *args):
         """
@@ -120,7 +121,7 @@ class ImportBase(ABC):
         if self.projections.hdf_file is not None:
             self.projections._open_hdf_file_read_only()
             self.projections._load_hdf_ds_data_into_memory()
-            self.projections._load_hdf_ds_data_into_memory()
+        self.projections._check_downsampled_data()
         self.uploader = self.raw_uploader
         self.Prep.projections = self.projections
         self.Center.projections = self.projections
@@ -130,6 +131,7 @@ class ImportBase(ABC):
         self.Align.refresh_plots()
         self.Center.refresh_plots()
         self.Prep.refresh_plots()
+        self.projections._close_hdf_file()
 
     @abstractmethod
     def make_tab(self):
@@ -928,9 +930,8 @@ class PrenormUploader(UploaderBase):
         else:
             self.projections.import_file_projections(self)
         self.import_status_label.value = (
-            "Plotting data (downsampled for viewer to 0.25x)."
+            "Plotting data (downsampled for viewer to 0.5x)."
         )
-        self.projections._check_downsampled_data()
         self.viewer.plot(self.projections)
         self.Import.use_raw_button.reset_state()
         self.Import.use_prenorm_button.reset_state()

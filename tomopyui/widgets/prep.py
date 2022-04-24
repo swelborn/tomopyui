@@ -543,10 +543,10 @@ class Prep(ABC):
                 x.disabled = False
 
     def refresh_plots(self):
-        self.imported_viewer.plot(self.projections)
+        self.imported_viewer.plot(self.projections, no_check=True)
         self.altered_projections.parent_projections = self.projections
         self.altered_projections.copy_from_parent()
-        self.altered_viewer.plot(self.altered_projections)
+        # self.altered_viewer.plot(self.altered_projections, )
 
     def set_observes(self):
 
