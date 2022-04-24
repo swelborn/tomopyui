@@ -658,6 +658,8 @@ class Align(AnalysisBase):
         self.result_after_viewer.create_app()
         if self.copy_hists:
             self.result_after_viewer.hist.copy_parent_hist()
+        else:
+            self.result_after_viewer.hist.precomputed_hist = None
         self.result_after_viewer.link_plotted_projections()
         self.result_after_viewer.link_plotted_projections_button.disabled = False
         self.result_after_viewer.plot(self.analysis.projections, ds=False)
@@ -774,10 +776,10 @@ class Recon(AnalysisBase):
     def __init__(self, Import, Center):
         super().init_attributes(Import, Center)
         self.metadata = Metadata_Recon()
-        self.save_opts_list = ["tomo_before", "recon", "tiff", "npy"]
+        self.save_opts_list = ["tomo_before", "recon", "tiff", "hdf"]
         self.Import.Recon = self
         self.init_widgets()
-        self.set_observes()
+        self.set_observes() 
         self.make_tab()
 
     def init_widgets(self):
@@ -825,6 +827,11 @@ class Recon(AnalysisBase):
         self.metadata.set_metadata(self)
         self.analysis = RunRecon(self)
         self.result_after_viewer.create_app()
+        self.analysis.projections.data = self.analysis.recon
+        if self.copy_hists:
+            self.result_after_viewer.hist.copy_parent_hist()
+        else:
+            self.result_after_viewer.hist.precomputed_hist = None
         self.result_after_viewer.plot(self.analysis.projections, ds=False)
         self.plot_result()
 
