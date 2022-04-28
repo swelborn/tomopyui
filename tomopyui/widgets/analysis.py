@@ -260,7 +260,7 @@ class AnalysisBase(ABC):
         self.ds_factor_dropdown.observe(self.update_ds_factor, names="value")
 
         # Phase cross correlation subset (from altered projections)
-        self.use_subset_correlation_checkbox.observe(self._use_subset_correlation)
+        self.use_subset_correlation_checkbox.observe(self._use_subset_correlation, names="value")
 
         # X Padding
         self.padding_x_textbox.observe(self.update_x_padding, names="value")
@@ -411,7 +411,7 @@ class AnalysisBase(ABC):
 
     # Phase cross correlation subset (from altered projections)
     def _use_subset_correlation(self, change):
-        self.use_subset_correlation = change.new
+        self.use_subset_correlation = self.use_subset_correlation_checkbox.value
         self.metadata.set_metadata(self)
 
     def update_ds_factor_from_viewer(self, *args):
