@@ -266,7 +266,7 @@ def align_joint(RunAlign):
             pass
         else:
             sim = np.flip(sim, axis=0)
-            sim = np.flip(sim, axis=2)
+            # sim = np.flip(sim, axis=2)
         # Cross correlation
         shift_cpu = []
         batch_cross_correlation(
