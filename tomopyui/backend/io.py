@@ -345,93 +345,6 @@ class IOBase:
                 )
                 self._load_hdf_ds_data_into_memory()
 
-        else:
-            try:
-                self.filedir_ds = pathlib.Path(filedir / "downsampled").mkdir(
-                    parents=True
-                )
-                self.filedir_ds = pathlib.Path(filedir / "downsampled")
-            except FileExistsError:
-                self.filedir_ds = pathlib.Path(filedir / "downsampled")
-                try:
-                    if label is not None:
-                        label.value = "Loading premade downsampled data and histograms."
-                    self._load_ds_and_hists()
-                except Exception:
-                    if label is not None:
-                        label.value = (
-                            "Downsampled folder exists, but doesn't match"
-                            + "format. Writing new downsampled data."
-                        )
-                    self._write_downsampled_data()
-            else:
-                if label is not None:
-                    label.value = "Writing new downsampled data."
-                self._write_downsampled_data()
-
-    def _write_downsampled_data(self):
-        """
-        Writes downsampled data into folder using self.ds_vals.
-
-        Parameters
-        ----------
-        self.ds_vals : list
-            List of downsampling values to use for faster viewing. Currently, this is
-            just [[1, 0.25, 0.25],]. List used to be longer, but deprecated in favor of
-            only using one downsampling (for time savings).
-
-        """
-        ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
-        # TODO: make parallel on individual slices of data. see bottom of this .py (archived code)
-        # ds_data = [rescale_parallel_pool(self.pxZ, self.data, ds_vals_list) for ds_vals_list in self.ds_vals]
-        # :
-        #     ds_data.append(rescale_parallel_pool(self.pxZ, self.data, self.ds_vals))
-        # ds_data = Parallel(n_jobs=int(os.environ["num_cpu_cores"]))(
-        #     delayed(rescale)(self.data, x) for x in self.ds_vals
-        # )
-        ds_data = rescale(self.data, self.ds_vals[0])
-        # ds_data.append(self.data)
-        for data, string in zip(ds_data, ds_vals_strs):
-            np.save(self.filedir_ds / str("ds" + string), data)
-
-        ds_data_da = [da.from_array(x) for x in ds_data]
-        ranges = [[np.min(x), np.max(x)] for x in ds_data]
-        hists = [
-            da.histogram(x, range=[y[0], y[1]], bins=200)
-            for x, y in zip(ds_data_da, ranges)
-        ]
-        hist_intensities = [hist[0] for hist in hists]
-        hist_intensities = [hist.compute() for hist in hist_intensities]
-        bin_edges = [hist[1] for hist in hists]
-        xvals = [[(b[i] + b[i + 1]) / 2 for i in range(len(b) - 1)] for b in bin_edges]
-
-        for hist_int, string, bin_edge, bin_center in zip(
-            hist_intensities, ds_vals_strs, bin_edges, xvals
-        ):
-            np.savez(
-                self.filedir_ds / str("ds" + string + "hist"),
-                frequency=hist_int,
-                edges=bin_edge,
-                bin_centers=bin_center,
-            )
-        self._load_ds_and_hists()
-
-    def _load_ds_and_hists(self):
-        """
-        Loads in downsampled data and their respective histograms to memory for
-        fast viewing in the plotters.
-
-        """
-        ds_vals_strs = [str(x[2]).replace(".", "p") for x in self.ds_vals]
-        self.hist = [
-            np.load(self.filedir_ds / str("ds" + string + "hist.npz"))
-            for string in ds_vals_strs
-        ]
-        self.data_ds = [
-            np.load(self.filedir_ds / str("ds" + string + ".npy"), mmap_mode="r")
-            for string in ds_vals_strs
-        ]
-
     def _file_finder(self, filedir, filetypes: list):
         """
         Used to find files of a given filetype in a directory. TODO: can go elsewhere.
@@ -490,7 +403,6 @@ class ProjectionsBase(IOBase, ABC):
 
     def __init__(self):
         super().__init__()
-        self.ds_vals = [(1, 0.25, 0.25)]
         self.px_size = 1
         self.angles_rad = None
         self.angles_deg = None
@@ -722,6 +634,7 @@ class Projections_Prenormalized(ProjectionsBase):
                 self.save_normalized_as_tiff()
                 self.metadata.metadata["saved_as_tiff"] = True
             self.metadata.set_attributes_from_metadata(self)
+            self._check_downsampled_data(label=Uploader.import_status_label)
             self.imported = True
 
         elif any([x in self.filename for x in [".tif", ".tiff"]]):
@@ -731,8 +644,6 @@ class Projections_Prenormalized(ProjectionsBase):
             self.save_data_and_metadata(Uploader)
             self.imported = True
             self.filepath = self.import_savedir / self.normalized_projections_hdf_key
-            self.hdf_file = h5py.File(self.filepath)
-            self._close_hdf_file()
 
         elif ".npy" in self.filename:
             self._data = np.load(self.filepath).astype(np.float32)
@@ -741,8 +652,6 @@ class Projections_Prenormalized(ProjectionsBase):
             self.save_data_and_metadata(Uploader)
             self.imported = True
             self.filepath = self.import_savedir / self.normalized_projections_hdf_key
-            self.hdf_file = h5py.File(self.filepath)
-            self._close_hdf_file()
 
     def make_angles(self):
         """
@@ -1311,27 +1220,19 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         xrm_files = [filedir / file for file in xrm_files]
         if any(["ref_" in str(file) for file in txrm_files]):
             flats = [
-                file.parent / file.name
-                for file in txrm_files
-                if "ref_" in file.name
+                file.parent / file.name for file in txrm_files if "ref_" in file.name
             ]
         else:
             flats = [
-                file.parent / file.name
-                for file in xrm_files
-                if "ref_" in file.name
+                file.parent / file.name for file in xrm_files if "ref_" in file.name
             ]
         if any(["tomo_" in str(file) for file in txrm_files]):
             projs = [
-                file.parent / file.name
-                for file in txrm_files
-                if "tomo_" in file.name
+                file.parent / file.name for file in txrm_files if "tomo_" in file.name
             ]
         else:
             projs = [
-                file.parent / file.name
-                for file in xrm_files
-                if "tomo_" in file.name
+                file.parent / file.name for file in xrm_files if "tomo_" in file.name
             ]
         return flats, projs
 
@@ -1473,10 +1374,14 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 display(self.energy_label)
             # Getting filename from specific energy
             self.flats_filename = [
-                file.parent / file.name for file in self.flats_filenames if energy in file.name and "ref_" in file.name
+                file.parent / file.name
+                for file in self.flats_filenames
+                if energy in file.name and "ref_" in file.name
             ]
             self.data_filename = [
-                file.parent / file.name for file in self.data_filenames if energy in file.name and "tomo_" in file.name
+                file.parent / file.name
+                for file in self.data_filenames
+                if energy in file.name and "tomo_" in file.name
             ]
             self.status_label = Label(
                 "Uploading txrm.", layout=Layout(justify_content="center")
@@ -1488,27 +1393,12 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                 self.data_filename[0]
             )
             self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
-
-            energy_filedir_name = str(energy + "eV")
-            self.import_savedir = self.filedir / energy_filedir_name
-            # TODO clean this with method
-            if self.import_savedir.exists():
-                now = datetime.datetime.now()
-                dt_str = now.strftime("%Y%m%d-%H%M-")
-                save_name = dt_str + energy_filedir_name
-                self.import_savedir = pathlib.Path(self.filedir / save_name)
-                if self.import_savedir.exists():
-                    dt_str = now.strftime("%Y%m%d-%H%M%S-")
-                    save_name = dt_str + energy_filedir_name
-                    self.import_savedir = pathlib.Path(self.filedir / save_name)
-            self.import_savedir.mkdir()
+            self.make_import_savedir(str(energy + "eV"))
             self.status_label.value = "Normalizing."
             self.normalize()
             self._data = np.flip(self._data, axis=1)
             self.data = self._data
-            self.status_label.value = (
-                "Calculating histogram of raw data and saving."
-            )
+            self.status_label.value = "Calculating histogram of raw data and saving."
             self._np_hist_and_save_data()
             self.saved_as_tiff = False
             self.filedir = self.import_savedir
@@ -1614,19 +1504,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                     self.data_filenames, Uploader
                 )
                 self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
-                energy_filedir_name = str(energy + "eV")
-                self.import_savedir = self.filedir / energy_filedir_name
-                # TODO clean this with method
-                if self.import_savedir.exists():
-                    now = datetime.datetime.now()
-                    dt_str = now.strftime("%Y%m%d-%H%M-")
-                    save_name = dt_str + energy_filedir_name
-                    self.import_savedir = pathlib.Path(self.filedir / save_name)
-                    if self.import_savedir.exists():
-                        dt_str = now.strftime("%Y%m%d-%H%M%S-")
-                        save_name = dt_str + energy_filedir_name
-                        self.import_savedir = pathlib.Path(self.filedir / save_name)
-                self.import_savedir.mkdir()
+                self.make_import_savedir(str(energy + "eV"))
                 projs, flats, darks = self.setup_normalize()
                 self.status_label.value = "Calculating flat positions."
                 self.flats_ind_from_collect(collect)
@@ -1641,7 +1519,6 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
                     compute=False,
                 )
                 self.data = self._data
-
                 self.status_label.value = (
                     "Calculating histogram of raw data and saving."
                 )
@@ -2373,7 +2250,6 @@ class Metadata_General_Prenorm(Metadata):
             self.metadata["downsampled_projections_directory"] = str(
                 projections.filedir_ds
             )
-        self.metadata["downsampled_values"] = projections.ds_vals
         self.metadata["saved_as_tiff"] = projections.saved_as_tiff
         self.metadata["num_angles"] = projections.data.shape[0]
         self.metadata["pxX"] = projections.data.shape[2]
@@ -2401,7 +2277,6 @@ class Metadata_General_Prenorm(Metadata):
             projections.filedir_ds = pathlib.Path(
                 self.metadata["downsampled_projections_directory"]
             )
-        projections.ds_vals = self.metadata["downsampled_values"]
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
         if "angles_rad" in self.metadata:
             projections.angles_rad = self.metadata["angles_rad"]
@@ -2672,16 +2547,14 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         en_units = self.metadata["energy_units"]
         start_angle = self.metadata["start_angle"]
         end_angle = self.metadata["end_angle"]
-        if isinstance(self.metadata['projections_exposure_time'], list):
+        if isinstance(self.metadata["projections_exposure_time"], list):
             exp_time_proj = f"{self.metadata['projections_exposure_time'][0]:0.2f}"
         else:
             exp_time_proj = f"{self.metadata['projections_exposure_time']:0.2f}"
-        if isinstance(self.metadata['references_exposure_time'], list):
+        if isinstance(self.metadata["references_exposure_time"], list):
             exp_time_ref = f"{self.metadata['references_exposure_time'][0]:0.2f}"
         else:
             exp_time_ref = f"{self.metadata['references_exposure_time']:0.2f}"
-        # ds_vals = self.metadata["downsampled_values"]
-        # ds_vals = [x[2] for x in ds_vals]
         if self.metadata["user_overwrite_energy"]:
             user_overwrite = "Yes"
         else:
@@ -2709,7 +2582,6 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
             {
                 "Energy Overwritten": user_overwrite,
                 ".tif Saved": save_as_tiff,
-                # "Downsample Values": ds_vals,
             },
         ]
         middle_headers = [[]]
@@ -2799,8 +2671,6 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
             )
         if "flats_ind" in self.metadata:
             projections.flats_ind = self.metadata["flats_ind"]
-        if "downsampled_values" in self.metadata:
-            projections.ds_vals = self.metadata["downsampled_values"]
         projections.saved_as_tiff = self.metadata["saved_as_tiff"]
 
 
@@ -2910,7 +2780,6 @@ class Metadata_SSRL62B_Raw_Projections(Metadata):
         en_units = self.metadata["energy_units"]
         start_angle = self.metadata["start_angle"]
         end_angle = self.metadata["end_angle"]
-        # ds_vals = [x[2] for x in ds_vals]
         self.metadata_list_for_table = [
             {
                 f"Energy ({en_units})": self.metadata["energy_str"],
@@ -2924,11 +2793,7 @@ class Metadata_SSRL62B_Raw_Projections(Metadata):
                 "Y Pixels": self.metadata["pxY"],
                 "Num. θ": self.metadata["num_angles"],
                 "Binning": self.metadata["binnings"][0],
-            }
-            # {
-            # ".tif Saved": save_as_tiff,
-            # "Downsample Values": ds_vals,
-            # },
+            },
         ]
         middle_headers = [[]]
         data = [[]]
@@ -3014,7 +2879,6 @@ class Metadata_SSRL62B_Raw_References(Metadata_SSRL62B_Raw_Projections):
         en_units = self.metadata["energy_units"]
         start_angle = self.metadata["start_angle"]
         end_angle = self.metadata["end_angle"]
-        # ds_vals = [x[2] for x in ds_vals]
         self.metadata_list_for_table = [
             {
                 f"Energy ({en_units})": self.metadata["energy_str"],
@@ -3029,10 +2893,6 @@ class Metadata_SSRL62B_Raw_References(Metadata_SSRL62B_Raw_Projections):
                 "Num. Refs": len(self.metadata["widths"]),
                 "Binning": self.metadata["binnings"][0],
             },
-            # {
-            # ".tif Saved": save_as_tiff,
-            # "Downsample Values": ds_vals,
-            # },
         ]
         middle_headers = [[]]
         data = [[]]
