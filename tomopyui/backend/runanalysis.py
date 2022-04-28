@@ -278,7 +278,6 @@ class RunRecon(RunAnalysisBase):
             self.save_data_after()
 
 
-# TODO: create superclass for RunRecon and RunAlign, as they basically do the same thing.
 class RunAlign(RunAnalysisBase):
     """ """
 
