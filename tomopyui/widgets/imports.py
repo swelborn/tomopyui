@@ -932,7 +932,7 @@ class PrenormUploader(UploaderBase):
         self.import_status_label.value = (
             "Plotting data (downsampled for viewer to 0.5x)."
         )
-        self.viewer.plot(self.projections)
+        self.viewer.plot(self.projections, ds=True, no_check=True)
         self.Import.use_raw_button.reset_state()
         self.Import.use_prenorm_button.reset_state()
         if "import_time" in self.projections.metadata.metadata:

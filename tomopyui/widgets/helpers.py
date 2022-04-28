@@ -295,14 +295,14 @@ class ReactiveTextButton(ReactiveButtonBase):
 
 
 class ReactiveIconButton(ReactiveButtonBase):
-    def __init__(self, callback, icon, icon_during, icon_after, skip_during):
-        super().__init__(
-            callback, icon=icon, icon_during=icon_during, icon_after=icon_after
-        )
+    def __init__(self, callback, icon, tooltip, skip_during=False, *args, **kwargs):
+        self.skip_during = skip_during
+        super().__init__(callback, icon=icon, tooltip=tooltip, *args, **kwargs)
 
     def run_callback(self, *args):
-        self.button.button_style = self.button_style_during
-        self.button.icon = self.icon_during
+        if not self.skip_during:
+            self.button.button_style = self.button_style_during
+            self.button.icon = self.icon_during
         self.callback()
         self.button.button_style = self.button_style_after
         self.button.icon = self.icon_after
