@@ -98,6 +98,7 @@ class Center:
             description="Center: ",
             disabled=False,
             style=extend_description_style,
+            layout=Layout(justify_content="center")
         )
         self.load_rough_center = Button(
             description="Click to load rough center from imported data.",
@@ -216,6 +217,7 @@ class Center:
             disabled=False,
         )
         self.add_center_button.button.disabled = True
+        self.rec_viewer.image_index_slider.disabled = True
 
     def _use_ds_data(self, change):
         self.use_ds = self.use_ds_checkbox.value
@@ -302,7 +304,7 @@ class Center:
     def remove_center(self, *args):
         ind = self.center_select.index
         if ind is None:
-            self.center_slice_list.pop(len(self.center_slice_list))
+            self.center_slice_list.pop(-1)
         else:
             self.center_slice_list.pop(ind)
         self.update_center_select()
@@ -398,6 +400,8 @@ class Center:
         :doc:`histogram <mpl-interactions:examples/hist>` plot
         """
         self.add_center_button.reset_state()
+        if self.rec_viewer.image_index_slider.disabled:
+            self.rec_viewer.image_index_slider.disabled = False
         self.recon_slice = copy.deepcopy(self.index_to_try)
         prj_imgs, ds_value = self.get_ds_projections()
         angles_rad = self.projections.angles_rad
@@ -504,7 +508,7 @@ class Center:
         self.manual_center_vbox = VBox(
             [
                 self.viewer_hbox,
-                self.center_textbox,
+                HBox([self.center_textbox],layout=Layout(justify_content="center")),
                 HBox(
                     [
                         self.find_center_manual_button.button,
