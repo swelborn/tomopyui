@@ -440,15 +440,18 @@ class BqImViewerBase(ABC):
         elif data["event"] == "mouseenter":
             self.status_bar_intensity.value = "Almost there..."  # this is is not visible because mousemove overwrites the msg
         else:
-            self.status_bar_intensity.value = f"click {data}"
+            pass
+            # self.status_bar_intensity.value = f"click {data}"
 
     # -- Other methods -----------------------------------------------------------------
     def change_aspect_ratio(self):
         pxX = self.images.shape[2]
         pxY = self.images.shape[1]
         self.aspect_ratio = pxX / pxY
-        if self.aspect_ratio >= 1.5: self.aspect_ratio = 1.5
-        if self.aspect_ratio <= 0.5: self.aspect_ratio = 0.5
+        if self.aspect_ratio >= 1.5:
+            self.aspect_ratio = 1.5
+        if self.aspect_ratio <= 0.5:
+            self.aspect_ratio = 0.5
         if self.aspect_ratio >= 1:
             if self.aspect_ratio > self.fig.max_aspect_ratio:
                 self.fig.max_aspect_ratio = self.aspect_ratio
@@ -779,6 +782,23 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
             min=0,
             max=self.images.shape[0] - 1,
             step=1,
+            orientation="vertical",
+            readout=False,
+            layout=Layout(height="auto"),
+        )
+        self.tilted_center_line = bq.Lines(
+            x=[0.5, 0.5],
+            y=[0, 1],
+            colors="orangered",
+            line_style="dashed",
+            stroke_width=3,
+            scales={"x": self.scale_x, "y": self.scale_y},
+        )
+        self.scatter = bq.Scatter(
+            scales={"x": self.scale_x, "y": self.scale_y},
+            colors=["orangered"],
+            stroke="black",
+            default_size=128,
         )
         self.fig.marks = (
             self.plotted_image,
@@ -793,7 +813,6 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
         )
         self.footer2 = VBox(
             [
-                HBox([self.slice_line_slider], layout=Layout(justify_content="center")),
                 self.button_box,
                 HBox(
                     [
@@ -814,12 +833,53 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
             layout=self.footer_layout,
         )
         self.footer = VBox([self.footer1, self.footer2])
+        self.center = HBox(
+            [self.slice_line_slider, self.fig, self.hist.fig], layout=self.center_layout
+        )
         self.app = VBox([self.header, self.center, self.footer])
 
     def plot(self, projections, no_check=True):
         super().plot(projections, no_check=no_check)
         self.slice_line_slider.max = self.pxY - 1
         self.slice_line_slider.value = int((self.pxY - 1) / 2)
+
+    def update_center_line(self, Center, slider_idx):
+        self.center_line.x = [
+            Center.cen_range[slider_idx] / self.pxX,
+            Center.cen_range[slider_idx] / self.pxX,
+        ]
+
+    def update_tilted_center_line(self, Center):
+        if Center.reg is None and len(Center.center_slice_list) == 0:
+            self.fig.marks = (
+                self.plotted_image,
+                self.center_line,
+                self.slice_line,
+            )
+        else:
+            x_vals = [cen[0] / self.pxX for cen in Center.center_slice_list]
+            y_vals = [cen[1] / self.pxY for cen in Center.center_slice_list]
+            self.scatter.x = x_vals
+            self.scatter.y = y_vals
+            self.tilted_center_line.x = [
+                Center.reg_centers[0] / self.pxX,
+                Center.reg_centers[-1] / self.pxX,
+            ]
+        if Center.reg is None and len(Center.center_slice_list) == 1:
+            self.fig.marks = (
+                self.plotted_image,
+                self.center_line,
+                self.slice_line,
+                self.scatter,
+            )
+        else:
+            self.fig.marks = (
+                self.plotted_image,
+                self.center_line,
+                self.slice_line,
+                self.tilted_center_line,
+                self.scatter,
+            )
 
 
 class BqImViewer_Center_Recon(BqImViewer_Projections_Parent):
