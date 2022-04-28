@@ -447,6 +447,8 @@ class BqImViewerBase(ABC):
         pxX = self.images.shape[2]
         pxY = self.images.shape[1]
         self.aspect_ratio = pxX / pxY
+        if self.aspect_ratio >= 1.5: self.aspect_ratio = 1.5
+        if self.aspect_ratio <= 0.5: self.aspect_ratio = 0.5
         if self.aspect_ratio >= 1:
             if self.aspect_ratio > self.fig.max_aspect_ratio:
                 self.fig.max_aspect_ratio = self.aspect_ratio
