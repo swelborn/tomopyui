@@ -1080,11 +1080,11 @@ class BqImHist:
         self.vmin = self.init_vmin
         self.vmax = self.init_vmax
         self.selector.selected = None
-        self.vmin = np.min(self.images)
-        self.vmax = np.max(self.images)
+        self.vmin = float(np.min(self.images))
+        self.vmax = float(np.max(self.images))
         self.rm_high_low_int(None)
 
-    def refresh_histogram(self, images=None):
+    def refresh_histogram(self):
         if self.precomputed_hist is not None:
             if self.viewer.from_hdf or self.copied_hist:
                 self.refresh_histogram_from_hdf()
@@ -1113,13 +1113,15 @@ class BqImHist:
 
         else:
             self.refresh_histogram_without_precompute()
-
+            print("finished without precomputed")
         self.selector = bq.interacts.BrushIntervalSelector(
             orientation="vertical", scale=self.x_sc
         )
+        self.selector.selected = None
         self.selector.observe(self.update_crange_selector, "selected")
         self.fig.marks = [self.hist]
         self.fig.interaction = self.selector
+        self.selector.selected = [self.init_vmin, self.init_vmax]
         self.rm_high_low_int(None)
 
     def refresh_histogram_from_hdf(self):
@@ -1152,9 +1154,13 @@ class BqImHist:
     def refresh_histogram_without_precompute(self):
         self.images_min = float(np.min(self.viewer.images))
         self.images_max = float(np.max(self.viewer.images))
-        self.vmin = self.images_min
-        self.vmax = self.images_max
-        self.x_sc = bq.LinearScale(min=float(self.vmin), max=float(self.vmax))
+        self.init_vmin, self.init_vmax = np.percentile(
+            self.viewer.images, q=(0.5, 99.5)
+        )
+        self.init_vmax = self.images_min
+        self.vmin = float(self.init_vmin)
+        self.vmax = float(self.init_vmax)
+        self.x_sc = bq.LinearScale(min=self.images_min, max=self.images_max)
         self.y_sc = bq.LinearScale()
         self.fig.scale_x = self.x_sc
         self.fig.scale_y = bq.LinearScale()
@@ -1172,7 +1178,7 @@ class BqImHist:
         )
         self.bin_centers = self.hist.x
         self.frequency = self.hist.y
-        ind = self.bin_centers < self.vmin
+        ind = self.bin_centers < self.images_min
         self.frequency[ind] = 0
         self.hist.scales["y"].max = np.max(self.frequency)
 
@@ -1184,12 +1190,8 @@ class BqImHist:
             self.vmax = self.selector.selected[1]
 
     def rm_high_low_int(self, change):
-        if self.viewer.from_hdf or self.viewer.from_npy:
-            self.vmin, self.vmax = self.init_vmin, self.init_vmax
-            self.selector.selected = [float(self.vmin), float(self.vmax)]
-        else:
-            self.vmin, self.vmax = np.percentile(self.viewer.images, q=(0.5, 99.5))
-            self.selector.selected = [self.vmin, self.vmax]
+        self.vmin, self.vmax = self.init_vmin, self.init_vmax
+        self.selector.selected = [float(self.vmin), float(self.vmax)]
 
 
 class BqImHist_Child(BqImHist):

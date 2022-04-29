@@ -98,7 +98,7 @@ class Center:
             description="Center: ",
             disabled=False,
             style=extend_description_style,
-            layout=Layout(justify_content="center")
+            layout=Layout(justify_content="center"),
         )
         self.load_rough_center = Button(
             description="Click to load rough center from imported data.",
@@ -178,7 +178,7 @@ class Center:
         self.projections_plot_header = Label(
             self.projections_plot_header, style=self.header_font_style
         )
-        self.reconstructions_plot_header = "Reconstruction"
+        self.reconstructions_plot_header = "Reconstructions"
         self.reconstructions_plot_header = Label(
             self.reconstructions_plot_header, style=self.header_font_style
         )
@@ -508,7 +508,7 @@ class Center:
         self.manual_center_vbox = VBox(
             [
                 self.viewer_hbox,
-                HBox([self.center_textbox],layout=Layout(justify_content="center")),
+                HBox([self.center_textbox], layout=Layout(justify_content="center")),
                 HBox(
                     [
                         self.find_center_manual_button.button,
