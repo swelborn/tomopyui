@@ -3662,7 +3662,7 @@ class Metadata_Align(Metadata):
     def set_metadata(self, Align):
         self.metadata["metadata_type"] = "Align"
         self.metadata["opts"]["downsample"] = Align.downsample
-        self.metadata["opts"]["ds_factor"] = Align.ds_factor
+        self.metadata["opts"]["ds_factor"] = int(Align.ds_factor)
         self.metadata["opts"]["pyramid_level"] = Align.pyramid_level
         self.metadata["opts"]["num_iter"] = Align.num_iter
         self.metadata["use_multiple_centers"] = Align.use_multiple_centers
@@ -3711,14 +3711,14 @@ class Metadata_Align(Metadata):
         ]
         metadata_frame["Headers"] = list(self.metadata["opts"].keys())
         center_idx = [
-            i for i, key in enumerate(metadata_frame["Headers"]) if key == "Center"
+            i for i, key in enumerate(metadata_frame["Headers"]) if key == "center"
         ][0]
         metadata_frame["Headers"] = [
-            metadata_frame["Headers"][key]
+            metadata_frame["Headers"][i]
             .replace("_", " ")
             .title()
             .replace("Num", "No.")
-            for key in metadata_frame["Headers"]
+            for i, key in enumerate(metadata_frame["Headers"]) if key != "pyramid_level"
         ]
         metadata_frame["Headers"] = metadata_frame["Headers"] + extra_headers
         extra_values = [
@@ -3730,11 +3730,10 @@ class Metadata_Align(Metadata):
         ]
         extra_values = [str(extra_values[i]) for i in range(len(extra_values))]
         metadata_frame["Values"] = [
-            str(self.metadata["opts"][key]) for key in self.metadata["opts"]
+            str(self.metadata["opts"][key]) for key in self.metadata["opts"] if key != "pyramid_level"
         ] + extra_values
         if self.metadata["use_multiple_centers"]:
             metadata_frame["Values"][center_idx] = "Multiple"
-        metadata_frame[""]
         metadata_frame = {
             metadata_frame["Headers"][i]: metadata_frame["Values"][i]
             for i in range(len(metadata_frame["Headers"]))

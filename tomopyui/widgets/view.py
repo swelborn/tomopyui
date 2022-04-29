@@ -851,6 +851,13 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
 
     def update_tilted_center_line(self, Center):
         if Center.reg is None and len(Center.center_slice_list) == 0:
+            # self.scatter.x = None
+            # self.scatter.y = None
+            self.fig.marks = (
+                self.plotted_image,
+                self.center_line,
+                self.slice_line,
+            )
             self.fig.marks = (
                 self.plotted_image,
                 self.center_line,
@@ -865,21 +872,22 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
                 Center.reg_centers[0] / self.pxX,
                 Center.reg_centers[-1] / self.pxX,
             ]
-        if Center.reg is None and len(Center.center_slice_list) == 1:
-            self.fig.marks = (
-                self.plotted_image,
-                self.center_line,
-                self.slice_line,
-                self.scatter,
-            )
-        else:
-            self.fig.marks = (
-                self.plotted_image,
-                self.center_line,
-                self.slice_line,
-                self.tilted_center_line,
-                self.scatter,
-            )
+            if Center.reg is None and len(Center.center_slice_list) == 1:
+                self.fig.marks = (
+                    self.plotted_image,
+                    self.center_line,
+                    self.slice_line,
+                    self.scatter,
+                )
+            else:
+                self.fig.marks = (
+                    self.plotted_image,
+                    self.center_line,
+                    self.slice_line,
+                    self.tilted_center_line,
+                    self.scatter,
+                )
+
 
 
 class BqImViewer_Center_Recon(BqImViewer_Projections_Parent):
@@ -1156,7 +1164,6 @@ class BqImHist:
         self.init_vmin, self.init_vmax = np.percentile(
             self.viewer.images, q=(0.5, 99.5)
         )
-        self.init_vmax = self.images_min
         self.vmin = float(self.init_vmin)
         self.vmax = float(self.init_vmax)
         self.x_sc = bq.LinearScale(min=self.images_min, max=self.images_max)
@@ -1179,7 +1186,7 @@ class BqImHist:
         self.frequency = self.hist.y
         ind = self.bin_centers < self.images_min
         self.frequency[ind] = 0
-        self.hist.scales["y"].max = np.max(self.frequency)
+        self.hist.scales["y"].max = float(np.max(self.frequency))
 
     def update_crange_selector(self, *args):
         if self.selector.selected is not None:

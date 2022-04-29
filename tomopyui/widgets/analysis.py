@@ -131,7 +131,7 @@ class AnalysisBase(ABC):
         self.viewer_accordion = Accordion(
             children=[self.viewer_hbox],
             selected_index=None,
-            titles=("Plot Projection Images",),
+            titles=("Narrow Data Range",),
         )
 
         # -- Saving Options -------------------------------------------------------
@@ -139,15 +139,6 @@ class AnalysisBase(ABC):
         self.save_opts_checkboxes = self.create_checkboxes_from_opt_list(
             self.save_opts_list, self.save_opts
         )
-        # Copy parent histograms?
-        self.copy_parent_hists_checkbox = Checkbox(
-            description="Copy parent histograms", value=True
-        )
-        self.save_opts_checkboxes.append(self.copy_parent_hists_checkbox)
-        self.shift_data_after_checkbox = Checkbox(
-            description="Shift full dataset after", value=True
-        )
-        self.save_opts_checkboxes.append(self.shift_data_after_checkbox)
 
         # -- Method Options -------------------------------------------------------
         self.methods_opts = {
@@ -253,12 +244,6 @@ class AnalysisBase(ABC):
             self.update_use_multiple_centers, names="value"
         )
 
-        # Copy parent histograms
-        self.copy_parent_hists_checkbox.observe(self.update_copy_hist, names="value")
-
-        # Shift dataset after
-        self.copy_parent_hists_checkbox.observe(self.update_shift_data, names="value")
-
         # Downsampling
         self.downsample_checkbox.observe(self._downsample_turn_on)
         self.altered_viewer.ds_viewer_dropdown.observe(
@@ -296,7 +281,7 @@ class AnalysisBase(ABC):
             self.projections = self.Import.projections
             self.center = self.Center.current_center
             self.center_textbox.value = self.Center.current_center
-            self.metadata.set_metadata(self)
+
             self.load_metadata_button.disabled = False
             self.start_button.disabled = False
             self.save_options_accordion.selected_index = 0
@@ -345,26 +330,21 @@ class AnalysisBase(ABC):
     # Copy histogram from parent
     def update_copy_hist(self, change):
         self.copy_hists = change.new
-        self.metadata.set_metadata(self)
 
     def update_shift_data(self, change):
         self.shift_full_dataset_after = change.new
-        self.metadata.set_metadata(self)
 
     # Number of iterations
     def update_num_iter(self, change):
         self.num_iter = int(change.new)
         self.progress_total.max = change.new
-        self.metadata.set_metadata(self)
 
     # Center of rotation
     def update_center_textbox(self, change):
         self.center = change.new
-        self.metadata.set_metadata(self)
 
     def update_use_multiple_centers(self, change):
         self.use_multiple_centers = change.new
-        self.metadata.set_metadata(self)
 
     # Downsampling
     def _downsample_turn_on(self, change):
@@ -372,17 +352,16 @@ class AnalysisBase(ABC):
             self.downsample = True
             self.pyramid_level = self.altered_viewer.ds_viewer_dropdown.value
             self.ds_factor_dropdown.disabled = False
-            self.metadata.set_metadata(self)
+
         if change.new is False:
             self.downsample = False
             self.ds_factor = 1
             self.ds_factor_dropdown.disabled = True
-            self.metadata.set_metadata(self)
+
 
     # Phase cross correlation subset (from altered projections)
     def _use_subset_correlation(self, change):
         self.use_subset_correlation = self.use_subset_correlation_checkbox.value
-        self.metadata.set_metadata(self)
 
     def update_ds_factor_from_viewer(self, *args):
         self.ds_factor_dropdown.value = self.altered_viewer.ds_viewer_dropdown.value
@@ -390,7 +369,6 @@ class AnalysisBase(ABC):
     def update_ds_factor(self, *args):
         self.pyramid_level = self.ds_factor_dropdown.value
         self.ds_factor = np.power(2, int(self.pyramid_level + 1))
-        self.metadata.set_metadata(self)
 
     # Batch size
     def update_num_batches(self, change):
@@ -398,17 +376,14 @@ class AnalysisBase(ABC):
         self.progress_phase_cross_corr.max = change.new
         self.progress_shifting.max = change.new
         self.progress_reprj.max = change.new
-        self.metadata.set_metadata(self)
 
     # X Padding
     def update_x_padding(self, change):
         self.padding_x = change.new
-        self.metadata.set_metadata(self)
 
     # Y Padding
     def update_y_padding(self, change):
         self.padding_y = change.new
-        self.metadata.set_metadata(self)
 
     # Pre-alignment iterations
     def update_pre_alignment_iters(self, *args):
@@ -417,67 +392,11 @@ class AnalysisBase(ABC):
     # Extra options
     def update_extra_options(self, change):
         self.extra_options = change.new
-        self.metadata.set_metadata(self)
-
-    # def set_widgets_from_load_metadata(self):
-
-    #     # -- Saving Options -------------------------------------------------------
-    #     self.save_opts_checkboxes = self.set_checkbox_bool(
-    #         self.save_opts_checkboxes, self.metadata["save_opts"]
-    #     )
-
-    #     # -- Method Options -------------------------------------------------------
-    #     # for key in self.metadata["methods"]:
-    #     #     if self.metadata["methods"][key]:
-    #     #         for checkbox in self.methods_checkboxes:
-    #     #             if checkbox.description == str(key):
-    #     #                 checkbox.value = True
-    #     #     elif not self.metadata["methods"][key]:
-    #     #         for checkbox in self.methods_checkboxes:
-    #     #             if checkbox.description == str(key):
-    #     #                 checkbox.value = False
-
-    #     self.tomopy_methods_checkboxes = self.set_checkbox_bool(
-    #         self.tomopy_methods_checkboxes, self.metadata["methods"]
-    #     )
-    #     self.astra_cuda_methods_checkboxes = self.set_checkbox_bool(
-    #         self.astra_cuda_methods_checkboxes, self.metadata["methods"]
-    #     )
-
-    #     # -- Projection Range Sliders ---------------------------------------------
-    #     # Not implemented in load metadata.
-
-    #     # -- Options ----------------------------------------------------------
-
-    #     # Number of iterations
-    #     self.num_iterations_textbox.value = self.num_iter
-
-    #     # Center
-    #     self.center_textbox.value = self.center
-
-    #     # Downsampling
-    #     self.downsample_checkbox.value = self.downsample
-    #     self.ds_factor_textbox.value = self.ds_factor
-    #     if self.downsample_checkbox.value:
-    #         self.ds_factor_textbox.disabled = False
-
-    #     # Batch size
-    #     self.num_batches_textbox.value = self.num_batches
-
-    #     # X Padding
-    #     self.padding_x_textbox.value = self.padding_x
-
-    #     # Y Padding
-    #     self.padding_y_textbox.value = self.padding_y
-
-    #     # Extra options
-    #     self.extra_options_textbox.value = str(self.extra_options)
-    #     return self
 
     def set_checkbox_bool(self, checkbox_list, dictionary):
         def create_opt_dict_on_check(change):
             dictionary[change.owner.description] = change.new
-            self.metadata.set_metadata(self)
+
 
         for key in dictionary:
             if dictionary[key]:
@@ -520,6 +439,63 @@ class AnalysisBase(ABC):
             )
             display(self.output_hbox)
 
+    def containerize(self):
+        # -- Saving -----------------------------------------------------------
+        save_hbox = VBox(
+            self.save_opts_checkboxes,
+            layout=Layout(flex_flow="column wrap", align_items="flex-start"),
+        )
+
+        self.save_options_accordion = Accordion(
+            children=[save_hbox],
+            selected_index=None,
+            titles=("Save Options",),
+        )
+
+        # -- Methods ----------------------------------------------------------
+        self.tomopy_methods_hbox = VBox(
+            [
+                Label("Tomopy", style=self.header_font_style),
+                VBox(
+                    self.tomopy_methods_checkboxes,
+                    layout=Layout(flex_flow="column wrap", align_content="flex-start"),
+                ),
+            ],
+            layout=Layout(align_items="center")
+        )
+
+        self.astra_methods_hbox = VBox(
+            [
+                Label("Astra", style=self.header_font_style),
+                VBox(
+                    self.astra_cuda_methods_checkboxes,
+                    layout=Layout(flex_flow="column wrap"),
+                ),
+            ],
+            layout=Layout(align_items="center")
+        )
+
+        recon_method_box = HBox(
+            [self.tomopy_methods_hbox, self.astra_methods_hbox],
+            layout=Layout(width="auto")
+        )
+        self.methods_accordion = Accordion(
+            children=[recon_method_box], selected_index=None, titles=("Methods",)
+        )
+
+        # -- Box organization -------------------------------------------------
+
+        self.top_of_box_hb = HBox(
+            [self.open_accordions_button, self.Import.switch_data_buttons],
+            layout=Layout(
+                width="auto",
+                justify_content="flex-start",
+            ),
+        )
+        self.start_button_hb = HBox(
+            [self.start_button], layout=Layout(width="auto", justify_content="center")
+        )
+
     @abstractmethod
     def update_num_batches(self, *args):
         ...
@@ -545,7 +521,7 @@ class Align(AnalysisBase):
         self.metadata = Metadata_Align()
         self.subset_x = None
         self.subset_y = None
-        self.save_opts_list = ["tomo_after", "tomo_before", "recon", "tiff", "hdf"]
+        self.save_opts_list = ["Projections Before Alignment", "Projections After Alignment", "Reconstruction", "tiff", "hdf"]
         self.Import.Align = self
         self.init_widgets()
         self.set_observes()
@@ -553,7 +529,6 @@ class Align(AnalysisBase):
 
     def init_widgets(self):
         super().init_widgets()
-
         # -- Progress bars and plotting output --------------------------------
         self.progress_total = IntProgress(description="Recon: ", value=0, min=0, max=1)
         self.progress_reprj = IntProgress(description="Reproj: ", value=0, min=0, max=1)
@@ -580,6 +555,15 @@ class Align(AnalysisBase):
             style=extend_description_style,
             value=self.upsample_factor,
         )
+        # Copy parent histograms?
+        self.copy_parent_hists_checkbox = Checkbox(
+            description="Copy parent histograms", value=True
+        )
+        self.shift_data_after_checkbox = Checkbox(
+            description="Shift full dataset after", value=True
+        )
+        self.save_opts_checkboxes.append(self.copy_parent_hists_checkbox)
+        self.save_opts_checkboxes.append(self.shift_data_after_checkbox)
 
     def set_observes(self):
         super().set_observes()
@@ -588,10 +572,14 @@ class Align(AnalysisBase):
         self.upsample_factor_textbox.observe(self.update_upsample_factor, names="value")
         self.start_button.on_click(self.set_options_and_run)
 
+        # Copy parent histograms
+        self.copy_parent_hists_checkbox.observe(self.update_copy_hist, names="value")
+        # Shift dataset after
+        self.shift_data_after_checkbox.observe(self.update_shift_data, names="value")
+
     # Upsampling
     def update_upsample_factor(self, change):
         self.upsample_factor = change.new
-        self.metadata.set_metadata(self)
 
     # TODO: implement load metadata
     # def set_widgets_from_load_metadata(self):
@@ -610,12 +598,10 @@ class Align(AnalysisBase):
         self.progress_phase_cross_corr.max = change.new
         self.progress_shifting.max = change.new
         self.progress_reprj.max = change.new
-        self.metadata.set_metadata(self)
 
     def update_num_iter(self, change):
         self.num_iter = change.new
         self.progress_total.max = change.new
-        self.metadata.set_metadata(self)
 
     def update_subset(self):
         self.subset_x = self.altered_viewer.subset_x
@@ -637,75 +623,20 @@ class Align(AnalysisBase):
 
     def make_tab(self):
 
-        # -- Saving -----------------------------------------------------------
-        save_hbox = HBox(
-            self.save_opts_checkboxes,
-            layout=Layout(flex_wrap="wrap", justify_content="space-between"),
-        )
-
-        self.save_options_accordion = Accordion(
-            children=[save_hbox],
-            selected_index=None,
-            titles=("Save Options",),
-        )
-
-        # -- Methods ----------------------------------------------------------
-        tomopy_methods_hbox = HBox(
-            [
-                Label("Tomopy:", layout=Layout(width="200px", align_content="center")),
-                HBox(
-                    self.tomopy_methods_checkboxes,
-                    layout=widgets.Layout(flex_flow="row wrap"),
-                ),
-            ]
-        )
-
-        astra_methods_hbox = HBox(
-            [
-                Label("Astra:", layout=Layout(width="100px", align_content="center")),
-                HBox(
-                    self.astra_cuda_methods_checkboxes,
-                    layout=widgets.Layout(flex_flow="row wrap"),
-                ),
-            ]
-        )
-
-        recon_method_box = VBox(
-            [tomopy_methods_hbox, astra_methods_hbox],
-            layout=widgets.Layout(flex_flow="row wrap"),
-        )
-        self.methods_accordion = Accordion(
-            children=[recon_method_box], selected_index=None, titles=("Methods",)
-        )
-
-        # -- Box organization -------------------------------------------------
-
-        top_of_box_hb = HBox(
-            [self.open_accordions_button, self.Import.switch_data_buttons],
-            layout=Layout(
-                width="auto",
-                justify_content="flex-start",
-            ),
-        )
-        start_button_hb = HBox(
-            [self.start_button], layout=Layout(width="auto", justify_content="center")
-        )
+        self.containerize()
 
         self.options_accordion = Accordion(
             children=[
                 HBox(
                     [
-                        self.num_iterations_textbox,
-                        self.center_textbox,
-                        self.upsample_factor_textbox,
-                        self.num_batches_textbox,
-                        self.padding_x_textbox,
-                        self.padding_y_textbox,
-                        self.downsample_checkbox,
-                        self.ds_factor_dropdown,
-                        self.extra_options_textbox,
+                        HBox([self.center_textbox]),
+                        HBox([self.num_iterations_textbox, self.pre_alignment_iters_textbox]),
+                        HBox([self.padding_x_textbox, self.padding_y_textbox]),
+                        HBox([self.downsample_checkbox, self.ds_factor_dropdown]),
                         self.use_subset_correlation_checkbox,
-                        self.pre_alignment_iters_textbox,
+                        self.num_batches_textbox,
+                        self.upsample_factor_textbox,
+                        self.extra_options_textbox,
                     ],
                     layout=Layout(flex_flow="row wrap", justify_content="flex-start"),
                 ),
@@ -714,7 +645,7 @@ class Align(AnalysisBase):
             titles=("Alignment Options",),
         )
 
-        progress_hbox = HBox(
+        self.progress_hbox = HBox(
             [
                 self.progress_total,
                 self.progress_reprj,
@@ -726,15 +657,15 @@ class Align(AnalysisBase):
 
         self.tab = VBox(
             children=[
-                top_of_box_hb,
+                self.top_of_box_hb,
                 self.viewer_accordion,
                 # TODO: implement load metadata again
                 # self.load_metadata_button,
-                self.methods_accordion,
-                self.save_options_accordion,
-                self.options_accordion,
-                start_button_hb,
-                progress_hbox,
+                HBox([self.methods_accordion,
+                    self.options_accordion,
+                    self.save_options_accordion]),               
+                self.start_button_hb,
+                self.progress_hbox,
                 VBox(
                     [self.plot_output1, self.plot_output2],
                 ),
@@ -746,10 +677,14 @@ class Recon(AnalysisBase):
     def __init__(self, Import, Center):
         super().init_attributes(Import, Center)
         self.metadata = Metadata_Recon()
-        self.save_opts_list = ["tomo_before", "recon", "tiff", "hdf"]
+        self.save_opts_list = ["Reconstruction"]
         self.Import.Recon = self
         self.init_widgets()
         self.set_observes()
+        # self.metadata.set_metadata(self)
+        for save_opt in self.save_opts_checkboxes:
+            if save_opt.description == "Reconstruction":
+                save_opt.value = True
         self.make_tab()
 
     def init_widgets(self):
@@ -785,16 +720,13 @@ class Recon(AnalysisBase):
     # Batch size
     def update_num_batches(self, change):
         self.num_batches = change.new
-        self.metadata.set_metadata(self)
 
     # Number of iterations
     def update_num_iter(self, change):
         self.num_iter = change.new
-        self.metadata.set_metadata(self)
 
     def run(self):
         self.metadata = Metadata_Recon()
-        self.metadata.set_metadata(self)
         self.analysis = RunRecon(self)
         self.result_after_viewer.create_app()
         self.analysis.projections.data = self.analysis.recon
@@ -807,92 +739,33 @@ class Recon(AnalysisBase):
         self.plot_result()
 
     def make_tab(self):
-
-        # -- Saving -----------------------------------------------------------
-        save_hbox = HBox(
-            self.save_opts_checkboxes,
-            layout=Layout(flex_wrap="wrap", justify_content="space-between"),
-        )
-
-        self.save_options_accordion = Accordion(
-            children=[save_hbox],
-            selected_index=None,
-            titles=("Save Options",),
-        )
-
-        # -- Methods ----------------------------------------------------------
-        tomopy_methods_hbox = HBox(
-            [
-                Label("Tomopy:", layout=Layout(width="200px", align_content="center")),
-                HBox(
-                    self.tomopy_methods_checkboxes,
-                    layout=widgets.Layout(flex_flow="row wrap"),
-                ),
-            ]
-        )
-        astra_methods_hbox = HBox(
-            [
-                Label("Astra:", layout=Layout(width="100px", align_content="center")),
-                HBox(
-                    self.astra_cuda_methods_checkboxes,
-                    layout=widgets.Layout(flex_flow="row wrap"),
-                ),
-            ]
-        )
-
-        recon_method_box = VBox(
-            [tomopy_methods_hbox, astra_methods_hbox],
-            layout=widgets.Layout(flex_flow="row wrap"),
-        )
-        self.methods_accordion = Accordion(
-            children=[recon_method_box], selected_index=None, titles=("Methods",)
-        )
-
-        # -- Box organization -------------------------------------------------
-
-        top_of_box_hb = HBox(
-            [self.open_accordions_button, self.Import.switch_data_buttons],
-            layout=Layout(
-                width="auto",
-                justify_content="flex-start",
-            ),
-        )
-        start_button_hb = HBox(
-            [self.start_button], layout=Layout(width="auto", justify_content="center")
-        )
-
+        self.containerize()
         self.options_accordion = Accordion(
             children=[
-                HBox(
+                VBox(
                     [
+                        HBox([self.use_multiple_centers_checkbox,self.center_textbox]),
                         self.num_iterations_textbox,
-                        self.center_textbox,
-                        self.use_multiple_centers_checkbox,
-                        self.padding_x_textbox,
-                        self.padding_y_textbox,
-                        self.downsample_checkbox,
-                        self.ds_factor_dropdown,
+                        HBox([self.padding_x_textbox,self.padding_y_textbox]),
+                        HBox([self.downsample_checkbox,self.ds_factor_dropdown]),
                         self.extra_options_textbox,
                     ],
-                    layout=Layout(
-                        flex_flow="row wrap", justify_content="space-between"
-                    ),
                 ),
             ],
             selected_index=None,
-            titles=("Alignment Options",),
+            titles=("Reconstruction Options",),
         )
 
         self.tab = VBox(
             children=[
-                top_of_box_hb,
+                self.top_of_box_hb,
                 self.viewer_accordion,
                 # TODO: implement load metadata again
                 # self.load_metadata_button,
-                self.methods_accordion,
-                self.save_options_accordion,
-                self.options_accordion,
-                start_button_hb,
+                HBox([self.methods_accordion,
+                    self.options_accordion,
+                    self.save_options_accordion]), 
+                self.start_button_hb,
                 self.plot_output1,
             ]
         )
@@ -907,6 +780,6 @@ class MetaCheckbox:
 
         def create_opt_dict_on_check(change):
             dictionary[description] = change.new
-            obj.metadata.set_metadata(obj)  # obj needs a Metadata instance
+            # obj.metadata.set_metadata(obj)  # obj needs a Metadata instance
 
         self.checkbox.observe(create_opt_dict_on_check, names="value")
