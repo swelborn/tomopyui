@@ -1240,7 +1240,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         """
         Grabs the angles from the file names in scan_info.
         """
-        reg_exp = re.compile("_[+-]\d\d\d.\d\d")
+        reg_exp = re.compile("_[+-0]\d\d\d.\d\d")
         self.angles_deg = map(
             reg_exp.findall, [str(file) for file in self.data_filenames]
         )
@@ -2369,28 +2369,49 @@ class Metadata_SSRL62C_Raw(Metadata):
     def metadata_to_DataFrame(self):
 
         # change metadata keys to be better looking
-        keys = {
-            "ENERGY": "Energy",
-            "TOMO": "Tomo",
-            "MOSAIC": "Mosaic",
-            "MULTIEXPOSURE": "MultiExposure",
-            "NREPEATSCAN": "Repeat Scan",
-            "WAITNSECS": "Wait (s)",
-            "NEXPOSURES": "Num. Exposures",
-            "AVERAGEONTHEFLY": "Average On the Fly",
-            "IMAGESPERPROJECTION": "Images/Projection",
-            "REFNEXPOSURES": "Num. Ref Exposures",
-            "REFEVERYEXPOSURES": "Ref/Num Exposures",
-            "REFABBA": "Order",
-            "REFDESPECKLEAVERAGE": "Ref Despeckle Avg",
-            "APPLYREF": "Ref Applied",
-            "MOSAICUP": "Up",
-            "MOSAICDOWN": "Down",
-            "MOSAICLEFT": "Left",
-            "MOSAICRIGHT": "Right",
-            "MOSAICOVERLAP": "Overlap (%)",
-            "MOSAICCENTRALTILE": "Central Tile",
-        }
+        if self.metadata["scan_info"]["VERSION"] == 1:
+            keys = {
+                "ENERGY": "Energy",
+                "TOMO": "Tomo",
+                "MOSAIC": "Mosaic",
+                "MULTIEXPOSURE": "MultiExposure",
+                "NREPEATSCAN": "Repeat Scan",
+                "WAITNSECS": "Wait (s)",
+                "NEXPOSURES": "Num. Exposures",
+                "AVERAGEONTHEFLY": "Average On the Fly",
+                "REFNEXPOSURES": "Num. Ref Exposures",
+                "REFEVERYEXPOSURES": "Ref/Num Exposures",
+                "REFABBA": "Order",
+                "MOSAICUP": "Up",
+                "MOSAICDOWN": "Down",
+                "MOSAICLEFT": "Left",
+                "MOSAICRIGHT": "Right",
+                "MOSAICOVERLAP": "Overlap (%)",
+                "MOSAICCENTRALTILE": "Central Tile",
+            }
+        if self.metadata["scan_info"]["VERSION"] == 2:
+            keys = {
+                "ENERGY": "Energy",
+                "TOMO": "Tomo",
+                "MOSAIC": "Mosaic",
+                "MULTIEXPOSURE": "MultiExposure",
+                "NREPEATSCAN": "Repeat Scan",
+                "WAITNSECS": "Wait (s)",
+                "NEXPOSURES": "Num. Exposures",
+                "AVERAGEONTHEFLY": "Average On the Fly",
+                "IMAGESPERPROJECTION": "Images/Projection",
+                "REFNEXPOSURES": "Num. Ref Exposures",
+                "REFEVERYEXPOSURES": "Ref/Num Exposures",
+                "REFABBA": "Order",
+                "REFDESPECKLEAVERAGE": "Ref Despeckle Avg",
+                "APPLYREF": "Ref Applied",
+                "MOSAICUP": "Up",
+                "MOSAICDOWN": "Down",
+                "MOSAICLEFT": "Left",
+                "MOSAICRIGHT": "Right",
+                "MOSAICOVERLAP": "Overlap (%)",
+                "MOSAICCENTRALTILE": "Central Tile",
+            }
         m = {keys[key]: self.metadata["scan_info"][key] for key in keys}
 
         if m["Order"] == 0:
@@ -2401,17 +2422,32 @@ class Metadata_SSRL62C_Raw(Metadata):
         # create headers and data for table
         middle_headers = []
         middle_headers.append(["Energy", "Tomo", "Mosaic", "MultiExposure"])
-        middle_headers.append(
-            [
-                "Repeat Scan",
-                "Wait (s)",
-                "Num. Exposures",
-                "Images/Projection",
-            ]
-        )
-        middle_headers.append(
-            ["Num. Ref Exposures", "Ref/Num Exposures", "Order", "Ref Despeckle Avg"]
-        )
+        if self.metadata["scan_info"]["VERSION"] == 1:
+            middle_headers.append(
+                [
+                    "Repeat Scan",
+                    "Wait (s)",
+                    "Num. Exposures",
+                ]
+            )
+            middle_headers.append(["Num. Ref Exposures", "Ref/Num Exposures", "Order"])
+        if self.metadata["scan_info"]["VERSION"] == 2:
+            middle_headers.append(
+                [
+                    "Repeat Scan",
+                    "Wait (s)",
+                    "Num. Exposures",
+                    "Images/Projection",
+                ]
+            )
+            middle_headers.append(
+                [
+                    "Num. Ref Exposures",
+                    "Ref/Num Exposures",
+                    "Order",
+                    "Ref Despeckle Avg",
+                ]
+            )
         middle_headers.append(["Up", "Down", "Left", "Right"])
         top_headers = []
         top_headers.append(["Layers"])
