@@ -896,7 +896,7 @@ class BqImViewer_Center_Recon(BqImViewer_Projections_Parent):
         self.image_index_slider.max = self.images.shape[0] - 1
         self.image_index_slider.value = int(self.images.shape[0] / 2)
         self.plotted_image.image = self.images[self.image_index_slider.value]
-        self.hist.refresh_histogram(self.images)
+        self.hist.refresh_histogram()
         self.hist.rm_high_low_int(None)
 
 
@@ -1071,7 +1071,7 @@ class BqImHist:
             fig_margin=dict(top=0, bottom=0, left=0, right=0),
         )
         self.precomputed_hist = None
-        self.refresh_histogram(self.viewer.images)
+        self.refresh_histogram()
         self.fig.layout.width = "100px"
         self.fig.layout.height = viewer.fig.layout.height
         self.copied_hist = False
@@ -1113,7 +1113,6 @@ class BqImHist:
 
         else:
             self.refresh_histogram_without_precompute()
-            print("finished without precomputed")
         self.selector = bq.interacts.BrushIntervalSelector(
             orientation="vertical", scale=self.x_sc
         )
@@ -1121,7 +1120,7 @@ class BqImHist:
         self.selector.observe(self.update_crange_selector, "selected")
         self.fig.marks = [self.hist]
         self.fig.interaction = self.selector
-        self.selector.selected = [self.init_vmin, self.init_vmax]
+        # self.selector.selected = [self.init_vmin, self.init_vmax]
         self.rm_high_low_int(None)
 
     def refresh_histogram_from_hdf(self):
