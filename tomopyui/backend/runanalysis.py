@@ -19,6 +19,7 @@ from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Chil
 from tomopy.recon import algorithm as tomopy_algorithm
 from tomopy.misc.corr import circ_mask
 from tomopy.recon import wrappers
+from scipy.stats import linregress
 
 # TODO: make this global
 from tomopyui.widgets.helpers import import_module_set_env
@@ -117,13 +118,15 @@ class RunAnalysisBase(ABC):
 
     def init_projections(self):
         self.px_range = (self.px_range_x, self.px_range_y)
-        if self.downsample:
-            pass
-        else:
+        if not self.downsample:
             self.pyramid_level = -1
         self.ds_factor = np.power(2, int(self.pyramid_level + 1))  # will be 1 for no ds
-        self.px_range_x_ds = [int(x / self.ds_factor) for x in self.px_range_x]
-        self.px_range_y_ds = [int(y / self.ds_factor) for y in self.px_range_y]
+        self.px_range_x_ds = [
+            int(np.around(x / self.ds_factor)) for x in self.px_range_x
+        ]
+        self.px_range_y_ds = [
+            int(np.around(y / self.ds_factor)) for y in self.px_range_y
+        ]
         self.px_range_ds = (self.px_range_x_ds, self.px_range_y_ds)
         if self.pyramid_level == -1:
             self.projections.get_parent_data_from_hdf(self.px_range_ds)
@@ -135,21 +138,32 @@ class RunAnalysisBase(ABC):
             self.prjs = self.projections.data_ds
 
         # Pad
-        self.pad_ds = tuple([int(x / self.ds_factor) for x in self.pad])
+        self.pad_ds = tuple([int(np.around(x / self.ds_factor)) for x in self.pad])
+
         self.prjs = pad_projections(self.prjs, self.pad_ds)
 
         # center of rotation change to fit new range
         if not self.use_multiple_centers:
             self.center = self.center / self.ds_factor
-            self.center = self.center - self.px_range_x_ds[0]
-            self.center = self.center + self.pad_ds[0]
+            self.center = self.center - self.px_range_x_ds[0] + self.pad_ds[0]
         if self.use_multiple_centers:
-            self.center = []
-            for center in self.analysis_parent.Center.reg_centers:
-                center = center / self.ds_factor
-                center = center - self.px_range_x_ds[0]
-                center = center + self.pad_ds[0]
-                self.center.append(center)
+            # get centers for padded/downsampled data. just for the
+            # computation, not saved in metadata
+            centers_ds = [x[0] / self.ds_factor for x in self.Center.center_slice_list]
+            slices_ds = [
+                int(np.around(x[1] / self.ds_factor))
+                for x in self.Center.center_slice_list
+            ]
+            linreg = linregress(slices_ds, centers_ds)
+            m, b = linreg.slope, linreg.intercept
+            slices_pad = range(
+                self.px_range_y_ds[0] - self.pad_ds[1],
+                self.px_range_y_ds[1] + self.pad_ds[1],
+            )
+            self.center = [m * x + b for x in slices_pad]
+            self.center = [
+                c - self.px_range_x_ds[0] + self.pad_ds[0] for c in self.center
+            ]
 
     def _save_data_after(self):
         self.make_wd_subdir()
