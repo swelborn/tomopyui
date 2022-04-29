@@ -3629,7 +3629,11 @@ class Metadata_Align(Metadata):
         self.metadata["opts"]["ds_factor"] = Align.ds_factor
         self.metadata["opts"]["pyramid_level"] = Align.pyramid_level
         self.metadata["opts"]["num_iter"] = Align.num_iter
-        self.metadata["opts"]["center"] = Align.center
+        self.metadata["use_multiple_centers"] = Align.use_multiple_centers
+        if self.metadata["use_multiple_centers"] and Align.Center.reg is not None:
+            self.metadata["opts"]["center"] = Align.Center.reg_centers
+        else:
+            self.metadata["opts"]["center"] = Align.center
         self.metadata["opts"]["pad"] = (
             Align.padding_x,
             Align.padding_y,
@@ -3670,9 +3674,15 @@ class Metadata_Align(Metadata):
             title,
         ]
         metadata_frame["Headers"] = list(self.metadata["opts"].keys())
+        center_idx = [
+            i for i, key in enumerate(metadata_frame["Headers"]) if key == "Center"
+        ][0]
         metadata_frame["Headers"] = [
-            metadata_frame["Headers"][i].replace("_", " ").title().replace("Num", "No.")
-            for i in range(len(metadata_frame["Headers"]))
+            metadata_frame["Headers"][key]
+            .replace("_", " ")
+            .title()
+            .replace("Num", "No.")
+            for key in metadata_frame["Headers"]
         ]
         metadata_frame["Headers"] = metadata_frame["Headers"] + extra_headers
         extra_values = [
@@ -3686,6 +3696,9 @@ class Metadata_Align(Metadata):
         metadata_frame["Values"] = [
             str(self.metadata["opts"][key]) for key in self.metadata["opts"]
         ] + extra_values
+        if self.metadata["use_multiple_centers"]:
+            metadata_frame["Values"][center_idx] = "Multiple"
+        metadata_frame[""]
         metadata_frame = {
             metadata_frame["Headers"][i]: metadata_frame["Values"][i]
             for i in range(len(metadata_frame["Headers"]))
@@ -3725,6 +3738,7 @@ class Metadata_Align(Metadata):
         Align.extra_options = self.metadata["opts"]["extra_options"]
         Align.methods_opts = self.metadata["methods"]
         Align.save_opts = self.metadata["save_opts"]
+        Align.use_multiple_centers = self.metadata["use_multiple_centers"]
         if "px_range_x" in self.metadata.keys():
             Align.px_range_x = self.metadata["px_range_x"]
             Align.px_range_y = self.metadata["px_range_y"]
