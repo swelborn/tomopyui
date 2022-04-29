@@ -3732,8 +3732,9 @@ class Metadata_Align(Metadata):
         metadata_frame["Values"] = [
             str(self.metadata["opts"][key]) for key in self.metadata["opts"] if key != "pyramid_level"
         ] + extra_values
-        if self.metadata["use_multiple_centers"]:
-            metadata_frame["Values"][center_idx] = "Multiple"
+        if "use_multiple_centers" in self.metadata:
+            if self.metadata["use_multiple_centers"]:
+                metadata_frame["Values"][center_idx] = "Multiple"
         metadata_frame = {
             metadata_frame["Headers"][i]: metadata_frame["Values"][i]
             for i in range(len(metadata_frame["Headers"]))
@@ -3773,7 +3774,10 @@ class Metadata_Align(Metadata):
         Align.extra_options = self.metadata["opts"]["extra_options"]
         Align.methods_opts = self.metadata["methods"]
         Align.save_opts = self.metadata["save_opts"]
-        Align.use_multiple_centers = self.metadata["use_multiple_centers"]
+        if "use_multiple_centers" not in self.metadata:
+            Align.use_multiple_centers = False
+        else:
+            Align.use_multiple_centers = self.metadata["use_multiple_centers"]
         if "px_range_x" in self.metadata.keys():
             Align.px_range_x = self.metadata["px_range_x"]
             Align.px_range_y = self.metadata["px_range_y"]
