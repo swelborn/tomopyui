@@ -85,7 +85,7 @@ class RunAnalysisBase(ABC):
         self.metadata.save_metadata()
 
     def save_data_before_analysis(self):
-        if self.metadata.metadata["save_opts"]["tomo_before"]:
+        if self.metadata.metadata["save_opts"]["Projections Before Alignment"]:
             save_str = "projections_before_" + self.savedir_suffix
             save_str_tif = "projections_before_" + self.savedir_suffix + ".tif"
             tf.imwrite(
@@ -139,7 +139,6 @@ class RunAnalysisBase(ABC):
 
         # Pad
         self.pad_ds = tuple([int(np.around(x / self.ds_factor)) for x in self.pad])
-
         self.prjs = pad_projections(self.prjs, self.pad_ds)
 
         # center of rotation change to fit new range
@@ -149,21 +148,28 @@ class RunAnalysisBase(ABC):
         if self.use_multiple_centers:
             # get centers for padded/downsampled data. just for the
             # computation, not saved in metadata
-            centers_ds = [x[0] / self.ds_factor for x in self.Center.center_slice_list]
+            centers_ds = [x[0] / self.ds_factor for x in self.analysis_parent.Center.center_slice_list]
             slices_ds = [
                 int(np.around(x[1] / self.ds_factor))
-                for x in self.Center.center_slice_list
+                for x in self.analysis_parent.Center.center_slice_list
             ]
-            linreg = linregress(slices_ds, centers_ds)
-            m, b = linreg.slope, linreg.intercept
-            slices_pad = range(
-                self.px_range_y_ds[0] - self.pad_ds[1],
-                self.px_range_y_ds[1] + self.pad_ds[1],
-            )
-            self.center = [m * x + b for x in slices_pad]
-            self.center = [
-                c - self.px_range_x_ds[0] + self.pad_ds[0] for c in self.center
-            ]
+            try:
+                linreg = linregress(slices_ds, centers_ds)
+            except ValueError:
+                self.center = self.center / self.ds_factor
+                self.center = self.center - self.px_range_x_ds[0] + self.pad_ds[0]
+                self.metadata.metadata["use_multiple_centers"] = False
+                self.use_multiple_centers = False
+            else:
+                m, b = linreg.slope, linreg.intercept
+                slices_pad = range(
+                    self.px_range_y_ds[0] - self.pad_ds[1],
+                    self.px_range_y_ds[1] + self.pad_ds[1],
+                )
+                self.center = [m * x + b for x in slices_pad]
+                self.center = [
+                    c - self.px_range_x_ds[0] + self.pad_ds[0] for c in self.center
+                ]
 
     def _save_data_after(self):
         self.make_wd_subdir()
@@ -201,9 +207,8 @@ class RunRecon(RunAnalysisBase):
 
     def save_data_after(self):
         super()._save_data_after()
-        if self.metadata.metadata["save_opts"]["recon"]:
-            if self.metadata.metadata["save_opts"]["tiff"]:
-                tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
+        if self.metadata.metadata["save_opts"]["Reconstruction"]:
+            tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
         self.analysis_parent.run_list.append({self.wd_subdir: self.metadata})
         self.metadata.save_metadata()
 
@@ -283,9 +288,12 @@ class RunRecon(RunAnalysisBase):
         self.recon = circ_mask(self.recon, axis=0)
         return self
 
+    def save_data_before_analysis(self):
+        pass
+
     def run(self):
-        metadata_list = super().make_metadata_list()
         super().init_projections()
+        metadata_list = super().make_metadata_list()
         for i in range(len(metadata_list)):
             self.metadata = metadata_list[i]
             tic = time.perf_counter()
@@ -383,20 +391,25 @@ class RunAlign(RunAnalysisBase):
         self.metadata.metadata["sx"] = list(self.sx)
         self.metadata.metadata["sy"] = list(self.sy)
         self.metadata.metadata["convergence"] = list(self.conv)
-        if self.metadata.metadata["save_opts"]["tomo_after"]:
+        if self.metadata.metadata["save_opts"]["Projections After Alignment"]:
             if self.metadata.metadata["save_opts"]["hdf"]:
                 self.projections.filepath = (
                     self.wd_subdir / "normalized_projections.hdf5"
                 )
                 data_dict = {self.projections.hdf_key_norm_proj: self.projections.data}
                 self.projections.dask_data_to_h5(data_dict)
-            if self.metadata.metadata["save_opts"]["tiff"]:
+            elif self.metadata.metadata["save_opts"]["tiff"]:
                 tf.imwrite(
                     self.wd_subdir / "normalized_projections.tif",
                     self.projections.data,
                 )
-        if self.metadata.metadata["save_opts"]["recon"] and self.current_align_is_cuda:
-
+            else:
+                self.projections.filepath = (
+                    self.wd_subdir / "normalized_projections.hdf5"
+                )
+                data_dict = {self.projections.hdf_key_norm_proj: self.projections.data}
+                self.projections.dask_data_to_h5(data_dict)    
+        if self.metadata.metadata["save_opts"]["Reconstruction"] and self.current_align_is_cuda:
             if self.metadata.metadata["save_opts"]["tiff"]:
                 tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
 

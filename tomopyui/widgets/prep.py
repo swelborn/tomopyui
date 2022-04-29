@@ -546,7 +546,7 @@ class Prep(ABC):
         self.imported_viewer.plot(self.projections, no_check=True)
         self.altered_projections.parent_projections = self.projections
         self.altered_projections.copy_from_parent()
-        # self.altered_viewer.plot(self.altered_projections, )
+        self.altered_viewer.plot(self.projections, no_check=True)
 
     def set_observes(self):
 
@@ -759,17 +759,6 @@ class Prep(ABC):
             selected_index=None,
             titles=("Upload shifts from prior alignments",),
         )
-
-        # progress_hbox = HBox(
-        #     [
-        #         self.progress_total,
-        #         self.progress_reprj,
-        #         self.progress_phase_cross_corr,
-        #         self.progress_shifting,
-        #     ],
-        #     layout=Layout(justify_content="center"),
-        # )
-
         self.tab = VBox(
             children=[
                 self.top_of_box_hb,
