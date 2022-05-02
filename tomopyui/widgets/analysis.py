@@ -16,6 +16,12 @@ from tomopyui.backend.io import (
     Metadata_Align,
     Metadata_Recon,
 )
+from tomopyui.widgets.helpers import (
+    ReactiveTextButton,
+    ReactiveIconButton,
+    SwitchOffOnIconButton,
+    ImportButton,
+)
 
 
 class AnalysisBase(ABC):
@@ -564,6 +570,15 @@ class Align(AnalysisBase):
         )
         self.save_opts_checkboxes.append(self.copy_parent_hists_checkbox)
         self.save_opts_checkboxes.append(self.shift_data_after_checkbox)
+        # Use this alignment button
+        self.save_after_alignment = False
+        self.use_this_alignment_button = ReactiveTextButton(
+            self.use_this_alignment,
+            "Do you want to use this alignment for another alignment or reconstruction?",
+            "Downsampling and updating plots.",
+            "This alignment has been loaded into the app.",
+        )
+        self.use_this_alignment_button.button.disabled=True
 
     def set_observes(self):
         super().set_observes()
@@ -577,21 +592,22 @@ class Align(AnalysisBase):
         # Shift dataset after
         self.shift_data_after_checkbox.observe(self.update_shift_data, names="value")
 
+    def use_this_alignment(self):
+        if self.analysis.saved_as_hdf:
+            pass
+        else:
+            self.save_after_alignment = True
+            self.analysis.skip_mk_wd_subdir = True
+            self.analysis.save_data_after()
+            self.save_after_alignment = False
+        self.Import.prenorm_uploader.quick_path_search.value = str(self.analysis.projections.filepath)
+        self.Import.prenorm_uploader.import_data()
+        self.Import.use_prenorm_button.run_callback()
+        self.start_button_hb.children = [self.start_button]
+
     # Upsampling
     def update_upsample_factor(self, change):
         self.upsample_factor = change.new
-
-    # TODO: implement load metadata
-    # def set_widgets_from_load_metadata(self):
-    #     super().set_widgets_from_load_metadata()
-    #     # -- Upsample factor --------------------------------------------------
-    #     self.upsample_factor_textbox.value = self.upsample_factor
-
-    # TODO: implement load metadata
-    # def load_metadata(self):
-    #     self.metadata = load_metadata(
-    #         self.Import.filedir_align, self.Import.filename_align
-    #     )
 
     def update_num_batches(self, change):
         self.num_batches = change.new
@@ -608,6 +624,7 @@ class Align(AnalysisBase):
         self.subset_y = self.altered_viewer.subset_y
 
     def run(self):
+        self.use_this_alignment_button.disable()
         self.metadata = Metadata_Align()
         self.metadata.set_metadata(self)
         self.analysis = RunAlign(self)
@@ -620,6 +637,8 @@ class Align(AnalysisBase):
         self.result_after_viewer.link_plotted_projections_button.disabled = False
         self.result_after_viewer.plot(self.analysis.projections, ds=False)
         self.plot_result()
+        self.start_button_hb.children = [self.start_button, self.use_this_alignment_button.button]
+        self.use_this_alignment_button.enable()
 
     def make_tab(self):
 
