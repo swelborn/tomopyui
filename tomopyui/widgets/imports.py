@@ -941,6 +941,7 @@ class PrenormUploader(UploaderBase):
                 + " plotting complete in "
                 + f"~{self.projections.metadata.metadata['import_time']:.0f}s."
             )
+        self.Import.use_prenorm_button.run_callback()
 
     def create_app(self):
         self.app = HBox(

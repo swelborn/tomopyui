@@ -42,6 +42,7 @@ class RunAnalysisBase(ABC):
 
     def __init__(self, analysis_parent):
         self.recon = None
+        self.skip_mk_wd_subdir = False
         self.analysis_parent = analysis_parent
         self.parent_projections = analysis_parent.projections
         self.projections = Projections_Child(analysis_parent.projections)
@@ -172,7 +173,8 @@ class RunAnalysisBase(ABC):
                 ]
 
     def _save_data_after(self):
-        self.make_wd_subdir()
+        if not self.skip_mk_wd_subdir:
+            self.make_wd_subdir()
         self.metadata.filedir = self.wd_subdir
 
     def make_wd_subdir(self):
@@ -213,7 +215,6 @@ class RunRecon(RunAnalysisBase):
         self.metadata.save_metadata()
 
     def reconstruct(self):
-
         # ensure it only runs on 1 thread for CUDA
         os.environ["TOMOPY_PYTHON_THREADS"] = "1"
         method_str = list(self.metadata.metadata["methods"].keys())[0]
@@ -391,13 +392,15 @@ class RunAlign(RunAnalysisBase):
         self.metadata.metadata["sx"] = list(self.sx)
         self.metadata.metadata["sy"] = list(self.sy)
         self.metadata.metadata["convergence"] = list(self.conv)
-        if self.metadata.metadata["save_opts"]["Projections After Alignment"]:
+        self.saved_as_hdf = False
+        if self.metadata.metadata["save_opts"]["Projections After Alignment"] or self.analysis_parent.save_after_alignment:
             if self.metadata.metadata["save_opts"]["hdf"]:
                 self.projections.filepath = (
                     self.wd_subdir / "normalized_projections.hdf5"
                 )
                 data_dict = {self.projections.hdf_key_norm_proj: self.projections.data}
                 self.projections.dask_data_to_h5(data_dict)
+                self.saved_as_hdf = True
             elif self.metadata.metadata["save_opts"]["tiff"]:
                 tf.imwrite(
                     self.wd_subdir / "normalized_projections.tif",
@@ -414,6 +417,7 @@ class RunAlign(RunAnalysisBase):
                 tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
 
         self.analysis_parent.run_list.append({str(self.wd_subdir.stem): self.metadata})
+        self.projections.metadata = self.metadata
         self.metadata.save_metadata()
 
     def run(self):
