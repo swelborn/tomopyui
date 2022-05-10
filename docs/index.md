@@ -4,7 +4,7 @@
 :hide-code:
 
 from ipywidgets import Video, HBox, Layout
-Video.from_file("_static/videos/front_page.mp4", autoplay=False)
+Video.from_file("_static/videos/alignment.mp4", autoplay=False)
 ```
 
 Have you ever wondered to yourself one of the following:

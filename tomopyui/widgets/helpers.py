@@ -205,6 +205,7 @@ class ReactiveButtonBase(ABC):
         disabled=False,
         layout=None,
         tooltip=None,
+        warning="That button click didn't work.",
     ):
         self.button = Button()
         self.callback = callback
@@ -222,6 +223,7 @@ class ReactiveButtonBase(ABC):
         self.layout = layout
         self.style = style
         self.tooltip = tooltip
+        self.warning = warning
         self.reset_state()
         self.button.on_click(self.run_callback)
 
@@ -245,6 +247,19 @@ class ReactiveButtonBase(ABC):
             self.disabled = True
             self.button.disabled = True
 
+    def disable(self):
+        self.reset_state()
+        self.button.disabled = True
+
+    def enable(self):
+        self.reset_state()
+        self.button.disabled = False
+
+    def warning(self, *args):
+        self.button.button_style = self.button_style_warning
+        self.button.description = self.warning
+        self.button.icon = "exclamation-triangle"
+
     @abstractmethod
     def run_callback(self, *args):
         ...
@@ -257,6 +272,7 @@ class ReactiveTextButton(ReactiveButtonBase):
         description,
         description_during,
         description_after,
+        warning="That button didn't work.",
         layout=Layout(width="auto", height="auto", align_items="stretch"),
     ):
         super().__init__(
@@ -265,6 +281,7 @@ class ReactiveTextButton(ReactiveButtonBase):
             description_during=description_during,
             description_after=description_after,
             layout=layout,
+            warning=warning,
         )
 
     def run_callback(self, *args):
@@ -278,14 +295,14 @@ class ReactiveTextButton(ReactiveButtonBase):
 
 
 class ReactiveIconButton(ReactiveButtonBase):
-    def __init__(self, callback, icon, icon_during, icon_after, skip_during):
-        super().__init__(
-            callback, icon=icon, icon_during=icon_during, icon_after=icon_after
-        )
+    def __init__(self, callback, icon, tooltip, skip_during=False, *args, **kwargs):
+        self.skip_during = skip_during
+        super().__init__(callback, icon=icon, tooltip=tooltip, *args, **kwargs)
 
     def run_callback(self, *args):
-        self.button.button_style = self.button_style_during
-        self.button.icon = self.icon_during
+        if not self.skip_during:
+            self.button.button_style = self.button_style_during
+            self.button.icon = self.icon_during
         self.callback()
         self.button.button_style = self.button_style_after
         self.button.icon = self.icon_after
@@ -344,12 +361,6 @@ class ImportButton(ReactiveButtonBase):
             self.button.button_style = "info"
         else:
             self.button.button_style = ""
-
-    def disable(self):
-        self.disabled = True
-        self.button.button_style = self.button_style
-        self.button.disabled = True
-        self.button.icon = self.icon
 
     def enable(self):
         self.disabled = False

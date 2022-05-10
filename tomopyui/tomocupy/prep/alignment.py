@@ -19,44 +19,42 @@ from ipywidgets import *
 from tomopyui.backend.util.padding import *
 
 
-
-def align_joint(TomoAlign):
+def align_joint(RunAlign):
 
     # ensure it only runs on 1 thread for CUDA
     os.environ["TOMOPY_PYTHON_THREADS"] = "1"
 
     # Initialize variables from metadata for ease of reading:
-    init_tomo_shape = TomoAlign.prjs.shape
-    num_iter = TomoAlign.num_iter
-    downsample = TomoAlign.downsample
-    pad = TomoAlign.pad
-    pad_ds = TomoAlign.pad_ds
-    method_str = list(TomoAlign.metadata.metadata["methods"].keys())[0]
+    init_tomo_shape = RunAlign.prjs.shape
+    num_iter = RunAlign.num_iter
+    downsample = RunAlign.downsample
+    pad = RunAlign.pad
+    pad_ds = RunAlign.pad_ds
+    method_str = list(RunAlign.metadata.metadata["methods"].keys())[0]
     if method_str == "MLEM_CUDA":
         method_str = "EM_CUDA"
-    upsample_factor = TomoAlign.upsample_factor
-    num_batches = TomoAlign.num_batches
-    center = TomoAlign.center
-    pre_alignment_iters = TomoAlign.pre_alignment_iters
+    upsample_factor = RunAlign.upsample_factor
+    num_batches = RunAlign.num_batches
+    center = RunAlign.center
+    pre_alignment_iters = RunAlign.pre_alignment_iters
     projection_num = 50  # default to 50 now, TODO: can make an option
 
     # Needs scaling for skimage float operations
-    TomoAlign.prjs, scl = scale_tomo(TomoAlign.prjs)
+    RunAlign.prjs, scl = scale_tomo(RunAlign.prjs)
 
     # Initialization of reconstruction dataset
-    tomo_shape = TomoAlign.prjs.shape
-    TomoAlign.recon = np.mean(TomoAlign.prjs) * np.empty(
+    tomo_shape = RunAlign.prjs.shape
+    RunAlign.recon = np.mean(RunAlign.prjs) * np.empty(
         (tomo_shape[1], tomo_shape[2], tomo_shape[2]), dtype=np.float32
     )
 
     # Initialize shift/convergence
-    TomoAlign.sx = np.zeros((tomo_shape[0]))
-    TomoAlign.sy = np.zeros((tomo_shape[0]))
-    TomoAlign.conv = np.zeros((num_iter))
-    subset_x = TomoAlign.subset_x
-    subset_y = TomoAlign.subset_y
-    subset_x = [int(x) + pad_ds[0] for x in subset_x]
-    subset_y = [int(y) + pad_ds[1] for y in subset_y]
+    RunAlign.sx = np.zeros((tomo_shape[0]))
+    RunAlign.sy = np.zeros((tomo_shape[0]))
+    RunAlign.conv = np.zeros((num_iter))
+    subset_x = RunAlign.subset_x
+    subset_y = RunAlign.subset_y
+
     # Initialize projection images plot
     scale_x = bq.LinearScale(min=0, max=1)
     scale_y = bq.LinearScale(min=1, max=0)
@@ -69,18 +67,18 @@ def align_joint(TomoAlign):
         "x": scale_x,
         "y": scale_y,
         "image": bq.ColorScale(
-            min=float(np.min(TomoAlign.prjs[projection_num])),
-            max=float(np.max(TomoAlign.prjs[projection_num])),
+            min=float(np.min(RunAlign.prjs[projection_num])),
+            max=float(np.max(RunAlign.prjs[projection_num])),
             scheme="viridis",
         ),
     }
 
     image_projection = ImageGL(
-        image=TomoAlign.prjs[projection_num],
+        image=RunAlign.prjs[projection_num],
         scales=scales_image,
     )
     image_simulated = ImageGL(
-        image=np.zeros_like(TomoAlign.prjs[projection_num]),
+        image=np.zeros_like(RunAlign.prjs[projection_num]),
         scales=scales_image,
     )
 
@@ -92,8 +90,8 @@ def align_joint(TomoAlign):
     simulated_fig.layout.width = "600px"
     simulated_fig.layout.height = "600px"
     simulated_fig.title = f"Re-projected Image {50}"
-    with TomoAlign.plot_output1:
-        TomoAlign.plot_output1.clear_output(wait=True)
+    with RunAlign.plot_output1:
+        RunAlign.plot_output1.clear_output(wait=True)
         display(
             HBox(
                 [projection_fig, simulated_fig],
@@ -108,8 +106,8 @@ def align_joint(TomoAlign):
     # Initialize Sx, Sy plot
     xs = bq.LinearScale()
     ys = bq.LinearScale()
-    x = range(TomoAlign.prjs.shape[0])
-    y = [TomoAlign.sx, TomoAlign.sy]
+    x = range(RunAlign.prjs.shape[0])
+    y = [RunAlign.sx, RunAlign.sy]
     line = bq.Lines(
         x=x,
         y=y,
@@ -133,7 +131,7 @@ def align_joint(TomoAlign):
     xs_conv = bq.LinearScale(min=0)
     ys_conv = bq.LinearScale()
     x_conv = [0]
-    y_conv = [TomoAlign.conv[0]]
+    y_conv = [RunAlign.conv[0]]
     line_conv = bq.Lines(
         x=x_conv,
         y=y_conv,
@@ -155,8 +153,8 @@ def align_joint(TomoAlign):
         marks=[line_conv], axes=[xax_conv, yax_conv], animation_duration=1000
     )
     fig_conv.layout.width = "600px"
-    with TomoAlign.plot_output2:
-        TomoAlign.plot_output2.clear_output()
+    with RunAlign.plot_output2:
+        RunAlign.plot_output2.clear_output()
         display(
             HBox(
                 [fig_SxSy, fig_conv],
@@ -177,31 +175,31 @@ def align_joint(TomoAlign):
             recon_iterations = 1
 
         # for progress bars
-        TomoAlign.Align.progress_shifting.value = 0
-        TomoAlign.Align.progress_reprj.value = 0
-        TomoAlign.Align.progress_phase_cross_corr.value = 0
-        _rec = TomoAlign.recon
+        RunAlign.analysis_parent.progress_shifting.value = 0
+        RunAlign.analysis_parent.progress_reprj.value = 0
+        RunAlign.analysis_parent.progress_phase_cross_corr.value = 0
+        _rec = RunAlign.recon
         # TODO: handle reconstruction-type parsing elsewhere
         if method_str == "SIRT_Plugin":
-            TomoAlign.recon = tomocupy_algorithm.recon_sirt_plugin(
-                TomoAlign.prjs,
-                TomoAlign.angles_rad,
+            RunAlign.recon = tomocupy_algorithm.recon_sirt_plugin(
+                RunAlign.prjs,
+                RunAlign.angles_rad,
                 num_iter=recon_iterations,
                 rec=_rec,
                 center=center,
             )
         elif method_str == "SIRT_3D":
-            TomoAlign.recon = tomocupy_algorithm.recon_sirt_3D(
-                TomoAlign.prjs,
-                TomoAlign.angles_rad,
+            RunAlign.recon = tomocupy_algorithm.recon_sirt_3D(
+                RunAlign.prjs,
+                RunAlign.angles_rad,
                 num_iter=recon_iterations,
                 rec=_rec,
                 center=center,
             )
         elif method_str == "CGLS_3D":
-            TomoAlign.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
-                TomoAlign.prjs,
-                TomoAlign.angles_rad,
+            RunAlign.recon = tomocupy_algorithm.recon_cgls_3D_allgpu(
+                RunAlign.prjs,
+                RunAlign.angles_rad,
                 num_iter=recon_iterations,
                 rec=_rec,
                 center=center,
@@ -217,18 +215,18 @@ def align_joint(TomoAlign):
             }
             kwargs["options"] = options
             if n == 0:
-                TomoAlign.recon = tomopy_algorithm.recon(
-                    TomoAlign.prjs,
-                    TomoAlign.angles_rad,
+                RunAlign.recon = tomopy_algorithm.recon(
+                    RunAlign.prjs,
+                    RunAlign.angles_rad,
                     algorithm=wrappers.astra,
                     center=center,
                     ncore=1,
                     **kwargs,
                 )
             else:
-                TomoAlign.recon = tomopy_algorithm.recon(
-                    TomoAlign.prjs,
-                    TomoAlign.angles_rad,
+                RunAlign.recon = tomopy_algorithm.recon(
+                    RunAlign.prjs,
+                    RunAlign.angles_rad,
                     algorithm=wrappers.astra,
                     init_recon=_rec,
                     center=center,
@@ -236,12 +234,12 @@ def align_joint(TomoAlign):
                     **kwargs,
                 )
 
-        TomoAlign.recon[np.isnan(TomoAlign.recon)] = 0
-        TomoAlign.Align.progress_total.value = n + 1
+        RunAlign.recon[np.isnan(RunAlign.recon)] = 0
+        RunAlign.analysis_parent.progress_total.value = n + 1
         # break up reconstruction into batches along z axis
-        TomoAlign.recon = np.array_split(TomoAlign.recon, num_batches, axis=0)
+        RunAlign.recon = np.array_split(RunAlign.recon, num_batches, axis=0)
         # may not need a copy.
-        _rec = TomoAlign.recon.copy()
+        _rec = RunAlign.recon.copy()
 
         # initialize simulated projection cpu array
         sim = []
@@ -254,8 +252,8 @@ def align_joint(TomoAlign):
             _rec,
             sim,
             center,
-            TomoAlign.angles_rad,
-            progress=TomoAlign.Align.progress_reprj,
+            RunAlign.angles_rad,
+            progress=RunAlign.analysis_parent.progress_reprj,
         )
         sim = np.concatenate(sim, axis=1)
         # only flip the simulated datasets if using normal tomopy algorithm
@@ -268,66 +266,65 @@ def align_joint(TomoAlign):
             pass
         else:
             sim = np.flip(sim, axis=0)
+            # sim = np.flip(sim, axis=2)
         # Cross correlation
         shift_cpu = []
         batch_cross_correlation(
-            TomoAlign.prjs,
+            RunAlign.prjs,
             sim,
             shift_cpu,
             num_batches,
             upsample_factor,
-            subset_correlation=TomoAlign.use_subset_correlation,
+            subset_correlation=RunAlign.use_subset_correlation,
             subset_x=subset_x,
             subset_y=subset_y,
             blur=True,
-            pad=TomoAlign.pad_ds,
-            progress=TomoAlign.Align.progress_phase_cross_corr,
+            pad=RunAlign.pad_ds,
+            progress=RunAlign.analysis_parent.progress_phase_cross_corr,
         )
-        TomoAlign.shift = np.concatenate(shift_cpu, axis=1)
+        RunAlign.shift = np.concatenate(shift_cpu, axis=1)
         # Shifting.
         (
-            TomoAlign.prjs,
-            TomoAlign.sx,
-            TomoAlign.sy,
-            TomoAlign.shift,
+            RunAlign.prjs,
+            RunAlign.sx,
+            RunAlign.sy,
+            RunAlign.shift,
             err,
-            TomoAlign.pad_ds,
+            RunAlign.pad_ds,
             center,
         ) = shift_prj_update_shift_cp(
-            TomoAlign.prjs,
-            TomoAlign.sx,
-            TomoAlign.sy,
-            TomoAlign.shift,
+            RunAlign.prjs,
+            RunAlign.sx,
+            RunAlign.sy,
+            RunAlign.shift,
             num_batches,
-            TomoAlign.pad_ds,
+            RunAlign.pad_ds,
             center,
-            downsample_factor=TomoAlign.downsample_factor,
-            progress=TomoAlign.Align.progress_shifting,
+            downsample_factor=RunAlign.ds_factor,
+            progress=RunAlign.analysis_parent.progress_shifting,
         )
-        TomoAlign.conv[n] = np.linalg.norm(err)
+        RunAlign.conv[n] = np.linalg.norm(err)
         # update images
-        image_projection.image = TomoAlign.prjs[projection_num]
+        image_projection.image = RunAlign.prjs[projection_num]
         image_simulated.image = sim[projection_num]
         # update plot lines
         line_conv.x = np.arange(0, n + 1)
-        line_conv.y = TomoAlign.conv[range(n + 1)]
-        line.y = [TomoAlign.sx, TomoAlign.sy]
-        TomoAlign.recon = np.concatenate(TomoAlign.recon, axis=0)
+        line_conv.y = RunAlign.conv[range(n + 1)]
+        line.y = [RunAlign.sx * RunAlign.ds_factor, RunAlign.sy * RunAlign.ds_factor]
+        RunAlign.recon = np.concatenate(RunAlign.recon, axis=0)
         mempool = cp.get_default_memory_pool()
         mempool.free_all_blocks()
 
     # Re-normalize data
-    TomoAlign.prjs *= scl
-    TomoAlign.recon = circ_mask(TomoAlign.recon, 0)
+    RunAlign.prjs *= scl
+    RunAlign.recon = circ_mask(RunAlign.recon, 0)
     if downsample:
-        TomoAlign.sx /= TomoAlign.downsample_factor
-        TomoAlign.sy /= TomoAlign.downsample_factor
-        TomoAlign.shift /= TomoAlign.downsample_factor
+        RunAlign.sx *= RunAlign.ds_factor
+        RunAlign.sy *= RunAlign.ds_factor
+        RunAlign.shift *= RunAlign.ds_factor
 
-    TomoAlign.pad = tuple(
-        [int(x / TomoAlign.downsample_factor) for x in TomoAlign.pad_ds]
-    )
-    return TomoAlign
+    RunAlign.pad = tuple([int(x * RunAlign.ds_factor) for x in RunAlign.pad_ds])
+    return RunAlign
 
 
 def simulate_projections(rec, sim, center, theta, progress=None):
@@ -403,8 +400,8 @@ def batch_cross_correlation(
             _sim_gpu = cp.array(_sim[batch], dtype=cp.float32)
 
         if median_filter:
-            _prj_gpu = ndi_cp.median_filter(_prj_gpu, size=(1,5,5))
-            _sim_gpu = ndi_cp.median_filter(_sim_gpu, size=(1,5,5))
+            _prj_gpu = ndi_cp.median_filter(_prj_gpu, size=(1, 5, 5))
+            _sim_gpu = ndi_cp.median_filter(_sim_gpu, size=(1, 5, 5))
         if mask_sim:
             _sim_gpu = cp.where(_prj_gpu < 1e-7, 0, _sim_gpu)
 

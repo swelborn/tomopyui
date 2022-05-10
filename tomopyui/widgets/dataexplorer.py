@@ -6,8 +6,8 @@ from ipywidgets import *
 from ipyfilechooser import FileChooser
 from abc import ABC, abstractmethod
 from tomopyui.widgets.view import (
-    BqImViewer_DataExplorer_BeforeAnalysis,
-    BqImViewer_DataExplorer_AfterAnalysis,
+    BqImViewer_Projections_Parent,
+    BqImViewer_Projections_Child,
 )
 from tomopyui.backend.io import Projections_Prenormalized
 from tomopyui.widgets.analysis import Align, Recon
@@ -52,11 +52,9 @@ class DataExplorerTab:
 class DataExplorerBase(ABC):
     def __init__(self):
         self.metadata = None
-        self.viewer_initial = BqImViewer_DataExplorer_BeforeAnalysis()
+        self.viewer_initial = BqImViewer_Projections_Parent()
         self.viewer_initial.create_app()
-        self.viewer_analyzed = BqImViewer_DataExplorer_AfterAnalysis(
-            self.viewer_initial
-        )
+        self.viewer_analyzed = BqImViewer_Projections_Child(self.viewer_initial)
         self.viewer_analyzed.create_app()
         self.projections = Projections_Prenormalized()
         self.analyzed_projections = Projections_Prenormalized()
@@ -157,13 +155,13 @@ class RecentAnalysisExplorer(DataExplorerBase):
                 metadata["angle_end"] = self.analysis.run_list[run][filedir][
                     "angle_end"
                 ]
-                self.imagestacks[0] = TomoData(metadata=metadata).prj_imgs
+                self.imagess[0] = TomoData(metadata=metadata).prj_imgs
                 metadata["filedir"] = self.analysis.run_list[run][filedir]["savedir"]
                 if self.obj.widget_type == "Align":
                     metadata["filename"] = "projections_after_alignment.tif"
                 else:
                     metadata["filename"] = "recon.tif"
-                self.imagestacks[1] = TomoData(metadata=metadata).prj_imgs
+                self.imagess[1] = TomoData(metadata=metadata).prj_imgs
                 self._create_image_app()
 
     def choose_file_to_plot(self, change):

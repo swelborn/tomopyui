@@ -7,13 +7,15 @@ import re
 import os
 import json
 import tifffile as tf
+import copy
+import h5py
 
 from ipyfilechooser import FileChooser
 from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
 from ipywidgets import *
 from abc import ABC, abstractmethod
 from tomopyui._sharedvars import *
-from tomopyui.widgets.view import BqImViewer_Import
+from tomopyui.widgets.view import BqImViewer_Projections_Parent
 from tomopyui.backend.io import (
     RawProjectionsHDF5_ALS832,
     RawProjectionsHDF5_APS,
@@ -26,6 +28,7 @@ from tomopyui.backend.io import (
     Metadata_APS_Raw,
     Metadata_APS_Prenorm,
     Metadata_General_Prenorm,
+    RawProjectionsTiff_SSRL62B,
 )
 from tomopyui.widgets import helpers
 from tomopyui.widgets.helpers import (
@@ -57,7 +60,7 @@ class ImportBase(ABC):
             "Raw/normalized data from Import tab in use for alignment/reconstruction.",
         )
         self.use_prenorm_button = ReactiveTextButton(
-            self.disable_raw,
+            self.enable_prenorm,
             "Click to use prenormalized data from the Import tab.",
             "Updating plots.",
             "Prenormalized data from Import tab in use for alignment/reconstruction.",
@@ -78,7 +81,7 @@ class ImportBase(ABC):
         self.log = logging.getLogger(__name__)
         self.log_handler, self.log = helpers.return_handler(self.log, logging_level=20)
 
-    def disable_raw(self, *args):
+    def enable_prenorm(self, *args):
         """
         Makes the prenorm_uploader projections the projections used throughout the app.
         Refreshes plots in the other tabs to match these.
@@ -86,14 +89,23 @@ class ImportBase(ABC):
         self.use_raw_button.reset_state()
         self.use_raw = False
         self.use_prenorm = True
+        if self.raw_uploader.projections.hdf_file is not None:
+            self.raw_uploader.projections._close_hdf_file()
         self.projections = self.prenorm_uploader.projections
+        if self.projections.hdf_file is not None:
+            self.projections._open_hdf_file_read_only()
+            self.projections._load_hdf_ds_data_into_memory()
+        # self.projections._check_downsampled_data()
         self.uploader = self.prenorm_uploader
+        self.Prep.projections = self.projections
+        self.Center.projections = self.projections
         self.Recon.projections = self.projections
         self.Align.projections = self.projections
         self.Recon.refresh_plots()
         self.Align.refresh_plots()
         self.Center.refresh_plots()
         self.Prep.refresh_plots()
+        self.projections._close_hdf_file()
 
     def enable_raw(self, *args):
         """
@@ -103,18 +115,88 @@ class ImportBase(ABC):
         self.use_prenorm_button.reset_state()
         self.use_raw = True
         self.use_prenorm = False
+        if self.prenorm_uploader.projections.hdf_file is not None:
+            self.prenorm_uploader.projections._close_hdf_file()
         self.projections = self.raw_uploader.projections
+        if self.projections.hdf_file is not None:
+            self.projections._open_hdf_file_read_only()
+            self.projections._load_hdf_ds_data_into_memory()
+        self.projections._check_downsampled_data()
         self.uploader = self.raw_uploader
+        self.Prep.projections = self.projections
+        self.Center.projections = self.projections
         self.Recon.projections = self.projections
         self.Align.projections = self.projections
         self.Recon.refresh_plots()
         self.Align.refresh_plots()
         self.Center.refresh_plots()
         self.Prep.refresh_plots()
+        self.projections._close_hdf_file()
 
     @abstractmethod
     def make_tab(self):
         ...
+
+
+class Import_SSRL62B(ImportBase):
+    """"""
+
+    def __init__(self):
+        super().__init__()
+        self.angles_from_filenames = True
+        self.raw_uploader = RawUploader_SSRL62B(self)
+        self.make_tab()
+
+    def make_tab(self):
+
+        self.switch_data_buttons = HBox(
+            [self.use_raw_button.button, self.use_prenorm_button.button],
+            layout=Layout(justify_content="center"),
+        )
+
+        # raw_import = HBox([item for sublist in raw_import for item in sublist])
+        self.raw_accordion = Accordion(
+            children=[
+                VBox(
+                    [
+                        HBox(
+                            [self.raw_uploader.metadata_table_output],
+                            layout=Layout(justify_content="center"),
+                        ),
+                        HBox(
+                            [self.raw_uploader.progress_output],
+                            layout=Layout(justify_content="center"),
+                        ),
+                        self.raw_uploader.app,
+                    ]
+                ),
+            ],
+            selected_index=None,
+            titles=("Import and Normalize Raw Data",),
+        )
+
+        self.prenorm_accordion = Accordion(
+            children=[
+                VBox(
+                    [
+                        HBox(
+                            [self.prenorm_uploader.metadata_table_output],
+                            layout=Layout(justify_content="center"),
+                        ),
+                        self.prenorm_uploader.app,
+                    ]
+                ),
+            ],
+            selected_index=None,
+            titles=("Import Prenormalized Data",),
+        )
+
+        self.tab = VBox(
+            [
+                self.raw_accordion,
+                self.prenorm_accordion,
+            ]
+        )
 
 
 class Import_SSRL62C(ImportBase):
@@ -298,7 +380,7 @@ class UploaderBase(ABC):
         )
 
         # Create data visualizer
-        self.viewer = BqImViewer_Import()
+        self.viewer = BqImViewer_Projections_Parent()
         self.viewer.create_app()
 
         # bool for whether or not metadata was imported
@@ -338,7 +420,6 @@ class UploaderBase(ABC):
         change
             This comes from the callback of the quick search textbox. change.new is
             a str. To inspect what else comes with change.new, you can edit this by
-            putting print(change) at the top of this function.
         """
         path = pathlib.Path(change.new)
         self.import_button.disable()
@@ -406,9 +487,9 @@ class PrenormUploader(UploaderBase):
         self.viewer.rectangle_selector_on = False  # TODO: Remove?
 
         # Quick search/filechooser will look for these types of files.
-        self.filetypes_to_look_for = [".json", ".npy", ".tif", ".tiff"]
+        self.filetypes_to_look_for = [".json", ".npy", ".tif", ".tiff", ".hdf5", ".h5"]
         self.files_not_found_str = ""
-        self.filetypes_to_look_for_images = [".npy", ".tif", ".tiff"]
+        self.filetypes_to_look_for_images = [".npy", ".tif", ".tiff", ".hdf5", ".h5"]
 
         # Create widgets for required data entry if the prenorm data does not have
         # proper metadata to run with the rest of the program. For ex, these boxes will
@@ -443,6 +524,7 @@ class PrenormUploader(UploaderBase):
             options=self.px_size_units_dropdown_opts,
             disabled=True,
             style=extend_description_style,
+            layout=Layout(width="auto"),
         )
         self.energy_textbox = FloatText(
             value=8000,
@@ -455,6 +537,7 @@ class PrenormUploader(UploaderBase):
             options=["eV", "keV"],
             disabled=True,
             style=extend_description_style,
+            layout=Layout(width="auto"),
         )
         self.binning_dropdown = Dropdown(
             value=2,
@@ -462,6 +545,7 @@ class PrenormUploader(UploaderBase):
             options=[("1", 1), ("2", 2), ("4", 4)],
             disabled=True,
             style=extend_description_style,
+            layout=Layout(width="auto"),
         )
         self.angular_resolution_textbox = FloatText(
             value=0.25,
@@ -520,13 +604,9 @@ class PrenormUploader(UploaderBase):
         self.metadata_widget_box = VBox(
             [
                 self.metadata_input_output_label,
-                HBox(
-                    [
-                        self.start_angle_textbox,
-                        self.angle_end_textbox,
-                        self.angular_resolution_textbox,
-                    ]
-                ),
+                self.start_angle_textbox,
+                self.angle_end_textbox,
+                self.angular_resolution_textbox,
                 HBox(
                     [
                         self.px_size_textbox,
@@ -658,6 +738,7 @@ class PrenormUploader(UploaderBase):
                     try:
                         imagesize = tif.pages[0].tags["ImageDescription"]
                         size = json.loads(imagesize.value)["shape"]
+                        sizeX = size[2]
                     except Exception:
                         sizeZ = self.tiff_count_in_folder
                         sizeY = tif.pages[0].tags["ImageLength"].value
@@ -672,6 +753,19 @@ class PrenormUploader(UploaderBase):
                 sizeZ = size[0]
                 sizeY = size[1]
                 sizeX = size[2]
+
+            elif image.suffix == ".hdf5" or image.suffix == ".h5":
+                self.projections.filepath = self.filedir / str(image)
+                try:
+                    with h5py.File(self.projections.filepath) as f:
+                        size = f[self.projections.hdf_key_norm_proj].shape
+                        sizeZ = size[0]
+                        sizeY = size[1]
+                        sizeX = size[2]
+                except Exception as e:
+                    sizeZ = 1
+                    sizeY = 1
+                    sizeX = 1
 
             size_tuple = (sizeZ, sizeY, sizeX)
             size_list.append(size_tuple)
@@ -772,13 +866,20 @@ class PrenormUploader(UploaderBase):
             )
             self.metadata_already_displayed = False
             if self.projections.metadatas != []:
-                [
+                parent = {}
+                for i, metadata in enumerate(self.projections.metadatas):
+                    metadata.filepath = copy.copy(self.metadata_filepath)
+                    if i == 0:
+                        metadata.load_metadata()
+                    else:
+                        metadata.metadata = parent
                     metadata.set_attributes_from_metadata(self.projections)
-                    for metadata in self.projections.metadatas
-                ]
+                    if "parent_metadata" in metadata.metadata:
+                        parent = metadata.metadata["parent_metadata"].copy()
                 self.create_and_display_metadata_tables()
                 self.metadata_already_displayed = True
                 self.imported_metadata = True
+                self.import_button.enable()
                 if len(self.projections.metadatas) > 1:
                     if (
                         self.projections.metadatas[-1].metadata["metadata_type"]
@@ -816,20 +917,22 @@ class PrenormUploader(UploaderBase):
         """
 
         with self.metadata_table_output:
-            # self.metadata_table_output.clear_output(wait=True)
-            # if self.imported_metadata:
-            #     [display(m) for m in self.dataframes if m is not None]
-            # else:
-            #     self.create_and_display_metadata_tables()
+            self.metadata_table_output.clear_output(wait=True)
+            if self.imported_metadata:
+                self.metadata_input_output.clear_output()
+                self.create_and_display_metadata_tables()
+            else:
+                self.metadata_input_output.clear_output()
+
             display(self.import_status_label)
         if self.filename == "" or self.filename is None:
             self.projections.import_filedir_projections(self)
         else:
             self.projections.import_file_projections(self)
         self.import_status_label.value = (
-            "Plotting data (downsampled for viewer to 0.25x)."
+            "Plotting data (downsampled for viewer to 0.5x)."
         )
-        self.viewer.plot(self.projections)
+        self.viewer.plot(self.projections, ds=True, no_check=True)
         self.Import.use_raw_button.reset_state()
         self.Import.use_prenorm_button.reset_state()
         if "import_time" in self.projections.metadata.metadata:
@@ -838,6 +941,7 @@ class PrenormUploader(UploaderBase):
                 + " plotting complete in "
                 + f"~{self.projections.metadata.metadata['import_time']:.0f}s."
             )
+        self.Import.use_prenorm_button.run_callback()
 
     def create_app(self):
         self.app = HBox(
@@ -923,7 +1027,7 @@ class ShiftsUploader(UploaderBase):
         super().__init__()
         self.Prep = Prep
         self.import_button.callback = Prep.add_shift  # callback to add shifts to list
-        self.projections = Prep.imported_projections
+        self.projections = Prep.projections
         self.filechooser.title = "Import shifts: "
         self.imported_metadata = False
         self.filetypes_to_look_for = ["sx.npy", "sy.npy", "alignment_metadata.json"]
@@ -981,6 +1085,252 @@ class ShiftsUploader(UploaderBase):
 
     def import_data(self, change):
         pass
+
+
+class RawUploader_SSRL62B(UploaderBase):
+    """
+    This uploader has two slots for choosing files and uploading:
+    one for references, one for projections. This
+    is because our data is stored in two separate folders.
+    """
+
+    def __init__(self, Import):
+        super().__init__()
+        self._init_widgets()
+
+        self.projections = RawProjectionsTiff_SSRL62B()
+
+        self.filedir = pathlib.Path()
+        self.filename = pathlib.Path()
+
+        # Save filedir/filename for projections
+        self.filedir_projections = pathlib.Path()
+        self.filename_projections = pathlib.Path()
+
+        # Save filedir/filename for references
+        self.filedir_references = pathlib.Path()
+        self.filename_references = pathlib.Path()
+
+        self.user_overwrite_energy = True
+
+        self.Import = Import
+
+        self.filetypes_to_look_for = ["metadata.txt"]
+        self.files_not_found_str = "Choose a directory with a metadata.txt file."
+
+        self.projections_found = False
+        self.references_found = False
+
+        # Creates the app that goes into the Import object
+        self.create_app()
+
+    def _init_widgets(self):
+
+        # File browser for projections
+        self.filechooser_projections = FileChooser()
+        self.filechooser_projections.register_callback(
+            self._update_quicksearch_from_filechooser_projections
+        )
+        self.filechooser_label_projections = Label(
+            "Raw Projections", style=self.header_font_style
+        )
+        self.filechooser_projections.show_only_dirs = True
+        self.filechooser_projections.title = "Choose raw projections file directory:"
+
+        # Quick path search textbox
+        self.quick_path_search_projections = Textarea(
+            placeholder=r"Z:\swelborn",
+            style=extend_description_style,
+            disabled=False,
+            layout=Layout(align_items="stretch"),
+        )
+        self.quick_path_search_projections.observe(
+            self._update_filechooser_from_quicksearch_projections, names="value"
+        )
+        self.quick_path_label_projections = Label("Quick path search (projections):")
+
+        # File browser for refs
+        self.filechooser_references = FileChooser()
+        self.filechooser_references.register_callback(
+            self._update_quicksearch_from_filechooser_references
+        )
+        self.filechooser_label_references = Label(
+            "Raw References", style=self.header_font_style
+        )
+        self.filechooser_references.show_only_dirs = True
+        self.filechooser_references.title = "Choose raw reference file directory:"
+
+        # Quick path search textbox
+        self.quick_path_search_references = Textarea(
+            placeholder=r"Z:\swelborn",
+            style=extend_description_style,
+            disabled=False,
+            layout=Layout(align_items="stretch"),
+        )
+        self.quick_path_search_references.observe(
+            self._update_filechooser_from_quicksearch_references, names="value"
+        )
+        self.quick_path_label_references = Label("Quick path search (references):")
+
+        self.upload_progress = IntProgress(
+            description="Uploading: ",
+            value=0,
+            min=0,
+            max=100,
+            layout=Layout(justify_content="center"),
+        )
+
+        # -- Setting metadata widgets --------------------------------------------------
+
+        self.px_size_textbox = FloatText(
+            value=30,
+            description="Pixel size (binning 1): ",
+            disabled=False,
+            style=extend_description_style,
+        )
+        self.px_units_dropdown_opts = ["nm", "\u00b5m", "mm", "cm"]
+        self.px_units_dropdown = Dropdown(
+            value="\u00b5m",
+            options=self.px_units_dropdown_opts,
+            disabled=False,
+            style=extend_description_style,
+        )
+        self.energy_textbox = FloatText(
+            value=8000,
+            description="Energy: ",
+            disabled=False,
+            style=extend_description_style,
+        )
+        self.energy_units_dropdown = Dropdown(
+            value="eV",
+            options=["eV", "keV"],
+            disabled=False,
+        )
+
+    def _update_quicksearch_from_filechooser_projections(self, *args):
+        self.filedir = pathlib.Path(self.filechooser_projections.selected_path)
+        self.filename = self.filechooser_projections.selected_filename
+        self.quick_path_search_projections.value = str(self.filedir / self.filename)
+
+    def _update_quicksearch_from_filechooser_references(self, *args):
+        self.filedir = pathlib.Path(self.filechooser_references.selected_path)
+        self.filename = self.filechooser_references.selected_filename
+        self.quick_path_search_references.value = str(self.filedir / self.filename)
+
+    def _update_filechooser_from_quicksearch_projections(self, change):
+        self.projections_found = False
+        self.looking_in_projections_filedir = True
+        self.looking_in_references_filedir = False
+        self.import_button.disable()
+        self._update_filechooser_from_quicksearch(change)
+
+    def _update_filechooser_from_quicksearch_references(self, change):
+        self.references_found = False
+        self.looking_in_projections_filedir = False
+        self.looking_in_references_filedir = True
+        self.import_button.disable()
+        self._update_filechooser_from_quicksearch(change)
+
+    def enable_import(self):
+        if self.references_found and self.projections_found:
+            self.import_button.enable()
+            self.projections.import_metadata()
+            self.projections.metadata.create_metadata_hbox()
+            with self.metadata_table_output:
+                self.metadata_table_output.clear_output(wait=True)
+                display(self.projections.metadata.metadata_hbox)
+
+    def import_data(self, *args):
+
+        tic = time.perf_counter()
+        self.projections.import_data(self)
+        toc = time.perf_counter()
+        self.projections.metadatas = Metadata.get_metadata_hierarchy(
+            self.projections.metadata.filedir / self.projections.metadata.filename
+        )
+        self.import_status_label.value = f"Import and normalization took {toc-tic:.0f}s"
+        self.projections.filedir = self.projections.import_savedir
+        self.viewer.plot(self.projections)
+
+    def update_filechooser_from_quicksearch(self, textfiles):
+        try:
+            metadata_filepath = (
+                self.filedir / [file for file in textfiles if "metadata.txt" in file][0]
+            )
+        except Exception:
+            not_found_str = (
+                "This directory doesn't have a metadata.txt file,"
+                + " please try another one."
+            )
+            self.find_metadata_status_label.value = not_found_str
+            return
+        try:
+            assert metadata_filepath != []
+        except Exception:
+            not_found_str = (
+                "This directory doesn't have a metadata.txt file,"
+                + " please try another one."
+            )
+            self.find_metadata_status_label.value = not_found_str
+            return
+        else:
+            if self.looking_in_projections_filedir:
+                self.projections_found = True
+                self.projections_metadata_filepath = metadata_filepath
+                self.projections.import_metadata_projections(self)
+                self.filedir_projections = copy.copy(self.filedir)
+
+            if self.looking_in_references_filedir:
+                self.references_found = True
+                self.references_metadata_filepath = metadata_filepath
+                self.projections.import_metadata_references(self)
+                self.filedir_references = copy.copy(self.filedir)
+
+            self.enable_import()
+            # self.projections.import_metadata(self)
+            # self.metadata_table = self.projections.metadata.metadata_to_DataFrame()
+            # with self.metadata_table_output:
+            #     self.metadata_table_output.clear_output(wait=True)
+            #     display(self.projections.metadata.dataframe)
+
+    def create_app(self):
+
+        self.app = HBox(
+            [
+                VBox(
+                    [
+                        self.filechooser_label_projections,
+                        self.quick_path_label_projections,
+                        HBox(
+                            [
+                                self.quick_path_search_projections,
+                                self.import_button.button,
+                            ]
+                        ),
+                        self.filechooser_projections,
+                        self.filechooser_label_references,
+                        self.quick_path_label_references,
+                        self.quick_path_search_references,
+                        self.filechooser_references,
+                        HBox(
+                            [
+                                self.px_size_textbox,
+                                self.px_units_dropdown,
+                            ]
+                        ),
+                        HBox(
+                            [
+                                self.energy_textbox,
+                                self.energy_units_dropdown,
+                            ]
+                        ),
+                        # self.save_tiff_on_import_checkbox,
+                    ],
+                ),
+                self.viewer.app,
+            ],
+            layout=Layout(justify_content="center"),
+        )
 
 
 class RawUploader_SSRL62C(UploaderBase):
@@ -1060,6 +1410,9 @@ class RawUploader_SSRL62C(UploaderBase):
         tic = time.perf_counter()
         self.projections.import_filedir_all(self)
         toc = time.perf_counter()
+        self.projections.metadatas = Metadata.get_metadata_hierarchy(
+            self.projections.metadata.filedir / self.projections.metadata.filename
+        )
         self.projections.status_label.value = (
             f"Import and normalization took {toc-tic:.0f}s"
         )
@@ -1189,6 +1542,9 @@ class RawUploader_ALS832(UploaderBase):
         tic = time.perf_counter()
         self.projections.import_file_all(self)
         toc = time.perf_counter()
+        self.projections.metadatas = Metadata.get_metadata_hierarchy(
+            self.projections.metadata.filedir / self.projections.metadata.filename
+        )
         self.import_status_label.value = f"Import and normalization took {toc-tic:.0f}s"
         self.viewer.plot(self.projections)
 

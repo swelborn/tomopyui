@@ -1,8 +1,8 @@
 name: tomopyui
 channels:
-  - conda-forge/label/widgetsnbextension_dev
+  - conda-forge/label/widgetsnbextension_rc
   - conda-forge/label/jupyterlab_widgets_rc
-  - conda-forge/label/ipywidgets_dev
+  - conda-forge/label/ipywidgets_rc
   - astra-toolbox
   - conda-forge
   - defaults
@@ -11,6 +11,7 @@ dependencies:
   - matplotlib
   - ffmpeg
   - dask
+  - dask-image
   - olefile
   - git
   - pip
