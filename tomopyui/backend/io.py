@@ -2024,7 +2024,7 @@ class RawProjectionsHDF5_APS(RawProjectionsBase):
         theta = dxreader.read_hdf5(fname, theta_grp, slc=None)
 
     def save_normalized_metadata(self, import_time=None, parent_metadata=None):
-        metadata = Metadata_ALS_832_Prenorm()
+        metadata = Metadata_APS_Prenorm()
         metadata.filedir = self.filedir
         metadata.metadata = parent_metadata.copy()
         if parent_metadata is not None:
@@ -3477,7 +3477,7 @@ class Metadata_APS_Raw(Metadata):
         self.resolution_key      = 'measurement_instrument_detection_system_objective_resolution'
         self.rotation_start_key  = 'process_acquisition_rotation_start'
         self.angle_step_key      = 'process_acquisition_rotation_step'
-        self.num_angle_key       = 'process_acquisition_rotation/num_angles'
+        self.num_angle_key       = 'process_acquisition_rotation_num_angles'
         self.width_key           = 'measurement_instrument_detector_array_size_x'
         self.height_key          = 'measurement_instrument_detector_array_size_y'
         self.camera_distance_key = 'measurement_instrument_detector_motor_stack_setup_z'
