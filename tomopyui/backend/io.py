@@ -648,6 +648,7 @@ class Projections_Prenormalized(ProjectionsBase):
         elif ".npy" in self.filename:
             self._data = np.load(self.filepath).astype(np.float32)
             self._data = np.where(np.isfinite(self._data), self._data, 0)
+            self._data = da.from_array(self._data)
             self.data = self._data
             self.save_data_and_metadata(Uploader)
             self.imported = True
@@ -2053,6 +2054,9 @@ class Metadata(ABC):
             metadata_instance = Metadata_Align()
         if metadata["metadata_type"] == "Recon":
             metadata_instance = Metadata_Recon()
+
+        if metadata["metadata_type"] == "2E":
+            metadata_instance = Metadata_TwoE()
 
         if filepath is not None:
             metadata_instance.filedir = filepath.parent
@@ -3639,6 +3643,46 @@ class Metadata_Prep(Metadata):
         self.prep_list_label = Label(display_str, style=self.prep_list_label_style)
         self.metadata_vbox = VBox(
             [self.table_label, self.prep_list_label],
+            layout=Layout(align_items="center"),
+        )
+
+    def set_attributes_from_metadata(self, projections):
+        pass
+
+
+class Metadata_TwoE(Metadata):
+    def __init__(self):
+        super().__init__()
+        self.table_label.value = "Preprocessing Methods"
+        self.prep_list_label_style = {
+            "font_size": "16px",
+            "font_weight": "bold",
+            "font_variant": "small-caps",
+            # "text_color": "#0F52BA",
+        }
+
+    def set_metadata(self, TwoEnergyTool):
+        self.metadata["metadata_type"] = "2E"
+        self.filename = "2E_metadata.json"
+        self.parent_metadata = TwoEnergyTool.low_e_viewer.projections.metadatas[0].metadata.copy()
+        self.high_e_metadata = TwoEnergyTool.high_e_viewer.projections.metadatas[0].metadata.copy()
+        self.metadata["parent_metadata"] = self.parent_metadata
+        self.metadata["high_e_metadata"] = self.high_e_metadata
+        if "data_hierarchy_level" in self.parent_metadata:
+            self.metadata["data_hierarchy_level"] = (
+                self.parent_metadata["data_hierarchy_level"] + 1
+            )
+        else:
+            self.metadata["data_hierarchy_level"] = 2
+        self.table_label.value = "2E Metadata"
+
+    def metadata_to_DataFrame(self):
+        self.dataframe = None
+
+    def create_metadata_box(self):
+
+        self.metadata_vbox = VBox(
+            [self.table_label],
             layout=Layout(align_items="center"),
         )
 

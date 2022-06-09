@@ -981,15 +981,25 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             layout=self.button_layout,
             style=self.button_font,
         )
+        self.save_button = Button(
+            disabled=True,
+            button_style="",
+            tooltip=("Click this button to save the shifted lower energy projections."),
+            icon="fa-file-export",
+            layout=self.button_layout,
+            style=self.button_font,
+        )
 
         self.all_buttons.insert(-2, self.diff_button)
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
         self.all_buttons.insert(-2, self.scale_button)
         self.all_buttons.insert(-2, self.start_button)
+        self.all_buttons.insert(-2, self.save_button)
         self.diff_button.on_click(self.switch_to_diff)
         self._disable_diff_callback = True
         self.viewing = False
         self.diff_on = False
+
 
     # Rectangle selector to update projection range
     def rectangle_to_px_range(self, *args):
@@ -1064,6 +1074,25 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             self._disable_diff_callback = True
             self.diff_button.button_style = ""
             self._disable_diff_callback = False
+
+    def plot_shrunken(self, projections):
+        self.pxX = projections.data.shape[2]
+        self.pxY = projections.data.shape[1]
+        self.original_images = projections.data
+        self.images = projections.data
+        self.ds_viewer_dropdown.value = 0
+        self.ds_factor = self.ds_viewer_dropdown.value
+        self.current_image_ind = 0
+        self.change_aspect_ratio()
+        self.image_index_slider.max = self.images.shape[0] - 1
+        self.plotted_image.image = self.images[self.image_index_slider.value]
+        
+        # self.hist.refresh_histogram()
+        # self.hist.rm_high_low_int(None)
+
+
+
+
 
 
 class BqImHist:
