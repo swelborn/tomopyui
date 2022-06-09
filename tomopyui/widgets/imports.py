@@ -977,6 +977,10 @@ class TwoEnergyUploader(PrenormUploader):
 
     def __init__(self, viewer):
         UploaderBase.__init__(self)
+        # Quick search/filechooser will look for these types of files.
+        self.filetypes_to_look_for = [".json", ".npy", ".tif", ".tiff", ".hdf5", ".h5"]
+        self.files_not_found_str = ""
+        self.filetypes_to_look_for_images = [".npy", ".tif", ".tiff", ".hdf5", ".h5"]
         self.projections = Projections_Prenormalized()
         self.filechooser.title = "Import prenormalized data:"
         self.viewer = viewer
@@ -995,6 +999,12 @@ class TwoEnergyUploader(PrenormUploader):
         )
         self.widgets_to_enable = [self.energy_textbox, self.pixel_size_textbox]
 
+    def _update_filechooser_from_quicksearch(self, change):
+        UploaderBase._update_filechooser_from_quicksearch(self, change)
+
+    def check_for_images(self):
+        return False
+
     def import_data(self):
         tic = time.perf_counter()
         with self.metadata_table_output:
@@ -1011,7 +1021,7 @@ class TwoEnergyUploader(PrenormUploader):
         self.import_status_label.value = "Checking for downsampled data."
         self.projections._check_downsampled_data(label=self.import_status_label)
         self.import_status_label.value = (
-            "Plotting data (downsampled for viewer to 0.25x)."
+            "Plotting data."
         )
         if not self.imported_metadata:
             self.projections.energy = self.energy_textbox.value
