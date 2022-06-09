@@ -601,6 +601,7 @@ class Align(AnalysisBase):
             self.analysis.save_data_after()
             self.save_after_alignment = False
         self.Import.prenorm_uploader.quick_path_search.value = str(self.analysis.projections.filepath)
+        self.Import.prenorm_uploader.tiff_folder_checkbox.value = False
         self.Import.prenorm_uploader.import_data()
         self.Import.use_prenorm_button.run_callback()
         self.start_button_hb.children = [self.start_button]
