@@ -18,6 +18,7 @@ import time
 import datetime
 import h5py
 import dask_image.imread
+import scipy.ndimage as ndi
 
 from abc import ABC, abstractmethod
 from tomopy.sim.project import angles as angle_maker
@@ -712,6 +713,7 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         """
         Wrapper for tomopy's normalize_nf
         """
+        os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
         self._data = tomopy_normalize.normalize_nf(
             self._data, self.flats, self.darks, self.flats_ind
         )
@@ -725,6 +727,10 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         """
         Wrapper for tomopy's normalize.
         """
+        os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
+        if int(self.flats.shape[1]) == int(2 * self._data.shape[1]):
+            self.flats = ndi.zoom(self.flats,(1,0.5,0.5))
+            self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
         self._data = tomopy_normalize.normalize(self._data, self.flats, self.darks)
         self._data = tomopy_normalize.minus_log(self._data)
         self.data = self._data
