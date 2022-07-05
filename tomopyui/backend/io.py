@@ -29,6 +29,8 @@ from joblib import Parallel, delayed
 from ipywidgets import *
 from functools import partial
 from skimage.util import img_as_float32
+from skimage.exposure import rescale_intensity
+
 
 
 class IOBase:
@@ -1337,6 +1339,9 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
 
     def load_txrm(self, txrm_filepath):
         data, metadata = read_txrm(str(txrm_filepath))
+        # rescale -- camera saturates at 4k -- can double check this number later.
+        # should not impact reconstruction
+        data = rescale_intensity(data, in_range=(0,4000),out_range="dtype") 
         data = img_as_float32(data)
         return data, metadata
 
@@ -1404,6 +1409,10 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             self.status_label.value = "Normalizing."
             self.normalize()
             self._data = np.flip(self._data, axis=1)
+            #TODO: potentially do this in normalize, decide later
+            # this removes negative values, 
+            self._data = self._data - np.median(self._data[self._data < 0])
+            self._data[self._data < 0] = 0.0
             self.data = self._data
             self.status_label.value = "Calculating histogram of raw data and saving."
             self._np_hist_and_save_data()
