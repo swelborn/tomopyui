@@ -335,7 +335,7 @@ class RunAlign(RunAnalysisBase):
 
     def align(self):
         """
-        Aligns a TomoData object using options in GUI.
+        Aligns projections using options in GUI.
         """
         for method in self.metadata.metadata["methods"]:
             if (
