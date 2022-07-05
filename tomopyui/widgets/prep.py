@@ -636,15 +636,13 @@ def shift_projections(projections, sx, sy):
 
 
 def renormalize_by_roi(projections, px_range_x, px_range_y):
-    exp_full = np.exp(-projections)
     averages = [
         np.mean(
-            exp_full[i, px_range_y[0] : px_range_y[1], px_range_x[0] : px_range_x[1]]
+            projections[i, px_range_y[0] : px_range_y[1], px_range_x[0] : px_range_x[1]]
         )
-        for i in range(len(exp_full))
+        for i in range(len(projections))
     ]
-    projections = [exp_full[i] / averages[i] for i in range(len(exp_full))]
-    projections = -np.log(projections)
+    projections = [projections[i] / averages[i] for i in range(len(projections))]
     return projections
 
 
