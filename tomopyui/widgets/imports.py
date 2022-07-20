@@ -1603,8 +1603,96 @@ class RawUploader_ALS832(UploaderBase):
             layout=Layout(justify_content="center"),
         )
 
+class RawUploader_APS(UploaderBase):
+    """
+    Raw uploaders are the way you get your raw data (projections, flats, dark fields)
+    into TomoPyUI. It holds a ProjectionsBase subclass (see io.py) that will do all of
+    the data import stuff. the ProjectionsBase subclass for SSRL is
+    RawProjectionsXRM_SSRL62. For you, it could be named
+    RawProjectionsHDF5_APSyourbeamlinenumber().
 
-class RawUploader_APS(RawUploader_ALS832):
+    """
+
+    def __init__(self, Import):
+        super().__init__()  # look at UploaderBase __init__()
+        self._init_widgets()
+        self.projections = RawProjectionsHDF5_APS()
+        self.reset_metadata_to = Metadata_APS_Raw
+        self.Import = Import
+        self.filechooser.title = "Import Raw hdf5 File"
+        self.filetypes_to_look_for = [".h5"]
+        self.files_not_found_str = "Choose a directory with an hdf5 file."
+
+        # Creates the app that goes into the Import object
+        self.create_app()
+
+    def _init_widgets(self):
+        """
+        You can make your widgets more fancy with this function. See the example in
+        RawUploader_SSRL62C.
+        """
+        pass
+
+    def import_data(self):
+        """
+        This is what is called when you click the blue import button on the frontend.
+        """
+        with self.progress_output:
+            self.progress_output.clear_output()
+            display(self.import_status_label)
+        tic = time.perf_counter()
+        self.projections.import_file_all(self)
+        toc = time.perf_counter()
+        self.import_status_label.value = f"Import and normalization took {toc-tic:.0f}s"
+        self.viewer.plot(self.projections)
+
+    def update_filechooser_from_quicksearch(self, h5files):
+        """
+        This is what is called when you update the quick path search bar. Right now,
+        this is very basic. If you want to see a more complex version of this you can
+        look at the example in PrenormUploader.
+
+        This is called after _update_filechooser_from_quicksearch in UploaderBase.
+        """
+        if len(h5files) == 1:
+            self.filename = h5files[0]
+        elif len(h5files) > 1 and self.filename is None:
+            self.find_metadata_status_label.value = (
+                "Multiple h5 files found in this"
+                + " directory. Choose one with the file browser."
+            )
+            self.import_button.disable()
+            return
+        self.projections.metadata = self.reset_metadata_to()
+        self.projections.import_metadata(self.filedir / self.filename)
+        self.projections.metadata.metadata_to_DataFrame()
+        with self.metadata_table_output:
+            self.metadata_table_output.clear_output(wait=True)
+            display(self.projections.metadata.dataframe)
+            self.import_button.enable()
+
+    def create_app(self):
+        self.app = HBox(
+            [
+                VBox(
+                    [
+                        self.quick_path_label,
+                        HBox(
+                            [
+                                self.quick_path_search,
+                                self.import_button.button,
+                            ]
+                        ),
+                        self.filechooser,
+                    ],
+                ),
+                self.viewer.app,
+            ],
+            layout=Layout(justify_content="center"),
+        )
+
+
+class RawUploader_APS(RawUploader_APS):
     """
     See descriptions in RawUploader_ALS832 superclass. You shouldn't have to do much
     here other than changing self.projections and self.reset_metadata_to if you change
