@@ -30,6 +30,8 @@ from ipywidgets import *
 from functools import partial
 from skimage.util import img_as_float32
 from skimage.exposure import rescale_intensity
+# if os.environ["cuda_enabled"] == "True":
+#     from tomopyui.widgets.prep import shift_projections
 
 
 
@@ -528,6 +530,23 @@ class Projections_Child(ProjectionsBase):
         self.parent_projections._return_hist(pyramid_level)
         self.hist = self.parent_projections.hist_returned
         self.parent_projections._close_hdf_file()
+
+    def shift_and_save_projections(self, sx, sy):
+        self.get_parent_data_from_hdf()
+        self.sx = [sx]
+        self.sy = [sy]
+        for i in range(3):
+            self.sx.append([shift / (2 ** i) for shift in sx])
+            self.sy.append([shift / (2 ** i) for shift in sy])
+        self._data = shift_projections(
+                self.data, self.sx, self.sy
+            )
+        self.data = self._data
+        data_dict = {self.hdf_key_norm_proj: self.data}
+        self.projections.dask_data_to_h5(data_dict)
+        for i in range(3):
+            self.get_parent_data_ds_from_hdf(i)
+            self.sx
 
     def import_file_projections(self):
         pass
@@ -1341,7 +1360,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         data, metadata = read_txrm(str(txrm_filepath))
         # rescale -- camera saturates at 4k -- can double check this number later.
         # should not impact reconstruction
-        data = rescale_intensity(data, in_range=(0,4000),out_range="dtype") 
+        data = rescale_intensity(data, in_range=(0,4096),out_range="dtype") 
         data = img_as_float32(data)
         return data, metadata
 
