@@ -589,6 +589,7 @@ class Align(AnalysisBase):
 
         # Copy parent histograms
         self.copy_parent_hists_checkbox.observe(self.update_copy_hist, names="value")
+        
         # Shift dataset after
         self.shift_data_after_checkbox.observe(self.update_shift_data, names="value")
 

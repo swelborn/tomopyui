@@ -1075,13 +1075,13 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             self.diff_button.button_style = ""
             self._disable_diff_callback = False
 
-    def plot_shrunken(self, projections):
-        self.pxX = projections.data.shape[2]
-        self.pxY = projections.data.shape[1]
-        self.original_images = projections.data
-        self.images = projections.data
-        self.ds_viewer_dropdown.value = 0
-        self.ds_factor = self.ds_viewer_dropdown.value
+    def plot_shrunken(self):
+        self.pxX = self.projections.shrunken_data.shape[2]
+        self.pxY = self.projections.shrunken_data.shape[1]
+        self.original_images = self.projections.shrunken_data
+        self.images = self.projections.shrunken_data
+        # self.ds_viewer_dropdown.value = 0
+        # self.ds_factor = self.ds_viewer_dropdown.value
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.image_index_slider.max = self.images.shape[0] - 1
