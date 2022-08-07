@@ -127,18 +127,18 @@ class TwoEnergyTool:
         high_e_prj = self.high_e_viewer.projections.data
         self.low_e_viewer.scale_button.button_style = "info"
         self.low_e_viewer.scale_button.icon = "fas fa-cog fa-spin fa-lg"
-        self.low_e_viewer.projections.data = shrink_and_pad_projections(
-            self.low_e_viewer.projections.data, high_e_prj, high_e, low_e, self.num_batches
+        self.low_e_viewer.projections.shrunken_data = shrink_and_pad_projections(
+            self.low_e_viewer.projections.data, high_e_prj, low_e, high_e, self.num_batches
         )
-        self.low_e_viewer.plot_shrunken(self.low_e_viewer.projections)
-        self.low_e_viewer.original_images = self.low_e_viewer.projections.data
+        print("got here")
+        print(self.low_e_viewer.projections.shrunken_data.shape)
+        self.low_e_viewer.plot_shrunken()
         self.low_e_viewer.start_button.disabled = False
         self.low_e_viewer.scale_button.button_style = "success"
         self.low_e_viewer.scale_button.icon = "fa-check-square"
         self.low_e_viewer.diff_images = np.array(
             [x / np.mean(x) for x in self.low_e_viewer.viewer_parent.original_images]
         ) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_images])
-        self.low_e_viewer._original_images = self.low_e_viewer.original_images
         self.low_e_viewer.diff_on = False
         self.low_e_viewer._disable_diff_callback = True
         self.low_e_viewer.diff_button.disabled = False
@@ -156,7 +156,7 @@ class TwoEnergyTool:
         self.num_batches = self.num_batches_textbox.value
         self.upsample_factor = 50
         self.shift_cpu = []
-        low_e_data = self.low_e_viewer.projections.data[
+        low_e_data = self.low_e_viewer.projections.shrunken_data[
             :, self.low_range_y[0] : self.low_range_y[1], self.low_range_x[0] : self.low_range_x[1]
         ]
         high_e_data = self.high_e_viewer.projections.data[
@@ -181,17 +181,15 @@ class TwoEnergyTool:
         self.sx = self.shift_cpu[1]
         self.sy = self.shift_cpu[0]
         # TODO: send to GPU and do both calcs there.
-        self.low_e_viewer.projections._data = shift_projections(
-            self.low_e_viewer.projections.data,
+        self.low_e_viewer.projections.shrunken_data = shift_projections(
+            self.low_e_viewer.projections.shrunken_data,
             self.sx,
             self.sy,
         )
-        self.low_e_viewer.projections.data = self.low_e_viewer.projections._data
-        self.low_e_viewer.plot_shrunken(self.low_e_viewer.projections)
+        self.low_e_viewer.plot_shrunken()
         # self.low_e_viewer.diff_images = np.array(
         #     [x / np.mean(x) for x in self.low_e_viewer.viewer_parent.original_images]
         # ) - np.array([x / np.mean(x) for x in self.low_e_viewer.original_images])
-        self.low_e_viewer._original_images = self.low_e_viewer.original_images
         self.low_e_viewer.diff_on = False
         self.low_e_viewer._disable_diff_callback = True
         self.low_e_viewer.diff_button.disabled = False

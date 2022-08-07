@@ -32,7 +32,7 @@ def shrink_and_pad_projections(
         zoomed_image_gpu = ndi_cp.zoom(
             batch_gpu, (1, shrink_ratio, shrink_ratio), order=order
         )
-        zoomed_image_gpu = pad_to_make_same_size_cp(batch_gpu, ref_shape)
+        zoomed_image_gpu = pad_to_make_same_size_cp(zoomed_image_gpu, ref_shape)
         zoomed_image_cpu.append(cp.asnumpy(zoomed_image_gpu))
 
     zoomed_image_cpu = np.concatenate(zoomed_image_cpu, axis=0)
