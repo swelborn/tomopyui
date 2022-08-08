@@ -1,8 +1,13 @@
-from tomopyui.backend.io import IOBase
+from tomopyui.backend.io import IOBase, Projections_Prenormalized, Metadata, Metadata_MultiEnergy
 from tomopyui.tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
 from tomopyui.tomocupy.prep.sampling import shrink_and_pad_projections
 from tomopyui.widgets.prep import shift_projections
 
+import numpy as np
+
+import pathlib
+import h5py
+import os
 
 class MultiEnergyProjections(IOBase):
 
@@ -27,6 +32,8 @@ class MultiEnergyProjections(IOBase):
     def __init__(self, hdf_path: pathlib.Path):
         self.energies: list[float] = []
         self.hdf_path = hdf_path
+        self.this_energy_projections = Projections_Prenormalized()
+        self.metadata = Metadata_MultiEnergy()
 
     def compile_energies(
         self, folders: list, alignment_meta: pathlib.Path, write_location: pathlib.Path
@@ -64,15 +71,16 @@ class MultiEnergyProjections(IOBase):
 
         sx = np.zeros((ref_shape[0]))
         sy = np.zeros((ref_shape[0]))
-        for metadata in ref_prj.metadatas:
+        for metadata in ref.metadatas:
             if metadata.metadata["metadata_type"] == "Align":
                 sx += np.array(metadata.metadata["sx"])
                 sy += np.array(metadata.metadata["sy"])
 
         # Shifting all of the lower energies and writing
-        hdf_file = h5py.File(write_location, "w")
+        hdf_file = h5py.File(write_location, "a")
 
         self.energies = []
+        self.energies_str = []
         for folder in folders:
             moving = Projections_Prenormalized()
             moving.filepath = folder / "normalized_projections.hdf5"
@@ -87,13 +95,18 @@ class MultiEnergyProjections(IOBase):
             )
             moving.data = shift_projections(moving.data, sx, sy)
             group: str = self.hdf_key_energies + "/" + moving.energy_str
-            grp = hdf_file.create_group(group + self.hdf_key_norm)
-            ds = grp.create_dataset(self.hdf_key_data, data=moving.data)
+            if group + self.hdf_key_norm not in hdf_file:
+                grp = hdf_file.create_group(group + self.hdf_key_norm)
+                ds = grp.create_dataset(self.hdf_key_data, data=moving.data)
+            else:
+                grp = hdf_file[group + self.hdf_key_norm]
+                ds = grp[self.hdf_key_data]
+                ds[...] = moving.data
             ds.attrs["energy"] = moving.energy_float
             ds.attrs["sx"] = sx
             ds.attrs["sy"] = sy
             for key in self.hdf_keys_ds_hist:
-                ds = grp.create_dataset(key, data=self.hist[key])
+                ds = grp.create_dataset(key, data=moving.hist[key])
             self.energies.append(moving.energy_float)
             self.energies_str.append(moving.energy_str)
 
@@ -111,15 +124,21 @@ class MultiEnergyProjections(IOBase):
                     5,
                 )
                 moving.data_ds = shift_projections(moving.data_ds, sx, sy)
-                grp = hdf_file.create_group(group + self.hdf_key_ds + "/" + i + "/")
-                ds = grp.create_dataset(self.hdf_key_data, data=moving.data_ds)
+                if group + self.hdf_key_ds + "/" + str(i) + "/" not in hdf_file:
+                    grp = hdf_file.create_group(group + self.hdf_key_ds + "/" + str(i) + "/")
+                    ds = grp.create_dataset(self.hdf_key_data, data=moving.data_ds)
+                else:
+                    grp = hdf_file[group + self.hdf_key_ds + "/" + str(i) + "/"]
+                    ds = grp[self.hdf_key_data]
+                    ds[...] = moving.data
                 ds.attrs["energy"] = moving.energy_float
                 ds.attrs["sx"] = sx
                 ds.attrs["sy"] = sy
+                ds.attrs["angles_deg"] = moving.metadata.metadata["angles_deg"]
                 for key in self.hdf_keys_ds_hist:
-                    ds = grp.create_dataset(key, data=self.hist[key])
+                    ds = grp.create_dataset(key, data=moving.hist[key])
                 for key in self.hdf_keys_ds_hist_scalar:
-                    ds = grp.create_dataset(key, data=self.hist[key])
+                    ds = grp.create_dataset(key, data=moving.hist[key])
 
             moving._close_hdf_file()
 
@@ -127,3 +146,37 @@ class MultiEnergyProjections(IOBase):
         hdf_file[self.hdf_key_energies].attrs["energies_float"] = self.energies
         hdf_file[self.hdf_key_energies].attrs["energies_str"] = self.energies_str
         hdf_file.close()
+
+    def get_folders(self, filedir: pathlib.Path):
+        """
+        Grabs all folders in a file directory.
+
+        Parameters
+        ----------
+        filedir: pathlib.Path
+            File directory to grab from
+
+        Returns
+        -------
+        folders: list[pathlib.Path]
+            Returns a list of all folders as pathlib.Paths.
+
+        """
+        folders = [pathlib.Path(f) for f in os.scandir(filedir) if f.is_dir()]
+        return folders
+
+    def import_file_projections(self, filepath: pathlib.Path):
+        """
+        Imports hdf5 file with multiple energy projections
+        Parameters
+        ----------
+        filepath: pathlib.Path
+            Path to hdf5 file creating using compile_energies.
+        
+
+        """
+        # with h5py.File(filepath) as f:
+        #     self.init_energy = 
+        #     self.hdf_key_norm_data = 
+        #     self.
+        pass

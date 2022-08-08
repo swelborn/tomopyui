@@ -2007,7 +2007,7 @@ class Metadata(ABC):
         with open(self.filepath) as f:
             self.metadata = json.load(f)
 
-        return self.metadata
+            return self.metadata
 
     def set_parent_metadata(self, parent_metadata):
         self.metadata["parent_metadata"] = parent_metadata
@@ -2560,6 +2560,46 @@ class Metadata_SSRL62C_Raw(Metadata):
         )
 
         self.dataframe = s
+
+class Metadata_MultiEnergy(Metadata):
+
+    def __init__(self):
+        super().__init__()
+        self.filename: str = "multi_energy_metadata.json"
+        self.metadata["metadata_type"] = "Multi_Energy"
+        self.metadata["data_hierarchy_level"] = 2
+        self.metadata["energies_metadata"] = {}
+        self.energies_float = []
+        self.energies_str = []
+
+    def make_init_metadata(self, folders):
+        self.energies_float = []
+        self.energies_str = []
+        for folder in folders:
+            _prj = Projections_Prenormalized()
+            _prj.metadata.filepath = folder / "import_metadata.json"
+            metadatas = _prj.metadata.get_metadata_hierarchy(_prj.metadata.filepath)
+            for metadata in metadatas:
+                metadata.set_attributes_from_metadata(_prj)
+            _prj.metadata.load_metadata()
+            self.metadata["energies_metadata"][_prj.energy_str] = _prj.metadata.metadata
+            self.energies_float.append(_prj.energy_float)
+            self.energies_str.append(_prj.energy_str)
+
+    def set_metadata(self, projections):
+        pass
+
+    def metadata_to_DataFrame(self):
+        pass
+
+    def set_attributes_from_metadata(self, projections):
+        projections.energies_float = self.energies_float
+        projections.energies_str = self.energies_str
+
+    def save_metadata(self, projections):
+
+        self.filedir = projections.filedir
+        super().save_metadata()
 
 
 class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
