@@ -30,9 +30,9 @@ from ipywidgets import *
 from functools import partial
 from skimage.util import img_as_float32
 from skimage.exposure import rescale_intensity
+
 # if os.environ["cuda_enabled"] == "True":
 #     from tomopyui.widgets.prep import shift_projections
-
 
 
 class IOBase:
@@ -136,7 +136,6 @@ class IOBase:
                 hdf_func(self, *args, **kwargs)
             else:
                 self._open_hdf_file_read_only(self.filepath)
-
                 hdf_func(self, *args, **kwargs)
 
         return inner_func
@@ -189,7 +188,6 @@ class IOBase:
             }
             for key in self.hdf_keys_ds_hist_scalar:
                 self.hist[key] = self.hdf_file[pyramid_level + key][()]
-
         ds_data_key = pyramid_level + self.hdf_key_data
         self.data_ds = self.hdf_file[ds_data_key]
 
@@ -538,9 +536,7 @@ class Projections_Child(ProjectionsBase):
         for i in range(3):
             self.sx.append([shift / (2 ** i) for shift in sx])
             self.sy.append([shift / (2 ** i) for shift in sy])
-        self._data = shift_projections(
-                self.data, self.sx, self.sy
-            )
+        self._data = shift_projections(self.data, self.sx, self.sy)
         self.data = self._data
         data_dict = {self.hdf_key_norm_proj: self.data}
         self.projections.dask_data_to_h5(data_dict)
@@ -750,7 +746,7 @@ class RawProjectionsBase(ProjectionsBase, ABC):
         """
         os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
         if int(self.flats.shape[1]) == int(2 * self._data.shape[1]):
-            self.flats = ndi.zoom(self.flats,(1,0.5,0.5))
+            self.flats = ndi.zoom(self.flats, (1, 0.5, 0.5))
             self.darks = np.zeros_like(self.flats[0])[np.newaxis, ...]
         self._data = tomopy_normalize.normalize(self._data, self.flats, self.darks)
         self._data = tomopy_normalize.minus_log(self._data)
@@ -1360,7 +1356,7 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
         data, metadata = read_txrm(str(txrm_filepath))
         # rescale -- camera saturates at 4k -- can double check this number later.
         # should not impact reconstruction
-        data = rescale_intensity(data, in_range=(0,4096),out_range="dtype") 
+        data = rescale_intensity(data, in_range=(0, 4096), out_range="dtype")
         data = img_as_float32(data)
         return data, metadata
 
@@ -1428,8 +1424,8 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
             self.status_label.value = "Normalizing."
             self.normalize()
             self._data = np.flip(self._data, axis=1)
-            #TODO: potentially do this in normalize, decide later
-            # this removes negative values, 
+            # TODO: potentially do this in normalize, decide later
+            # this removes negative values,
             self._data = self._data - np.median(self._data[self._data < 0])
             self._data[self._data < 0] = 0.0
             self.data = self._data
@@ -3698,8 +3694,12 @@ class Metadata_TwoE(Metadata):
     def set_metadata(self, TwoEnergyTool):
         self.metadata["metadata_type"] = "2E"
         self.filename = "2E_metadata.json"
-        self.parent_metadata = TwoEnergyTool.low_e_viewer.projections.metadatas[0].metadata.copy()
-        self.high_e_metadata = TwoEnergyTool.high_e_viewer.projections.metadatas[0].metadata.copy()
+        self.parent_metadata = TwoEnergyTool.low_e_viewer.projections.metadatas[
+            0
+        ].metadata.copy()
+        self.high_e_metadata = TwoEnergyTool.high_e_viewer.projections.metadatas[
+            0
+        ].metadata.copy()
         self.metadata["parent_metadata"] = self.parent_metadata
         self.metadata["high_e_metadata"] = self.high_e_metadata
         if "data_hierarchy_level" in self.parent_metadata:
@@ -3792,11 +3792,9 @@ class Metadata_Align(Metadata):
             i for i, key in enumerate(metadata_frame["Headers"]) if key == "center"
         ][0]
         metadata_frame["Headers"] = [
-            metadata_frame["Headers"][i]
-            .replace("_", " ")
-            .title()
-            .replace("Num", "No.")
-            for i, key in enumerate(metadata_frame["Headers"]) if key != "pyramid_level"
+            metadata_frame["Headers"][i].replace("_", " ").title().replace("Num", "No.")
+            for i, key in enumerate(metadata_frame["Headers"])
+            if key != "pyramid_level"
         ]
         metadata_frame["Headers"] = metadata_frame["Headers"] + extra_headers
         extra_values = [
@@ -3808,7 +3806,9 @@ class Metadata_Align(Metadata):
         ]
         extra_values = [str(extra_values[i]) for i in range(len(extra_values))]
         metadata_frame["Values"] = [
-            str(self.metadata["opts"][key]) for key in self.metadata["opts"] if key != "pyramid_level"
+            str(self.metadata["opts"][key])
+            for key in self.metadata["opts"]
+            if key != "pyramid_level"
         ] + extra_values
         if "use_multiple_centers" in self.metadata:
             if self.metadata["use_multiple_centers"]:
@@ -3915,149 +3915,3 @@ def parse_printed_time(timedict):
 
     time = f"{time:.1f}"
     return time, title
-
-
-def rescale_parallel(i, images=None, ds_factor_list=None):
-    return rescale(images[i], (ds_factor_list[1], ds_factor_list[2]))
-
-
-def rescale_parallel_pool(n, images, ds_factor_list):
-    with mp.Pool() as pool:
-        rescale_partial = partial(
-            rescale_parallel, images=images, ds_factor_list=ds_factor_list
-        )
-        return pool.map(rescale_partial, range(n))
-
-
-# ARCHIVE:
-
-# proj_ind = [
-#     True if "ref_" not in file.name else False for file in collect
-# ]
-# flats_ind_positions = [i for i, val in enumerate(self.flats_ind) if val][
-#     :: self.metadata["REFNEXPOSURES"]
-# ]
-# self.flats_ind = [
-#     j for j in flats_ind_positions for i in range(self.metadata["REFNEXPOSURES"])
-# ]
-
-
-# # Groups each set of references and each set of projections together. Unused.
-# def group_from_run_script(self):
-#     all_collections = [[]]
-#     energies = [[]]
-#     with open(self.run_script_path, "r") as f:
-#         for line in f.readlines():
-#             if line.startswith("sete "):
-#                 energies.append(f"{float(line[5:]):.2f}")
-#                 all_collections.append([])
-#             elif line.startswith("collect "):
-#                 filename = line[8:].strip()
-#                 all_collections[-1].append(self.run_script_path.parent / filename)
-#     all_collections.pop(0)
-#     energies.pop(0)
-#     for energy, collect in zip(energies, all_collections):
-#         if energy not in self.selected_energies:
-#             continue
-#         else:
-#             # getting all flats/projections
-#             ref_ind = [True if "ref_" in file.name else False for file in collect]
-#             i = 0
-#             copy_collect = collect.copy()
-#             for pos, file in enumerate(copy_collect):
-#                 if "ref_" in file.name:
-#                     if i == 0:
-#                         i = 1
-#                     elif i == 1:
-#                         copy_collect[pos] = 1
-#                 elif "ref_" not in file.name:
-#                     i = 0
-#             copy_collect = [value for value in copy_collect if value != 1]
-#             ref_ind = [
-#                 True if "ref_" in file.name else False for file in copy_collect
-#             ]
-#             ref_ind = [i for i in range(len(ref_ind)) if ref_ind[i]]
-#             self.ref_ind = ref_ind
-
-#             proj_ind = [
-#                 True if "ref_" not in file.name else False for file in collect
-#             ]
-#             self.flats_filenames = [
-#                 file.parent / file.name for file in collect if "ref_" in file.name
-#             ]
-#             self.data_filenames = [
-#                 file.parent / file.name
-#                 for file in collect
-#                 if "ref_" not in file.name
-#             ]
-#             # # intitializing switch statements
-#             files_grouped = [[]]
-#             file_type = ["reference"]
-#             i = 0
-#             adding_refs = True
-#             adding_projs = False
-#             for num, collection in enumerate(collect):
-#                 if ref_ind[num] and adding_refs:
-#                     files_grouped[-1].append(collection)
-#                 elif proj_ind[num] and ref_ind[num - 1]:
-#                     adding_refs = False
-#                     adding_projs = True
-#                     i = 0
-#                     files_grouped.append([])
-#                     files_grouped[-1].append(collection)
-#                     file_type.append("projection")
-#                 elif proj_ind[num - 1] and ref_ind[num]:
-#                     adding_refs = True
-#                     adding_projs = False
-#                     i = 0
-#                     files_grouped.append([])
-#                     files_grouped[-1].append(collection)
-#                     file_type.append("reference")
-#                 elif adding_projs and i < self.scan_info["NEXPOSURES"] - 1:
-#                     i += 1
-#                     files_grouped[-1].append(collection)
-#                 else:
-#                     i = 0
-#                     files_grouped.append([])
-#                     file_type.append("projection")
-
-#     return files_grouped, file_type
-
-
-# def get_img_shape(self, extension=None):
-#     """
-#     Gets the image shape of a tiff or npy with lazy loading.
-#     """
-
-#     if self.extension == ".tif" or self.extension == ".tiff":
-#         allowed_extensions = [".tiff", ".tif"]
-#         file_list = [
-#             pathlib.PurePath(f) for f in os.scandir(self.filedir) if not f.is_dir()
-#         ]
-#         tiff_file_list = [
-#             file.name
-#             for file in file_list
-#             if any(x in file.name for x in self.allowed_extensions)
-#         ]
-#         tiff_count_in_filedir = len(tiff_file_list)
-#         with tf.TiffFile(self.filepath) as tif:
-#             # if you select a file instead of a file path, it will try to
-#             # bring in the full filedir
-#             if tiff_count_in_filedir > 50:
-#                 sizeX = tif.pages[0].tags["ImageWidth"].value
-#                 sizeY = tif.pages[0].tags["ImageLength"].value
-#                 sizeZ = tiff_count_in_filedir  # can maybe use this later
-#             else:
-#                 imagesize = tif.pages[0].tags["ImageDescription"]
-#                 size = json.loads(imagesize.value)["shape"]
-#                 sizeZ = size[0]
-#                 sizeY = size[1]
-#                 sizeX = size[2]
-
-#     elif self.extension == ".npy":
-#         size = np.load(self.filepath, mmap_mode="r").shape
-#         sizeZ = size[0]
-#         sizeY = size[1]
-#         sizeX = size[2]
-
-#     return (sizeZ, sizeY, sizeX)
