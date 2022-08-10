@@ -436,7 +436,7 @@ class Center:
         self.add_center_button.button.disabled = False
 
     def get_ds_projections(self):
-        ds_value = self.viewer.ds_viewer_dropdown.value
+        ds_value = self.viewer.ds_dropdown.value
         if self.use_ds:
             if ds_value == -1:
                 prj_imgs = self.projections.data

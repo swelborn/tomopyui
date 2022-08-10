@@ -2561,8 +2561,8 @@ class Metadata_SSRL62C_Raw(Metadata):
 
         self.dataframe = s
 
-class Metadata_MultiEnergy(Metadata):
 
+class Metadata_MultiEnergy(Metadata):
     def __init__(self):
         super().__init__()
         self.filename: str = "multi_energy_metadata.json"

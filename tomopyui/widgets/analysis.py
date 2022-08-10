@@ -252,7 +252,7 @@ class AnalysisBase(ABC):
 
         # Downsampling
         self.downsample_checkbox.observe(self._downsample_turn_on)
-        self.altered_viewer.ds_viewer_dropdown.observe(
+        self.altered_viewer.ds_dropdown.observe(
             self.update_ds_factor_from_viewer, names="value"
         )
         self.ds_factor_dropdown.observe(self.update_ds_factor, names="value")
@@ -356,7 +356,7 @@ class AnalysisBase(ABC):
     def _downsample_turn_on(self, change):
         if change.new is True:
             self.downsample = True
-            self.pyramid_level = self.altered_viewer.ds_viewer_dropdown.value
+            self.pyramid_level = self.altered_viewer.ds_dropdown.value
             self.ds_factor_dropdown.disabled = False
 
         if change.new is False:
@@ -364,13 +364,12 @@ class AnalysisBase(ABC):
             self.ds_factor = 1
             self.ds_factor_dropdown.disabled = True
 
-
     # Phase cross correlation subset (from altered projections)
     def _use_subset_correlation(self, change):
         self.use_subset_correlation = self.use_subset_correlation_checkbox.value
 
     def update_ds_factor_from_viewer(self, *args):
-        self.ds_factor_dropdown.value = self.altered_viewer.ds_viewer_dropdown.value
+        self.ds_factor_dropdown.value = self.altered_viewer.ds_dropdown.value
 
     def update_ds_factor(self, *args):
         self.pyramid_level = self.ds_factor_dropdown.value
@@ -402,7 +401,6 @@ class AnalysisBase(ABC):
     def set_checkbox_bool(self, checkbox_list, dictionary):
         def create_opt_dict_on_check(change):
             dictionary[change.owner.description] = change.new
-
 
         for key in dictionary:
             if dictionary[key]:
@@ -467,7 +465,7 @@ class AnalysisBase(ABC):
                     layout=Layout(flex_flow="column wrap", align_content="flex-start"),
                 ),
             ],
-            layout=Layout(align_items="center")
+            layout=Layout(align_items="center"),
         )
 
         self.astra_methods_hbox = VBox(
@@ -478,12 +476,12 @@ class AnalysisBase(ABC):
                     layout=Layout(flex_flow="column wrap"),
                 ),
             ],
-            layout=Layout(align_items="center")
+            layout=Layout(align_items="center"),
         )
 
         recon_method_box = HBox(
             [self.tomopy_methods_hbox, self.astra_methods_hbox],
-            layout=Layout(width="auto")
+            layout=Layout(width="auto"),
         )
         self.methods_accordion = Accordion(
             children=[recon_method_box], selected_index=None, titles=("Methods",)
@@ -527,7 +525,13 @@ class Align(AnalysisBase):
         self.metadata = Metadata_Align()
         self.subset_x = None
         self.subset_y = None
-        self.save_opts_list = ["Projections Before Alignment", "Projections After Alignment", "Reconstruction", "tiff", "hdf"]
+        self.save_opts_list = [
+            "Projections Before Alignment",
+            "Projections After Alignment",
+            "Reconstruction",
+            "tiff",
+            "hdf",
+        ]
         self.Import.Align = self
         self.init_widgets()
         self.set_observes()
@@ -578,7 +582,7 @@ class Align(AnalysisBase):
             "Downsampling and updating plots.",
             "This alignment has been loaded into the app.",
         )
-        self.use_this_alignment_button.button.disabled=True
+        self.use_this_alignment_button.button.disabled = True
 
     def set_observes(self):
         super().set_observes()
@@ -589,7 +593,7 @@ class Align(AnalysisBase):
 
         # Copy parent histograms
         self.copy_parent_hists_checkbox.observe(self.update_copy_hist, names="value")
-        
+
         # Shift dataset after
         self.shift_data_after_checkbox.observe(self.update_shift_data, names="value")
 
@@ -601,7 +605,9 @@ class Align(AnalysisBase):
             self.analysis.skip_mk_wd_subdir = True
             self.analysis.save_data_after()
             self.save_after_alignment = False
-        self.Import.prenorm_uploader.quick_path_search.value = str(self.analysis.projections.filepath)
+        self.Import.prenorm_uploader.quick_path_search.value = str(
+            self.analysis.projections.filepath
+        )
         self.Import.prenorm_uploader.tiff_folder_checkbox.value = False
         self.Import.prenorm_uploader.import_data()
         self.Import.use_prenorm_button.run_callback()
@@ -639,7 +645,10 @@ class Align(AnalysisBase):
         self.result_after_viewer.link_plotted_projections_button.disabled = False
         self.result_after_viewer.plot(self.analysis.projections, ds=False)
         self.plot_result()
-        self.start_button_hb.children = [self.start_button, self.use_this_alignment_button.button]
+        self.start_button_hb.children = [
+            self.start_button,
+            self.use_this_alignment_button.button,
+        ]
         self.use_this_alignment_button.enable()
 
     def make_tab(self):
@@ -651,7 +660,12 @@ class Align(AnalysisBase):
                 HBox(
                     [
                         HBox([self.center_textbox]),
-                        HBox([self.num_iterations_textbox, self.pre_alignment_iters_textbox]),
+                        HBox(
+                            [
+                                self.num_iterations_textbox,
+                                self.pre_alignment_iters_textbox,
+                            ]
+                        ),
                         HBox([self.padding_x_textbox, self.padding_y_textbox]),
                         HBox([self.downsample_checkbox, self.ds_factor_dropdown]),
                         self.use_subset_correlation_checkbox,
@@ -682,9 +696,13 @@ class Align(AnalysisBase):
                 self.viewer_accordion,
                 # TODO: implement load metadata again
                 # self.load_metadata_button,
-                HBox([self.methods_accordion,
-                    self.options_accordion,
-                    self.save_options_accordion]),               
+                HBox(
+                    [
+                        self.methods_accordion,
+                        self.options_accordion,
+                        self.save_options_accordion,
+                    ]
+                ),
                 self.start_button_hb,
                 self.progress_hbox,
                 VBox(
@@ -765,10 +783,10 @@ class Recon(AnalysisBase):
             children=[
                 VBox(
                     [
-                        HBox([self.use_multiple_centers_checkbox,self.center_textbox]),
+                        HBox([self.use_multiple_centers_checkbox, self.center_textbox]),
                         self.num_iterations_textbox,
-                        HBox([self.padding_x_textbox,self.padding_y_textbox]),
-                        HBox([self.downsample_checkbox,self.ds_factor_dropdown]),
+                        HBox([self.padding_x_textbox, self.padding_y_textbox]),
+                        HBox([self.downsample_checkbox, self.ds_factor_dropdown]),
                         self.extra_options_textbox,
                     ],
                 ),
@@ -783,9 +801,13 @@ class Recon(AnalysisBase):
                 self.viewer_accordion,
                 # TODO: implement load metadata again
                 # self.load_metadata_button,
-                HBox([self.methods_accordion,
-                    self.options_accordion,
-                    self.save_options_accordion]), 
+                HBox(
+                    [
+                        self.methods_accordion,
+                        self.options_accordion,
+                        self.save_options_accordion,
+                    ]
+                ),
                 self.start_button_hb,
                 self.plot_output1,
             ]

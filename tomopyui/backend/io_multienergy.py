@@ -1,7 +1,13 @@
-from tomopyui.backend.io import IOBase, Projections_Prenormalized, Metadata, Metadata_MultiEnergy
-from tomopyui.tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
-from tomopyui.tomocupy.prep.sampling import shrink_and_pad_projections
-from tomopyui.widgets.prep import shift_projections
+from tomopyui.backend.io import (
+    IOBase,
+    Projections_Prenormalized,
+    Metadata,
+    Metadata_MultiEnergy,
+)
+
+# from tomopyui.tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
+# from tomopyui.tomocupy.prep.sampling import shrink_and_pad_projections
+# from tomopyui.widgets.prep import shift_projections
 
 import numpy as np
 
@@ -9,29 +15,10 @@ import pathlib
 import h5py
 import os
 
+
 class MultiEnergyProjections(IOBase):
-
-    # hdf keys
-    hdf_key_theta = "/exchange/theta"
-    hdf_key_energies = "/energies"
-    hdf_key_norm_proj = "/process/normalized/data"
-    hdf_key_norm = "/process/normalized/"
-    hdf_key_ds = "/process/downsampled/"
-    hdf_key_ds_0 = "/process/downsampled/0/"
-    hdf_key_ds_1 = "/process/downsampled/1/"
-    hdf_key_ds_2 = "/process/downsampled/2/"
-    hdf_key_data = "data"  # to be added after downsampled/0,1,2/...
-    hdf_key_bin_frequency = "frequency"  # to be added after downsampled/0,1,2/...
-    hdf_key_bin_centers = "bin_centers"  # to be added after downsampled/0,1,2/...
-    hdf_key_image_range = "image_range"  # to be added after downsampled/0,1,2/...
-    hdf_key_bin_edges = "bin_edges"
-    hdf_key_percentile = "percentile"
-    hdf_key_ds_factor = "ds_factor"
-    hdf_key_process = "/process"
-
-    def __init__(self, hdf_path: pathlib.Path):
+    def __init__(self):
         self.energies: list[float] = []
-        self.hdf_path = hdf_path
         self.this_energy_projections = Projections_Prenormalized()
         self.metadata = Metadata_MultiEnergy()
 
@@ -125,7 +112,9 @@ class MultiEnergyProjections(IOBase):
                 )
                 moving.data_ds = shift_projections(moving.data_ds, sx, sy)
                 if group + self.hdf_key_ds + "/" + str(i) + "/" not in hdf_file:
-                    grp = hdf_file.create_group(group + self.hdf_key_ds + "/" + str(i) + "/")
+                    grp = hdf_file.create_group(
+                        group + self.hdf_key_ds + "/" + str(i) + "/"
+                    )
                     ds = grp.create_dataset(self.hdf_key_data, data=moving.data_ds)
                 else:
                     grp = hdf_file[group + self.hdf_key_ds + "/" + str(i) + "/"]
@@ -172,11 +161,31 @@ class MultiEnergyProjections(IOBase):
         ----------
         filepath: pathlib.Path
             Path to hdf5 file creating using compile_energies.
-        
+
 
         """
         # with h5py.File(filepath) as f:
-        #     self.init_energy = 
-        #     self.hdf_key_norm_data = 
+        #     self.init_energy =
+        #     self.hdf_key_norm_data =
         #     self.
         pass
+
+    def get_this_energy_projections(self, uploader):
+        self.set_this_energy(uploader)
+        if self.hdf_file:
+            self.hdf_file.close()
+        self.filepath = uploader.filepath
+        self.downsample_factor = uploader.viewer.ds_viewer_dropdown.value
+        self.viewer.plot(self)
+
+    def set_this_energy(self, uploader):
+        self.this_energy_str = uploader.this_energy_str
+        self.this_energy_float = uploader.this_energy_float
+        self.hdf_prefix = self.hdf_key_energies + "/" + self.this_energy_str
+        self.hdf_key_norm_proj = self.hdf_prefix + IOBase.hdf_key_norm_proj
+        self.hdf_key_norm = self.hdf_prefix + IOBase.hdf_key_norm
+        self.hdf_key_ds = self.hdf_prefix + IOBase.hdf_key_ds
+        self.hdf_key_ds_0 = self.hdf_prefix + IOBase.hdf_key_ds_0
+        self.hdf_key_ds_1 = self.hdf_prefix + IOBase.hdf_key_ds_1
+        self.hdf_key_ds_2 = self.hdf_prefix + IOBase.hdf_key_ds_2
+        self.hdf_key_process = self.hdf_prefix + IOBase.hdf_key_process
