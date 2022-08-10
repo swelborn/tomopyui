@@ -457,7 +457,11 @@ class UploaderBase(ABC):
         """
         self.filedir = pathlib.Path(self.filechooser.selected_path)
         self.filename = self.filechooser.selected_filename
-        self.quick_path_search.value = str(self.filedir / self.filename)
+        if str(self.filedir / self.filename) == self.quick_path_search.value:
+            _ = DummyChange(str(self.filedir / self.filename))
+            self._update_filechooser_from_quicksearch(_)
+        else:
+            self.quick_path_search.value = str(self.filedir / self.filename)
 
     # Each uploader has a method to update the filechooser from the quick search path,
     # and vice versa.
@@ -470,6 +474,11 @@ class UploaderBase(ABC):
     @abstractmethod
     def import_data(self):
         ...
+
+
+class DummyChange:
+    def __init__(self, new):
+        self.new = new
 
 
 class PrenormUploader(UploaderBase):
@@ -1020,9 +1029,7 @@ class TwoEnergyUploader(PrenormUploader):
             self.projections.import_file_projections(self)
         self.import_status_label.value = "Checking for downsampled data."
         self.projections._check_downsampled_data(label=self.import_status_label)
-        self.import_status_label.value = (
-            "Plotting data."
-        )
+        self.import_status_label.value = "Plotting data."
         if not self.imported_metadata:
             self.projections.energy = self.energy_textbox.value
             self.projections.current_pixel_size = self.pixel_size_textbox.value

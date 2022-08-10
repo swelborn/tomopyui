@@ -64,8 +64,8 @@ class Prep(ABC):
         self.imported_viewer.create_app()
         self.altered_viewer = BqImViewer_Projections_Child(self.imported_viewer)
         self.altered_viewer.create_app()
-        self.altered_viewer.ds_viewer_dropdown.options = [("Original", -1)]
-        self.altered_viewer.ds_viewer_dropdown.value = -1
+        self.altered_viewer.ds_dropdown.options = [("Original", -1)]
+        self.altered_viewer.ds_dropdown.value = -1
 
         # -- Headers for plotting -------------------------------------
         self.import_plot_header = "Imported Projections"
@@ -418,7 +418,6 @@ class Prep(ABC):
 
         # Save
         self.save_on_button.on_click(self.save_on_off)
-
 
     def update_shifts_list(self):
         pass
