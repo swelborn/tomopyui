@@ -77,7 +77,7 @@ class HDF5_Tree:
             for attr in self.hdf_obj[dataset].attrs:
                 values.append(f"<i>{attr}</i>: {self.hdf_obj[dataset].attrs[attr]}")
             datasets_info.append(
-                widgets.HTML(value="<br/>".join(values), layout=Layout(width="100%"))
+                HTML(value="<br/>".join(values), layout=Layout(width="100%"))
             )
             self.datasets_info.children = datasets_info
 
@@ -92,16 +92,18 @@ class HDF5_Tree:
             self.vbox.append(self.datasets_info)
 
         # create VBox for attributes
-        attributes = []
-        for attr in self.hdf_obj.attrs:
-            attributes.append(f"<i>{attr}</i>: {self.hdf_obj.attrs[attr]}")
-        self.attributes = widgets.HTML(
-            value="<br/>".join(attributes), layout=Layout(width="100%")
-        )
+        # attributes = []
+        # for attr in self.hdf_obj.attrs:
+        #     print(attr)
+        #     attributes.append(f"<i>{attr}</i>: {self.hdf_obj.attrs[attr]}")
+        # self.attributes = HTML(
+        #     value="<br/>".join(attributes), layout=Layout(width="100%")
+        # )
 
-        # create widget
-        if len(attributes) > 0:
-            titles = ["Groups / Datasets", "Attributes"]
-            self.widget = widgets.Tab([VBox(self.vbox), self.attributes], titles=titles)
-        else:
-            self.widget = VBox(self.vbox)
+        # # create widget
+        # if len(attributes) > 0:
+        #     titles = ["Groups / Datasets", "Attributes"]
+        #     print(self.attributes)
+        #     self.widget = Tab([VBox(self.vbox), VBox(self.attributes)])
+        # else:
+        self.widget = VBox(self.vbox)
