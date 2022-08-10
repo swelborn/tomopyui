@@ -4,10 +4,15 @@ from tomopyui.backend.io import (
     Metadata,
     Metadata_MultiEnergy,
 )
+import os
+from tomopyui.widgets.helpers import import_module_set_env
 
-# from tomopyui.tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
-# from tomopyui.tomocupy.prep.sampling import shrink_and_pad_projections
-# from tomopyui.widgets.prep import shift_projections
+cuda_import_dict = {"cupy": "cuda_enabled"}
+import_module_set_env(cuda_import_dict)
+if os.environ["cuda_enabled"] == "True":
+    from tomopyui.tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
+    from tomopyui.tomocupy.prep.sampling import shrink_and_pad_projections
+    from tomopyui.widgets.prep import shift_projections
 
 import numpy as np
 
@@ -21,9 +26,10 @@ class MultiEnergyProjections(IOBase):
         self.energies: list[float] = []
         self.this_energy_projections = Projections_Prenormalized()
         self.metadata = Metadata_MultiEnergy()
+        self.hdf_key_energies = "energies/"
 
     def compile_energies(
-        self, folders: list, alignment_meta: pathlib.Path, write_location: pathlib.Path
+        self, folders: list, hdf_for_alignment: pathlib.Path, write_location: pathlib.Path
     ):
         """
         Compiles energies into one HDF5 file and aligns all data to a pre-aligned upper
@@ -35,10 +41,10 @@ class MultiEnergyProjections(IOBase):
         folders: list of pathlib.Path
             Paths to folders that contain imported data from XANES tomography.
 
-        alignment_meta: pathlib.Path
+        hdf_for_alignment: pathlib.Path
             Path to alignment metadata for the pre-aligned dataset. This could be a
             "standard," or the highest energy dataset for the sample. Must have
-            alignment_metadata.json in folder.
+            hdf_for_alignmentdata.json in folder.
 
         write_location: pathlib.Path
             Location where compiled energy hdf5 file will be written.
@@ -47,7 +53,7 @@ class MultiEnergyProjections(IOBase):
 
         # Setting the shift values
         ref = Projections_Prenormalized()
-        ref.filepath = alignment_meta
+        ref.filepath = hdf_for_alignment
         ref.metadatas = Metadata.get_metadata_hierarchy(
             ref.filedir / "alignment_metadata.json"
         )
@@ -62,13 +68,18 @@ class MultiEnergyProjections(IOBase):
             if metadata.metadata["metadata_type"] == "Align":
                 sx += np.array(metadata.metadata["sx"])
                 sy += np.array(metadata.metadata["sy"])
-
         # Shifting all of the lower energies and writing
         hdf_file = h5py.File(write_location, "a")
 
         self.energies = []
         self.energies_str = []
         for folder in folders:
+            sx = np.zeros((ref_shape[0]))
+            sy = np.zeros((ref_shape[0]))
+            for metadata in ref.metadatas:
+                if metadata.metadata["metadata_type"] == "Align":
+                    sx += np.array(metadata.metadata["sx"])
+                    sy += np.array(metadata.metadata["sy"])
             moving = Projections_Prenormalized()
             moving.filepath = folder / "normalized_projections.hdf5"
             moving._load_hdf_normalized_data_into_memory()
@@ -119,7 +130,7 @@ class MultiEnergyProjections(IOBase):
                 else:
                     grp = hdf_file[group + self.hdf_key_ds + "/" + str(i) + "/"]
                     ds = grp[self.hdf_key_data]
-                    ds[...] = moving.data
+                    ds[...] = moving.data_ds
                 ds.attrs["energy"] = moving.energy_float
                 ds.attrs["sx"] = sx
                 ds.attrs["sy"] = sy
