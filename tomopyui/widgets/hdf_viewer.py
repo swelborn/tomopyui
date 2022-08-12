@@ -1,4 +1,9 @@
-from tomopyui.widgets.view import BqImViewerBase
+from tomopyui.widgets.view import (
+    BqImViewerBase,
+    BqImViewer_Projections_Parent,
+    BqImViewer_Projections_Child,
+    BqImViewer_TwoEnergy_Low,
+)
 from ipywidgets import *
 import bqplot as bq
 from tomopyui._sharedvars import *
@@ -9,8 +14,7 @@ class BqImViewer_HDF5(BqImViewerBase):
 
         super().__init__()
         self.rectangle_selector_button.tooltip = (
-            "Turn on the rectangular region selector. Select a region "
-            "and copy it over to Altered Projections."
+            "Turn on the rectangular region selector."
         )
         self.from_hdf = True
         self.from_npy = False
@@ -76,3 +80,56 @@ class BqImViewer_HDF5(BqImViewerBase):
 
         self.plotted_image.image = self.images[self.image_index_slider.value]
         self.change_aspect_ratio()
+
+
+class BqImViewer_HDF5_Align_To(BqImViewer_HDF5):
+    def __init__(self):
+        super().__init__()
+        # Rectangle selector button
+        self.rectangle_selector_button.tooltip = (
+            "Turn on the rectangular region selector. Select a region here "
+            "to do phase correlation on."
+        )
+        self.rectangle_selector_on = False
+        self.rectangle_select(None)
+        self.viewing = False
+
+    # Rectangle selector to update projection range
+    def rectangle_to_px_range(self, *args):
+        BqImViewer_Projections_Parent.rectangle_to_px_range(self)
+        self.viewer_child.match_rectangle_selector_range_parent()
+
+
+class BqImViewer_HDF5_Align(BqImViewer_TwoEnergy_Low):
+    def __init__(self, viewer_parent):
+        super().__init__(viewer_parent)
+        self.from_hdf = True
+        self.ds_dropdown = self.viewer_parent.ds_dropdown
+        self.scheme_dropdown = self.viewer_parent.scheme_dropdown
+        self.start_button.disabled = False
+        self.save_button.disabled = False
+
+    def make_buttons(self):
+        self.init_buttons = [
+            self.plus_button,
+            self.minus_button,
+            self.reset_button,
+            self.rm_high_low_int_button,
+            self.rectangle_selector_button,
+        ]
+        self.all_buttons = self.init_buttons
+        super().make_buttons()
+        del self.scale_button
+        self.diff_button.on_click(self.switch_to_diff)
+
+    def add_buttons(self):
+        self.all_buttons.insert(-1, self.diff_button)
+        self.all_buttons.insert(-1, self.link_plotted_projections_button)
+        self.all_buttons.insert(-1, self.start_button)
+        self.all_buttons.insert(-1, self.save_button)
+
+    def plot(self, projections, hdf_handler):
+        BqImViewer_HDF5.plot(self, projections, hdf_handler)
+
+    def downsample_viewer(self, *args):
+        pass

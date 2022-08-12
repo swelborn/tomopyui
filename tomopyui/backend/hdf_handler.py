@@ -40,7 +40,6 @@ class HDF5_Handler:
     ]
     hdf_keys_ds_hist_scalar = [hdf_key_ds_factor]
 
-
     # -- Initialization --
     def __init__(self, uploader, hdf_path: pathlib.Path = None, mode="r+"):
         if hdf_path is not None:
@@ -60,6 +59,7 @@ class HDF5_Handler:
         self.projections = uploader.projections
         self.uploader = uploader
         self.open_hdf_files = []
+        self.ds_factor_from_parent = False
 
     def _init_objs(self):
         self.selected_group_name = None
@@ -105,7 +105,7 @@ class HDF5_Handler:
     def load_data(self):
         self.find_nearest_process()
         if self.uploader.load_ds_checkbox.value:
-            self.load_ds("1")
+            self.load_ds("2")
         else:
             self.load_any()
 
@@ -148,9 +148,44 @@ class HDF5_Handler:
         pyramid_ds_map = {"0": 2, "1": 4, "2": 8}
         self.loaded_ds_factor = pyramid_ds_map[str(_)]
 
+    def load_full(self):
+        self.projections._data = self.nearest_process[self.hdf_key_norm_proj][:]
+        self.projections.data = self.projections._data
+        pyramid_level = self.hdf_key_ds + str(0) + "/"
+        try:
+            self.projections.hist = {
+                key: self.nearest_process[self.hdf_key_norm + key][:]
+                for key in self.hdf_keys_ds_hist
+            }
+        except KeyError:
+            # load downsampled histograms if regular histograms don't work
+            self.projections.hist = {
+                key: self.nearest_process[pyramid_level + key][:]
+                for key in self.hdf_keys_ds_hist
+            }
+            for key in self.hdf_keys_ds_hist_scalar:
+                self.projections.hist[key] = self.nearest_process[pyramid_level + key][
+                    ()
+                ]
+        ds_data_key = pyramid_level + self.hdf_key_data
+        self.data_ds = self.nearest_process[ds_data_key]
+        self.loaded_ds = False
+        self.viewer.plot(self.projections, self)
+        self.turn_off_callbacks = True
+        self.uploader.viewer.ds_dropdown.value = -1
+        self.turn_off_callbacks = False
+        self.loaded_ds_factor = -1
+
     def load_any(self):
         if self.nearest_process is None:
             return
+        if self.ds_factor_from_parent:
+            if self.loaded_ds_factor == -1:
+                self.load_full()
+            else:
+                self.load_ds(str(self.loaded_ds_factor))
+            return
+
         strcmp = str(self.selected_group_name)
         grp = str(self.selected_group_name.stem)
         nums = [str(num) for num in range(3)]
@@ -161,36 +196,5 @@ class HDF5_Handler:
             self.load_ds("2")
             return
         elif strcmp.endswith("normalized"):
-            self.projections._data = self.nearest_process[self.hdf_key_norm_proj][:]
-            self.projections.data = self.projections._data
-            pyramid_level = self.hdf_key_ds + str(0) + "/"
-            try:
-                self.projections.hist = {
-                    key: self.nearest_process[self.hdf_key_norm + key][:]
-                    for key in self.hdf_keys_ds_hist
-                }
-            except KeyError:
-                # load downsampled histograms if regular histograms don't work
-                self.projections.hist = {
-                    key: self.nearest_process[pyramid_level + key][:]
-                    for key in self.hdf_keys_ds_hist
-                }
-                for key in self.hdf_keys_ds_hist_scalar:
-                    self.projections.hist[key] = self.nearest_process[
-                        pyramid_level + key
-                    ][()]
-            ds_data_key = pyramid_level + self.hdf_key_data
-            self.data_ds = self.nearest_process[ds_data_key]
-            self.loaded_ds = False
-            self.viewer.plot(self.projections, self)
-            self.turn_off_callbacks = True
-            self.uploader.viewer.ds_dropdown.value = -1
-            self.turn_off_callbacks = False
-            self.loaded_ds_factor = -1
-
-    def _unload_hdf_normalized_and_ds(self):
-        self._data = self.selected_group[self.hdf_key_norm_proj]
-        self.data = self._data
-        pyramid_level = self.hdf_key_ds + str(0) + "/"
-        ds_data_key = pyramid_level + self.hdf_key_data
-        self.data_ds = self.hdf_obj[ds_data_key]
+            self.load_full()
+            return

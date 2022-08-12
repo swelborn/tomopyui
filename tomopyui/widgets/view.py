@@ -947,12 +947,20 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             "Turn on the rectangular region selector. Select a region here "
             "to do phase correlation on. This will be the moving image."
         )
+        self.make_buttons()
+        self.add_buttons()
+        self.diff_button.on_click(self.switch_to_diff)
+        self.viewing = False
+        self.diff_on = False
+        self.diff_images = self.viewer_parent.images - self.images
+
+    def make_buttons(self):
         self.diff_button = Button(
-            icon="minus",
+            icon="black-tie",
             layout=self.button_layout,
             style=self.button_font,
             tooltip="Take the difference of the high and low energies.",
-            disabled=True,
+            disabled=False,
         )
         self.link_plotted_projections_button = Button(
             icon="unlink",
@@ -987,15 +995,12 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             style=self.button_font,
         )
 
+    def add_buttons(self):
         self.all_buttons.insert(-2, self.diff_button)
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
         self.all_buttons.insert(-2, self.scale_button)
         self.all_buttons.insert(-2, self.start_button)
         self.all_buttons.insert(-2, self.save_button)
-        self.diff_button.on_click(self.switch_to_diff)
-        self._disable_diff_callback = True
-        self.viewing = False
-        self.diff_on = False
 
     # Rectangle selector to update projection range
     def rectangle_to_px_range(self, *args):
@@ -1056,15 +1061,18 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
         self.app = VBox([self.header, self.center, footer])
 
     def switch_to_diff(self, *args):
-        if not self.diff_on and not self._disable_diff_callback:
+        if not self.diff_on:
+            self._images = self.images
+            self.diff_images = self.viewer_parent.images - self.images
             self.images = self.diff_images
             self.plotted_image.image = self.images[self.image_index_slider.value]
             self.diff_on = True
             self._disable_diff_callback = True
             self.diff_button.button_style = "success"
             self._disable_diff_callback = False
-        elif not self._disable_diff_callback:
-            self.images = self.original_images
+        else:
+            del self.diff_images
+            self.images = self._images
             self.plotted_image.image = self.images[self.image_index_slider.value]
             self.diff_on = False
             self._disable_diff_callback = True
