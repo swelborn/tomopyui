@@ -29,7 +29,10 @@ class MultiEnergyProjections(IOBase):
         self.hdf_key_energies = "energies/"
 
     def compile_energies(
-        self, folders: list, hdf_for_alignment: pathlib.Path, write_location: pathlib.Path
+        self,
+        folders: list,
+        hdf_for_alignment: pathlib.Path,
+        write_location: pathlib.Path,
     ):
         """
         Compiles energies into one HDF5 file and aligns all data to a pre-aligned upper
@@ -100,9 +103,10 @@ class MultiEnergyProjections(IOBase):
                 grp = hdf_file[group + self.hdf_key_norm]
                 ds = grp[self.hdf_key_data]
                 ds[...] = moving.data
-            ds.attrs["energy"] = moving.energy_float
-            ds.attrs["sx"] = sx
-            ds.attrs["sy"] = sy
+            grp.attrs["energy"] = moving.energy_float
+            grp.attrs["sx"] = sx
+            grp.attrs["sy"] = sy
+            grp.attrs["angles_deg"] = moving.metadata.metadata["angles_deg"]
             for key in self.hdf_keys_ds_hist:
                 ds = grp.create_dataset(key, data=moving.hist[key])
             self.energies.append(moving.energy_float)
@@ -131,10 +135,10 @@ class MultiEnergyProjections(IOBase):
                     grp = hdf_file[group + self.hdf_key_ds + "/" + str(i) + "/"]
                     ds = grp[self.hdf_key_data]
                     ds[...] = moving.data_ds
-                ds.attrs["energy"] = moving.energy_float
-                ds.attrs["sx"] = sx
-                ds.attrs["sy"] = sy
-                ds.attrs["angles_deg"] = moving.metadata.metadata["angles_deg"]
+                grp.attrs["energy"] = moving.energy_float
+                grp.attrs["sx"] = sx
+                grp.attrs["sy"] = sy
+                grp.attrs["angles_deg"] = moving.metadata.metadata["angles_deg"]
                 for key in self.hdf_keys_ds_hist:
                     ds = grp.create_dataset(key, data=moving.hist[key])
                 for key in self.hdf_keys_ds_hist_scalar:

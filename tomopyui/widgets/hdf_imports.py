@@ -6,8 +6,9 @@ import pathlib
 from ipywidgets import *
 from tomopyui.backend.hdf_handler import HDF5_Handler
 from tomopyui.widgets.imports import UploaderBase
-from tomopyui.widgets.hdf_viewer import BqImViewer_HDF5
+from tomopyui.widgets.hdf_viewer import *
 from tomopyui.backend.io import Projections_Prenormalized
+from tomopyui.widgets.helpers import ToggleIconButton
 
 
 class HDF5_GeneralUploader(UploaderBase):
@@ -112,7 +113,6 @@ class HDF5_GeneralUploader(UploaderBase):
                             [
                                 self.quick_path_search,
                                 self.files_sel,
-                                self.import_button.button,
                             ]
                         ),
                         self.tree_output,
@@ -124,10 +124,52 @@ class HDF5_GeneralUploader(UploaderBase):
         )
 
 
-# class HDF5_MultipleEnergyUploader(HDF5_GeneralUploader):
+class HDF5_MultipleEnergyUploader(HDF5_GeneralUploader):
+    def __init__(self):
+        super().__init__()
+        self.viewer1 = BqImViewer_HDF5_Align_To()
+        self.viewer1.create_app()
+        self.viewer2 = BqImViewer_HDF5_Align(self.viewer1)
+        self.viewer2.create_app()
+        self.toggle_button = ToggleIconButton(self.viewer2_on, self.viewer1_on)
+        self.viewer = self.viewer1
+        self.hdf_handler.viewer = self.viewer
+        self.viewer1.hdf_handler = self.hdf_handler
+        self.viewer2.hdf_handler = self.hdf_handler
+        self.create_app()
 
-#     def __init__(self):
-#         super().__init__(self)
-#         self.projections = MultiEnergyProjections()
-#         self.viewer = BqImViewer_HDF5()
-#         self.create_app()
+    def viewer1_on(self):
+        self.viewer = self.viewer1
+        self.hdf_handler.viewer = self.viewer
+        self.hdf_handler.ds_factor_from_parent = False
+
+    def viewer2_on(self):
+        self.viewer = self.viewer2
+        self.hdf_handler.viewer = self.viewer
+        self.hdf_handler.ds_factor_from_parent = True
+        self.hdf_handler.loaded_ds_factor = self.viewer1.ds_dropdown.value
+
+    def create_app(self):
+        self.app = HBox(
+            [
+                VBox(
+                    [
+                        HBox(
+                            [
+                                self.reset_button,
+                                self.filechooser,
+                                self.load_ds_checkbox,
+                            ]
+                        ),
+                        HBox(
+                            [
+                                self.quick_path_search,
+                                self.files_sel,
+                            ]
+                        ),
+                        self.tree_output,
+                    ],
+                ),
+            ],
+            layout=Layout(justify_content="center"),
+        )
