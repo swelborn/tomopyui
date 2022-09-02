@@ -21,12 +21,16 @@ from tomopyui.widgets.helpers import ReactiveIconButton
 from tomopyui.widgets.hdf_viewer import *
 from tomopyui.widgets.hdf_imports import *
 
-# if os.environ["cuda_enabled"] == "True":
-#     from ..tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
-#     from ..tomocupy.prep.sampling import shrink_and_pad_projections
-#     from tomopyui.widgets.prep import shift_projections
-# Multiple Energy Alignment
+from tomopyui.widgets.helpers import import_module_set_env
 
+cuda_import_dict = {"cupy": "cuda_enabled"}
+import_module_set_env(cuda_import_dict)
+if os.environ["cuda_enabled"] == "True":
+    from ..tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
+    from ..tomocupy.prep.sampling import shrink_and_pad_projections
+    from tomopyui.widgets.prep import shift_projections, shift_projections_nopad
+
+# Multiple Energy Alignment
 
 class TwoEnergyTool:
     def __init__(self):
@@ -317,36 +321,25 @@ class MultiEnergyAlignmentTool:
         self.num_batches = self.num_batches_textbox.value
         self.upsample_factor = 50
         self.shift_cpu = []
-        low_e_data = self.low_e_viewer.projections.data[
-            :,
-            self.low_range_y[0] : self.low_range_y[1],
-            self.low_range_x[0] : self.low_range_x[1],
-        ]
-        high_e_data = self.high_e_viewer.projections.data[
-            :,
-            self.high_range_y[0] : self.high_range_y[1],
-            self.high_range_x[0] : self.high_range_x[1],
-        ]
-
         batch_cross_correlation(
-            low_e_data,
-            high_e_data,
+            self.low_e_viewer.projections.data,
+            self.high_e_viewer.projections.data,
             self.shift_cpu,
             self.num_batches,
             self.upsample_factor,
-            blur=False,
-            subset_correlation=False,
-            subset_x=None,
-            subset_y=None,
+            blur=True,
+            subset_correlation=True,
+            subset_x=self.high_range_x,
+            subset_y=self.high_range_y,
             mask_sim=False,
-            pad=(0, 0),
+            pad=(300, 300),
             progress=None,
         )
         self.shift_cpu = np.concatenate(self.shift_cpu, axis=1)
         self.sx = self.shift_cpu[1]
         self.sy = self.shift_cpu[0]
         # TODO: send to GPU and do both calcs there.
-        self.low_e_viewer.projections.data = shift_projections(
+        self.low_e_viewer.projections.data = shift_projections_nopad(
             self.low_e_viewer.projections.data,
             self.sx,
             self.sy,
