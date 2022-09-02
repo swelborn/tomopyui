@@ -64,8 +64,8 @@ class Prep(ABC):
         self.imported_viewer.create_app()
         self.altered_viewer = BqImViewer_Projections_Child(self.imported_viewer)
         self.altered_viewer.create_app()
-        self.altered_viewer.ds_viewer_dropdown.options = [("Original", -1)]
-        self.altered_viewer.ds_viewer_dropdown.value = -1
+        self.altered_viewer.ds_dropdown.options = [("Original", -1)]
+        self.altered_viewer.ds_dropdown.value = -1
 
         # -- Headers for plotting -------------------------------------
         self.import_plot_header = "Imported Projections"
@@ -419,7 +419,6 @@ class Prep(ABC):
         # Save
         self.save_on_button.on_click(self.save_on_off)
 
-
     def update_shifts_list(self):
         pass
 
@@ -633,6 +632,20 @@ def shift_projections(projections, sx, sy):
         use_corr_prj_gpu=False,
     )
     return new_prj_imgs
+
+def shift_projections_nopad(projections, sx, sy):
+    new_prj_imgs = copy.deepcopy(projections)
+    new_prj_imgs = shift_prj_cp(
+        new_prj_imgs,
+        sx,
+        sy,
+        5,
+        (0,0),
+        use_corr_prj_gpu=False,
+        use_pad_cond=False,
+    )
+    return new_prj_imgs
+
 
 
 def renormalize_by_roi(projections, px_range_x, px_range_y):
