@@ -178,7 +178,7 @@ class BqImViewerBase(ABC):
         )
 
         # Downsample dropdown menu
-        self.ds_viewer_dropdown = Dropdown(
+        self.ds_dropdown = Dropdown(
             description="Viewer binning: ",
             options=[("Original", -1), ("2", 0), ("4", 1), ("8", 2)],
             value=0,
@@ -241,7 +241,7 @@ class BqImViewerBase(ABC):
         self.save_movie_button.on_click(self.save_movie)
 
         # Downsample dropdown menu
-        self.ds_viewer_dropdown.observe(self.downsample_viewer, "value")
+        self.ds_dropdown.observe(self.downsample_viewer, "value")
 
         # Reset button
         self.reset_button.on_click(self.reset)
@@ -287,7 +287,7 @@ class BqImViewerBase(ABC):
 
     # Downsample the plot view
     def downsample_viewer(self, *args):
-        self.ds_factor = self.ds_viewer_dropdown.value
+        self.ds_factor = self.ds_dropdown.value
         if self.from_hdf and self.ds_factor != -1:
             self.projections._load_hdf_ds_data_into_memory(pyramid_level=self.ds_factor)
             self.original_images = self.projections.data
@@ -349,9 +349,7 @@ class BqImViewerBase(ABC):
         vmin = self.image_scale["image"].min
         vmax = self.image_scale["image"].max
         if self.from_hdf:
-            self.projections._load_hdf_ds_data_into_memory(
-                self.ds_viewer_dropdown.value
-            )
+            self.projections._load_hdf_ds_data_into_memory(self.ds_dropdown.value)
             self.images = self.projections.data_ds
         for image in self.images:
             im = ax.imshow(image, animated=True, vmin=vmin, vmax=vmax)
@@ -463,7 +461,7 @@ class BqImViewerBase(ABC):
             self.fig.layout.height = str(int(550 / self.aspect_ratio)) + "px"
 
     def check_npy_or_hdf(self, projections):
-        if projections.hdf_file is not None:
+        if projections.hdf_file is not None or "hdf_handler" in self.__dict__:
             self.from_hdf = True
             self.from_npy = False
         else:
@@ -485,7 +483,7 @@ class BqImViewerBase(ABC):
         self.hist.refresh_histogram()
 
     def get_ds_factor_from_dropdown(self):
-        ds_factor = self.ds_viewer_dropdown.value
+        ds_factor = self.ds_dropdown.value
         if ds_factor == -1:
             ds_factor = 1
         else:
@@ -497,7 +495,7 @@ class BqImViewerBase(ABC):
         self.header_layout = Layout(justify_content="center", align_items="center")
         self.header = HBox(
             [
-                self.ds_viewer_dropdown,
+                self.ds_dropdown,
                 self.scheme_dropdown,
             ],
             layout=self.header_layout,
@@ -572,8 +570,8 @@ class BqImViewer_Projections_Parent(BqImViewerBase):
         self.px_size = self.projections.px_size
         if ds and not no_check:
             self.projections._check_downsampled_data()
-            self.ds_viewer_dropdown.value = (
-                0 if any([0 == x[1] for x in self.ds_viewer_dropdown.options]) else -1
+            self.ds_dropdown.value = (
+                0 if any([0 == x[1] for x in self.ds_dropdown.options]) else -1
             )
             self.hist.precomputed_hist = self.projections.hist
             self.original_images = self.projections.data
@@ -583,8 +581,8 @@ class BqImViewer_Projections_Parent(BqImViewerBase):
             self.original_images = self.projections.data
             self.images = self.projections.data_ds
         else:
-            self.ds_viewer_dropdown.value = -1
-            self.ds_viewer_dropdown.options = [("Original", -1)]
+            self.ds_dropdown.value = -1
+            self.ds_dropdown.options = [("Original", -1)]
             self.original_images = self.projections.data
             self.images = self.original_images
         self.check_npy_or_hdf(projections)
@@ -889,7 +887,6 @@ class BqImViewer_Center(BqImViewer_Projections_Parent):
                 )
 
 
-
 class BqImViewer_Center_Recon(BqImViewer_Projections_Parent):
     # TODO: make reconstruction io_object
     def plot(self, rec):
@@ -897,8 +894,8 @@ class BqImViewer_Center_Recon(BqImViewer_Projections_Parent):
         self.pxY = rec.shape[1]
         self.original_images = rec
         self.images = rec
-        self.ds_viewer_dropdown.value = 0
-        self.ds_factor = self.ds_viewer_dropdown.value
+        self.ds_dropdown.value = 0
+        self.ds_factor = self.ds_dropdown.value
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.image_index_slider.max = self.images.shape[0] - 1
@@ -950,12 +947,20 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             "Turn on the rectangular region selector. Select a region here "
             "to do phase correlation on. This will be the moving image."
         )
+        self.make_buttons()
+        self.add_buttons()
+        self.diff_button.on_click(self.switch_to_diff)
+        self.viewing = False
+        self.diff_on = False
+        self.diff_images = self.viewer_parent.images - self.images
+
+    def make_buttons(self):
         self.diff_button = Button(
-            icon="minus",
+            icon="black-tie",
             layout=self.button_layout,
             style=self.button_font,
             tooltip="Take the difference of the high and low energies.",
-            disabled=True,
+            disabled=False,
         )
         self.link_plotted_projections_button = Button(
             icon="unlink",
@@ -990,16 +995,12 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             style=self.button_font,
         )
 
+    def add_buttons(self):
         self.all_buttons.insert(-2, self.diff_button)
         self.all_buttons.insert(-2, self.link_plotted_projections_button)
         self.all_buttons.insert(-2, self.scale_button)
         self.all_buttons.insert(-2, self.start_button)
         self.all_buttons.insert(-2, self.save_button)
-        self.diff_button.on_click(self.switch_to_diff)
-        self._disable_diff_callback = True
-        self.viewing = False
-        self.diff_on = False
-
 
     # Rectangle selector to update projection range
     def rectangle_to_px_range(self, *args):
@@ -1060,15 +1061,18 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
         self.app = VBox([self.header, self.center, footer])
 
     def switch_to_diff(self, *args):
-        if not self.diff_on and not self._disable_diff_callback:
+        if not self.diff_on:
+            self._images = self.images
+            self.diff_images = self.viewer_parent.images - self.images
             self.images = self.diff_images
             self.plotted_image.image = self.images[self.image_index_slider.value]
             self.diff_on = True
             self._disable_diff_callback = True
             self.diff_button.button_style = "success"
             self._disable_diff_callback = False
-        elif not self._disable_diff_callback:
-            self.images = self.original_images
+        else:
+            del self.diff_images
+            self.images = self._images
             self.plotted_image.image = self.images[self.image_index_slider.value]
             self.diff_on = False
             self._disable_diff_callback = True
@@ -1080,19 +1084,15 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
         self.pxY = self.projections.shrunken_data.shape[1]
         self.original_images = self.projections.shrunken_data
         self.images = self.projections.shrunken_data
-        # self.ds_viewer_dropdown.value = 0
-        # self.ds_factor = self.ds_viewer_dropdown.value
+        # self.ds_dropdown.value = 0
+        # self.ds_factor = self.ds_dropdown.value
         self.current_image_ind = 0
         self.change_aspect_ratio()
         self.image_index_slider.max = self.images.shape[0] - 1
         self.plotted_image.image = self.images[self.image_index_slider.value]
-        
+
         # self.hist.refresh_histogram()
         # self.hist.rm_high_low_int(None)
-
-
-
-
 
 
 class BqImHist:
@@ -1177,7 +1177,6 @@ class BqImHist:
         self.init_vmin = float(self.vmin)
         self.vmax = float(self.ds_dict[self.viewer.projections.hdf_key_percentile][1])
         self.init_vmax = float(self.vmax)
-        self.ds_factor_num = self.ds_dict[self.viewer.projections.hdf_key_ds_factor]
 
     def refresh_histogram_from_downsampled_folder(self):
         self.bin_centers = self.precomputed_hist[-1]["bin_centers"]

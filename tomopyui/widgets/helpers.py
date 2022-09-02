@@ -330,6 +330,34 @@ class SwitchOffOnIconButton(ReactiveButtonBase):
             self.button_on = True
 
 
+class ToggleIconButton(ReactiveButtonBase):
+    """
+    Subclass for buttons that turn off and on (green on, grey off).
+    """
+
+    def __init__(self, callback_on, callback_off):
+        super().__init__(
+            None,
+            tooltip="Switch on and off.",
+            style={"font_size": "35px"},
+            layout=Layout(width="75px", height="40px"),
+        )
+        self.button.icon = "toggle-off"
+        self.callback_on = callback_on
+        self.callback_off = callback_off
+        self.button_on = False
+
+    def run_callback(self, *args):
+        if self.button_on:
+            self.callback_off()
+            self.button.icon = "toggle-off"
+            self.button_on = False
+        else:
+            self.callback_on()
+            self.button.icon = "toggle-on"
+            self.button_on = True
+
+
 class ImportButton(ReactiveButtonBase):
     """
     Import button found throughout the app.
