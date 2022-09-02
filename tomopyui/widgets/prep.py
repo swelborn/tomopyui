@@ -8,14 +8,14 @@ from ipywidgets import *
 from abc import ABC, abstractmethod
 from functools import partial
 from tomopyui._sharedvars import *
-from tomopyui.backend.io import Projections_Child
-from tomopyui.widgets.imports import ShiftsUploader
+from tomopyui.backend.io.io import Projections_Child
+from tomopyui.widgets.imports.imports import ShiftsUploader
 from tomopyui.widgets.view import (
     BqImViewer_Projections_Parent,
     BqImViewer_Projections_Child,
 )
 from tomopyui.backend.util.padding import *
-from tomopyui.backend.io import Metadata_Prep
+from tomopyui.backend.io.metadata import Metadata_Prep
 
 
 if os.environ["cuda_enabled"] == "True":

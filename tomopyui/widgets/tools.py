@@ -10,7 +10,7 @@ from ipywidgets import *
 from tomopyui._sharedvars import *
 from tomopyui.backend.io import Projections_Child
 
-from tomopyui.widgets.imports import TwoEnergyUploader
+from tomopyui.widgets.imports.imports import TwoEnergyUploader
 from tomopyui.widgets.view import (
     BqImViewer_TwoEnergy_High,
     BqImViewer_TwoEnergy_Low,

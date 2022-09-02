@@ -1,15 +1,8 @@
 import multiprocessing
 from ipywidgets import *
 from tomopyui.widgets.helpers import import_module_set_env
-from tomopyui.widgets.imports import (
-    Import_SSRL62C,
-    Import_SSRL62B,
-    Import_ALS832,
-    Import_APS,
-)
 from tomopyui.widgets.center import Center
 from tomopyui.widgets.analysis import Align, Recon
-from tomopyui.widgets.dataexplorer import DataExplorerTab
 from tomopyui.widgets.prep import Prep
 
 # checks if cupy is installed. if not, disable cuda and certain gui aspects
@@ -48,19 +41,23 @@ def create_dashboard(institution: str):
         dashboard
 
     """
+
     if institution == "ALS_832":
+        from tomopyui.widgets.imports.als import Import_ALS832
         file_import = Import_ALS832()
     if institution == "SSRL_62C":
+        from tomopyui.widgets.imports.ssrl import Import_SSRL62C
         file_import = Import_SSRL62C()
     if institution == "SSRL_62B":
+        from tomopyui.widgets.imports.ssrl import Import_SSRL62B
         file_import = Import_SSRL62B()
     if institution == "APS":
+        from tomopyui.widgets.imports.aps import Import_APS
         file_import = Import_APS()
     prep = Prep(file_import)
     center = Center(file_import)
     align = Align(file_import, center)
     recon = Recon(file_import, center)
-    dataexplorer = DataExplorerTab(align, recon)
 
     for checkbox in (
         align.astra_cuda_methods_checkboxes + recon.astra_cuda_methods_checkboxes
@@ -81,7 +78,6 @@ def create_dashboard(institution: str):
         center.tab,
         align.tab,
         recon.tab,
-        dataexplorer.tab,
         file_import.log_handler.out,
     ]
 
@@ -91,7 +87,6 @@ def create_dashboard(institution: str):
         "Center",
         "Align",
         "Reconstruct",
-        "Data Explorer",
         "Log",
     ]
 
@@ -112,9 +107,6 @@ def create_dashboard(institution: str):
         center.manual_center_accordion,
         align.viewer_accordion,
         recon.viewer_accordion,
-        dataexplorer.analysis_browser_accordion,
-        # dataexplorer.recent_alignment_accordion,
-        # dataexplorer.recent_recon_accordion,
     ]
 
     [
@@ -135,5 +127,4 @@ def create_dashboard(institution: str):
         center,
         align,
         recon,
-        dataexplorer,
     )

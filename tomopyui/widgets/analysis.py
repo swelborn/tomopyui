@@ -11,10 +11,12 @@ from tomopyui.widgets.view import (
     BqImViewer_Projections_Child,
 )
 from tomopyui.backend.runanalysis import RunAlign, RunRecon
-from tomopyui.backend.io import (
-    Projections_Child,
+from tomopyui.backend.io.metadata import (
     Metadata_Align,
     Metadata_Recon,
+)
+from tomopyui.backend.io.io import (
+    Projections_Child,
 )
 from tomopyui.widgets.helpers import (
     ReactiveTextButton,

@@ -15,7 +15,8 @@ from skimage.transform import rescale  # look for better option
 from tomopy.prep.alignment import align_joint as align_joint_tomopy
 from tomopyui.backend.util.padding import *
 from tomopyui._sharedvars import *
-from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Child
+from tomopyui.backend.io.metadata import Metadata_Align, Metadata_Recon
+from tomopyui.backend.io.io import Projections_Child
 from tomopy.recon import algorithm as tomopy_algorithm
 from tomopy.misc.corr import circ_mask
 from tomopy.recon import wrappers
