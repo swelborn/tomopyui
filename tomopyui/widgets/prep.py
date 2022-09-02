@@ -633,6 +633,20 @@ def shift_projections(projections, sx, sy):
     )
     return new_prj_imgs
 
+def shift_projections_nopad(projections, sx, sy):
+    new_prj_imgs = copy.deepcopy(projections)
+    new_prj_imgs = shift_prj_cp(
+        new_prj_imgs,
+        sx,
+        sy,
+        5,
+        (0,0),
+        use_corr_prj_gpu=False,
+        use_pad_cond=False,
+    )
+    return new_prj_imgs
+
+
 
 def renormalize_by_roi(projections, px_range_x, px_range_y):
     averages = [
