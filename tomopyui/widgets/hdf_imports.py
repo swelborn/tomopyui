@@ -127,10 +127,14 @@ class HDF5_GeneralUploader(UploaderBase):
 class HDF5_MultipleEnergyUploader(HDF5_GeneralUploader):
     def __init__(self):
         super().__init__()
+        self.projections1 = self.projections
+        self.projections2 = Projections_Prenormalized()
         self.viewer1 = BqImViewer_HDF5_Align_To()
         self.viewer1.create_app()
+        self.viewer1.projections = self.projections1
         self.viewer2 = BqImViewer_HDF5_Align(self.viewer1)
         self.viewer2.create_app()
+        self.viewer2.projections = self.projections2
         self.toggle_button = ToggleIconButton(self.viewer2_on, self.viewer1_on)
         self.viewer = self.viewer1
         self.hdf_handler.viewer = self.viewer
@@ -141,11 +145,15 @@ class HDF5_MultipleEnergyUploader(HDF5_GeneralUploader):
     def viewer1_on(self):
         self.viewer = self.viewer1
         self.hdf_handler.viewer = self.viewer
+        self.hdf_handler.projections = self.projections1
+        self.projections = self.projections1
         self.hdf_handler.ds_factor_from_parent = False
 
     def viewer2_on(self):
         self.viewer = self.viewer2
         self.hdf_handler.viewer = self.viewer
+        self.hdf_handler.projections = self.projections2
+        self.projections = self.projections2
         self.hdf_handler.ds_factor_from_parent = True
         self.hdf_handler.loaded_ds_factor = self.viewer1.ds_dropdown.value
 
