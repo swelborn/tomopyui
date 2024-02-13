@@ -1,12 +1,11 @@
-from tomopyui.widgets.view import (
-    BqImViewerBase,
-    BqImViewer_Projections_Parent,
-    BqImViewer_Projections_Child,
-    BqImViewer_TwoEnergy_Low,
-)
 from ipywidgets import *
-import bqplot as bq
+
 from tomopyui._sharedvars import *
+from tomopyui.widgets.view import (
+    BqImViewer_Projections_Parent,
+    BqImViewer_TwoEnergy_Low,
+    BqImViewerBase,
+)
 
 
 class BqImViewer_HDF5(BqImViewerBase):

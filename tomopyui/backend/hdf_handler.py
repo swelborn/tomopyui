@@ -1,9 +1,9 @@
-from tomopyui.widgets.hdf_tree import HDF5_Tree
-
-import h5py
-import os
 import pathlib
 import tempfile as tf
+
+import h5py
+
+from tomopyui.widgets.hdf_tree import HDF5_Tree
 
 
 class HDF5_Handler:

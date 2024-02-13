@@ -1,15 +1,17 @@
 import multiprocessing
+
 from ipywidgets import *
+
+from tomopyui.widgets.analysis import Align, Recon
+from tomopyui.widgets.center import Center
+from tomopyui.widgets.dataexplorer import DataExplorerTab
 from tomopyui.widgets.helpers import import_module_set_env
 from tomopyui.widgets.imports import (
-    Import_SSRL62C,
-    Import_SSRL62B,
     Import_ALS832,
     Import_APS,
+    Import_SSRL62B,
+    Import_SSRL62C,
 )
-from tomopyui.widgets.center import Center
-from tomopyui.widgets.analysis import Align, Recon
-from tomopyui.widgets.dataexplorer import DataExplorerTab
 from tomopyui.widgets.prep import Prep
 
 # checks if cupy is installed. if not, disable cuda and certain gui aspects

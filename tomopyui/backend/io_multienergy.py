@@ -1,24 +1,23 @@
+import os
+import pathlib
+
+import h5py
+import numpy as np
+
 from tomopyui.backend.io import (
     IOBase,
-    Projections_Prenormalized,
     Metadata,
     Metadata_MultiEnergy,
+    Projections_Prenormalized,
 )
-import os
 from tomopyui.widgets.helpers import import_module_set_env
 
 cuda_import_dict = {"cupy": "cuda_enabled"}
 import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
-    from tomopyui.tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
+    from tomopyui.tomocupy.prep.alignment import batch_cross_correlation, shift_prj_cp
     from tomopyui.tomocupy.prep.sampling import shrink_and_pad_projections
     from tomopyui.widgets.prep import shift_projections
-
-import numpy as np
-
-import pathlib
-import h5py
-import os
 
 
 class MultiEnergyProjections(IOBase):

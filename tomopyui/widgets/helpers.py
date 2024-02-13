@@ -1,18 +1,11 @@
-import os
-import glob
-import numpy as np
-import json
-import functools
-import tifffile as tf
 import asyncio
-import logging
-import ipywidgets as widgets
 import importlib.util
+import logging
+import os
 import sys
-import time
+from abc import ABC, abstractmethod
 
 from ipywidgets import *
-from abc import ABC, abstractmethod
 
 
 def import_module_set_env(import_dict):
@@ -261,8 +254,7 @@ class ReactiveButtonBase(ABC):
         self.button.icon = "exclamation-triangle"
 
     @abstractmethod
-    def run_callback(self, *args):
-        ...
+    def run_callback(self, *args): ...
 
 
 class ReactiveTextButton(ReactiveButtonBase):
