@@ -1,15 +1,16 @@
-from tomopyui.backend.io import Projections_Prenormalized
-from tomopyui.backend.io import Metadata
-import pathlib
 import os
+import pathlib
 import re
-import numpy as np
+
 import dask.array as da
 import h5py
+import numpy as np
+
+from tomopyui.backend.io import Metadata, Projections_Prenormalized
 
 os.environ["cuda_enabled"] = "True"
 if os.environ["cuda_enabled"] == "True":
-    from tomopyui.tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
+    from tomopyui.tomocupy.prep.alignment import batch_cross_correlation, shift_prj_cp
     from tomopyui.tomocupy.prep.sampling import shrink_and_pad_projections
     from tomopyui.widgets.prep import shift_projections
 

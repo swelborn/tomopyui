@@ -1,22 +1,21 @@
-import numpy as np
 import copy
 import datetime
 import pathlib
-import dask.array as da
-
-from ipywidgets import *
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import partial
+
+import dask.array as da
+import numpy as np
+from ipywidgets import *
+
 from tomopyui._sharedvars import *
-from tomopyui.backend.io import Projections_Child
+from tomopyui.backend.io import Metadata_Prep, Projections_Child
+from tomopyui.backend.util.padding import *
 from tomopyui.widgets.imports import ShiftsUploader
 from tomopyui.widgets.view import (
-    BqImViewer_Projections_Parent,
     BqImViewer_Projections_Child,
+    BqImViewer_Projections_Parent,
 )
-from tomopyui.backend.util.padding import *
-from tomopyui.backend.io import Metadata_Prep
-
 
 if os.environ["cuda_enabled"] == "True":
     from ..tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
@@ -633,6 +632,7 @@ def shift_projections(projections, sx, sy):
     )
     return new_prj_imgs
 
+
 def shift_projections_nopad(projections, sx, sy):
     new_prj_imgs = copy.deepcopy(projections)
     new_prj_imgs = shift_prj_cp(
@@ -640,12 +640,11 @@ def shift_projections_nopad(projections, sx, sy):
         sx,
         sy,
         5,
-        (0,0),
+        (0, 0),
         use_corr_prj_gpu=False,
         use_pad_cond=False,
     )
     return new_prj_imgs
-
 
 
 def renormalize_by_roi(projections, px_range_x, px_range_y):

@@ -1,7 +1,6 @@
-import h5py
-import os
 import pathlib
 
+import h5py
 from ipywidgets import *
 
 

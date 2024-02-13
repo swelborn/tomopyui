@@ -1,26 +1,17 @@
-import numpy as np
 import copy
 import pathlib
-
-from ipywidgets import *
-from tomopyui._sharedvars import *
 from abc import ABC, abstractmethod
-from tomopyui.widgets.view import (
-    BqImViewer_Projections_Parent,
-    BqImViewer_Projections_Child,
-    BqImViewer_Projections_Child,
-)
+
+import numpy as np
+from ipywidgets import *
+
+from tomopyui._sharedvars import *
+from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Child
 from tomopyui.backend.runanalysis import RunAlign, RunRecon
-from tomopyui.backend.io import (
-    Projections_Child,
-    Metadata_Align,
-    Metadata_Recon,
-)
-from tomopyui.widgets.helpers import (
-    ReactiveTextButton,
-    ReactiveIconButton,
-    SwitchOffOnIconButton,
-    ImportButton,
+from tomopyui.widgets.helpers import ReactiveTextButton
+from tomopyui.widgets.view import (
+    BqImViewer_Projections_Child,
+    BqImViewer_Projections_Parent,
 )
 
 
@@ -501,20 +492,16 @@ class AnalysisBase(ABC):
         )
 
     @abstractmethod
-    def update_num_batches(self, *args):
-        ...
+    def update_num_batches(self, *args): ...
 
     @abstractmethod
-    def update_num_iter(self, *args):
-        ...
+    def update_num_iter(self, *args): ...
 
     @abstractmethod
-    def run(self):
-        ...
+    def run(self): ...
 
     @abstractmethod
-    def make_tab(self):
-        ...
+    def make_tab(self): ...
 
     # TODO: add @abstractmethod for loading metadata
 

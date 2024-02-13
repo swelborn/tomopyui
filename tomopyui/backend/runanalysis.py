@@ -1,25 +1,21 @@
 import datetime
-import json
 import os
-import tifffile as tf
-import numpy as np
 import pathlib
-import tomopy
-import matplotlib.pyplot as plt
 import time
-
 from abc import ABC, abstractmethod
-from copy import copy, deepcopy
 from time import perf_counter
-from skimage.transform import rescale  # look for better option
+
+import numpy as np
+import tifffile as tf
+from scipy.stats import linregress
+from tomopy.misc.corr import circ_mask
 from tomopy.prep.alignment import align_joint as align_joint_tomopy
-from tomopyui.backend.util.padding import *
+from tomopy.recon import algorithm as tomopy_algorithm
+from tomopy.recon import wrappers
+
 from tomopyui._sharedvars import *
 from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Child
-from tomopy.recon import algorithm as tomopy_algorithm
-from tomopy.misc.corr import circ_mask
-from tomopy.recon import wrappers
-from scipy.stats import linregress
+from tomopyui.backend.util.padding import *
 
 # TODO: make this global
 from tomopyui.widgets.helpers import import_module_set_env
@@ -27,12 +23,10 @@ from tomopyui.widgets.helpers import import_module_set_env
 cuda_import_dict = {"cupy": "cuda_enabled"}
 import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
-    import astra
     import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
-    import cupy as cp
-    from ..tomocupy.prep.alignment import align_joint as align_joint_cupy
-    from ..tomocupy.prep.alignment import shift_prj_cp
     from tomopyui.widgets.prep import shift_projections
+
+    from ..tomocupy.prep.alignment import align_joint as align_joint_cupy
 
 
 class RunAnalysisBase(ABC):
@@ -77,9 +71,9 @@ class RunAnalysisBase(ABC):
     def save_overall_metadata(self):
         self.metadata.filedir = pathlib.Path(self.wd)
         self.metadata.filename = "overall_" + self.savedir_suffix + "_metadata.json"
-        self.metadata.metadata[
-            "parent_metadata"
-        ] = self.analysis_parent.projections.metadatas[0].metadata.copy()
+        self.metadata.metadata["parent_metadata"] = (
+            self.analysis_parent.projections.metadatas[0].metadata.copy()
+        )
         self.metadata.metadata["data_hierarchy_level"] = (
             self.metadata.metadata["parent_metadata"]["data_hierarchy_level"] + 1
         )
@@ -149,7 +143,10 @@ class RunAnalysisBase(ABC):
         if self.use_multiple_centers:
             # get centers for padded/downsampled data. just for the
             # computation, not saved in metadata
-            centers_ds = [x[0] / self.ds_factor for x in self.analysis_parent.Center.center_slice_list]
+            centers_ds = [
+                x[0] / self.ds_factor
+                for x in self.analysis_parent.Center.center_slice_list
+            ]
             slices_ds = [
                 int(np.around(x[1] / self.ds_factor))
                 for x in self.analysis_parent.Center.center_slice_list
@@ -193,8 +190,7 @@ class RunAnalysisBase(ABC):
         self.wd_subdir.mkdir()
 
     @abstractmethod
-    def run(self):
-        ...
+    def run(self): ...
 
 
 class RunRecon(RunAnalysisBase):
@@ -393,7 +389,10 @@ class RunAlign(RunAnalysisBase):
         self.metadata.metadata["sy"] = list(self.sy)
         self.metadata.metadata["convergence"] = list(self.conv)
         self.saved_as_hdf = False
-        if self.metadata.metadata["save_opts"]["Projections After Alignment"] or self.analysis_parent.save_after_alignment:
+        if (
+            self.metadata.metadata["save_opts"]["Projections After Alignment"]
+            or self.analysis_parent.save_after_alignment
+        ):
             if self.metadata.metadata["save_opts"]["hdf"]:
                 self.projections.filepath = (
                     self.wd_subdir / "normalized_projections.hdf5"
@@ -411,8 +410,11 @@ class RunAlign(RunAnalysisBase):
                     self.wd_subdir / "normalized_projections.hdf5"
                 )
                 data_dict = {self.projections.hdf_key_norm_proj: self.projections.data}
-                self.projections.dask_data_to_h5(data_dict)    
-        if self.metadata.metadata["save_opts"]["Reconstruction"] and self.current_align_is_cuda:
+                self.projections.dask_data_to_h5(data_dict)
+        if (
+            self.metadata.metadata["save_opts"]["Reconstruction"]
+            and self.current_align_is_cuda
+        ):
             if self.metadata.metadata["save_opts"]["tiff"]:
                 tf.imwrite(self.wd_subdir / "recon.tif", self.recon)
 
