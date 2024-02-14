@@ -12,11 +12,11 @@ from tomopyui.backend.io import Metadata_TwoE
 from tomopyui.backend.util.padding import *
 from tomopyui.widgets.hdf_imports import *
 from tomopyui.widgets.hdf_viewer import *
+from tomopyui._sharedvars import cuda_import_dict
 from tomopyui.widgets.helpers import import_module_set_env
 from tomopyui.widgets.imports import TwoEnergyUploader
 from tomopyui.widgets.view import BqImViewer_TwoEnergy_High, BqImViewer_TwoEnergy_Low
 
-cuda_import_dict = {"cupy": "cuda_enabled"}
 import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
     from tomopyui.widgets.prep import shift_projections, shift_projections_nopad
@@ -24,9 +24,8 @@ if os.environ["cuda_enabled"] == "True":
     from ..tomocupy.prep.alignment import batch_cross_correlation
     from ..tomocupy.prep.sampling import shrink_and_pad_projections
 
+
 # Multiple Energy Alignment
-
-
 class TwoEnergyTool:
     def __init__(self):
         self.init_attributes()

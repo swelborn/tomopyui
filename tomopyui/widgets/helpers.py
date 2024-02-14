@@ -8,6 +8,31 @@ from abc import ABC, abstractmethod
 from ipywidgets import *
 
 
+def check_cuda_gpus_with_cupy() -> bool:
+    """
+    Checks for NVIDIA GPUs availability using cupy.
+    Sets environment variables based on the presence of CUDA GPUs.
+    """
+    try:
+        import cupy as cp
+
+        # Query the number of GPUs available
+        num_gpus = cp.cuda.runtime.getDeviceCount()
+        if num_gpus > 0:
+            os.environ["cuda_enabled"] = "True"
+            os.environ["cuda_gpus"] = str(num_gpus)
+            return True
+        else:
+            print("No CUDA GPUs available.")
+            os.environ["cuda_enabled"] = "False"
+            os.environ["cuda_gpus"] = "0"
+            return False
+    except Exception as e:
+        os.environ["cuda_enabled"] = "False"
+        os.environ["cuda_gpus"] = "0"
+        return False
+
+
 def import_module_set_env(import_dict):
     """
     https://stackoverflow.com/questions/1051254/check-if-python-package-is-installed

@@ -12,9 +12,9 @@ from tomopyui.backend.io import (
     Metadata_MultiEnergy,
     Projections_Prenormalized,
 )
+from tomopyui._sharedvars import cuda_import_dict
 from tomopyui.widgets.helpers import import_module_set_env
 
-cuda_import_dict = {"cupy": "cuda_enabled"}
 import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
     from tomopyui.tomocupy.prep.alignment import batch_cross_correlation, shift_prj_cp

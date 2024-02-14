@@ -1,5 +1,6 @@
 import datetime
 import os
+import multiprocessing
 import pathlib
 import time
 from abc import ABC, abstractmethod
@@ -17,17 +18,17 @@ from scipy.fft import set_backend
 from tomopyui._sharedvars import astra_cuda_recon_algorithm_underscores
 from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Child
 from tomopyui.backend.util.padding import *
-
-# TODO: make this global
+from tomopyui._sharedvars import cuda_import_dict
 from tomopyui.widgets.helpers import import_module_set_env
 
-cuda_import_dict = {"cupy": "cuda_enabled"}
 import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
     import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
     from tomopyui.widgets.prep import shift_projections
 
     from ..tomocupy.prep.alignment import align_joint as align_joint_cupy
+
+os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
 
 
 class RunAnalysisBase(ABC):
