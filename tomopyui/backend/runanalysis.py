@@ -40,8 +40,9 @@ class RunAnalysisBase(ABC):
     Base class for alignment and reconstruction objects.
     """
 
-    def __init__(self, analysis_parent):
+    def __init__(self, analysis_parent, auto_run=True):
         self.recon = None
+        self.num_iter = analysis_parent.num_iter
         self.skip_mk_wd_subdir = False
         self.analysis_parent = analysis_parent
         self.parent_projections = analysis_parent.projections
@@ -58,7 +59,8 @@ class RunAnalysisBase(ABC):
         self.make_wd()
         self.save_overall_metadata()
         self.save_data_before_analysis()
-        self.run()
+        if auto_run:
+            self.run()
 
     def make_wd(self):
         """
@@ -200,12 +202,12 @@ class RunAnalysisBase(ABC):
 class RunRecon(RunAnalysisBase):
     """ """
 
-    def __init__(self, Recon):
+    def __init__(self, Recon, auto_run=True):
         self.recon = None
         self.metadata_class = Metadata_Recon
         self.metadata = self.metadata_class()
         self.savedir_suffix = "recon"
-        super().__init__(Recon)
+        super().__init__(Recon, auto_run=auto_run)
 
     def save_data_after(self):
         super()._save_data_after()
@@ -312,7 +314,7 @@ class RunRecon(RunAnalysisBase):
 class RunAlign(RunAnalysisBase):
     """ """
 
-    def __init__(self, Align):
+    def __init__(self, Align, auto_run=True):
         self.shift = None
         self.sx = None
         self.sy = None
@@ -320,7 +322,7 @@ class RunAlign(RunAnalysisBase):
         self.metadata_class = Metadata_Align
         self.metadata = self.metadata_class()
         self.savedir_suffix = "alignment"
-        super().__init__(Align)
+        super().__init__(Align, auto_run=auto_run)
 
     def init_projections(self):
         super().init_projections()
