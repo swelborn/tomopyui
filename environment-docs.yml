@@ -19,8 +19,16 @@ dependencies:
   - ipyfilechooser
   - ipywidgets
   - astra-toolbox
-  - cudatoolkit
-  - cupy
   - bqplot
+  - sphinx
+  - jupyter_sphinx
+  - numpydoc
+  - sphinx-copybutton
+  - sphinx-panels
+  - sphinx-thebe
+  - sphinx-togglebutton
+  - sphinx-book-theme
+  - sphinx-gallery
+  - myst-nb
   - pip:
       - bqplot-image-gl

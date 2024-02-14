@@ -1,17 +1,18 @@
 import pathlib
-import numpy as np
-import dxchange
-
-from ipywidgets import *
-from ipyfilechooser import FileChooser
 from abc import ABC, abstractmethod
-from tomopyui.widgets.view import (
-    BqImViewer_Projections_Parent,
-    BqImViewer_Projections_Child,
-)
+
+import dxchange
+import numpy as np
+from ipyfilechooser import FileChooser
+from ipywidgets import *
+
+from tomopyui._sharedvars import extend_description_style
 from tomopyui.backend.io import Projections_Prenormalized
 from tomopyui.widgets.analysis import Align, Recon
-from tomopyui._sharedvars import *
+from tomopyui.widgets.view import (
+    BqImViewer_Projections_Child,
+    BqImViewer_Projections_Parent,
+)
 
 
 class DataExplorerTab:
@@ -60,8 +61,7 @@ class DataExplorerBase(ABC):
         self.analyzed_projections = Projections_Prenormalized()
 
     @abstractmethod
-    def create_app(self):
-        ...
+    def create_app(self): ...
 
 
 class AnalysisExplorer(DataExplorerBase):
