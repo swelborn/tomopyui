@@ -1,8 +1,6 @@
 ## This is experimental
 
 from ipywidgets import *
-
-from tomopyui._sharedvars import *
 from tomopyui.widgets.view import (
     BqImViewer_Projections_Parent,
     BqImViewer_TwoEnergy_Low,

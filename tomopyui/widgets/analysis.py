@@ -3,7 +3,12 @@ from abc import ABC, abstractmethod
 import numpy as np
 from ipywidgets import *
 
-from tomopyui._sharedvars import *
+from tomopyui._sharedvars import (
+    tomopy_algorithm_kwargs,
+    astra_cuda_recon_algorithm_kwargs,
+    extend_description_style,
+)
+
 from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Child
 from tomopyui.backend.runanalysis import RunAlign, RunRecon
 from tomopyui.widgets.helpers import ReactiveTextButton
@@ -11,6 +16,7 @@ from tomopyui.widgets.view import (
     BqImViewer_Projections_Child,
     BqImViewer_Projections_Parent,
 )
+
 
 class AnalysisBase(ABC):
     def init_attributes(self, Import, Center):
@@ -42,7 +48,7 @@ class AnalysisBase(ABC):
         self.padding_y = 20
         self.use_subset_correlation = False
         self.pre_alignment_iters = 1
-        self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
+        self.tomopy_methods_list = [key for key in tomopy_algorithm_kwargs]
         self.astra_cuda_methods_list = [
             key for key in astra_cuda_recon_algorithm_kwargs
         ]

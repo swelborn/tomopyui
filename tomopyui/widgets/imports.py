@@ -13,7 +13,9 @@ import tifffile as tf
 from ipyfilechooser import FileChooser
 from ipywidgets import *
 
-from tomopyui._sharedvars import *
+from tomopyui._sharedvars import (
+    extend_description_style,
+)
 from tomopyui.backend.io import (
     Metadata,
     Metadata_Align,

@@ -8,7 +8,6 @@ import dask.array as da
 import numpy as np
 from ipywidgets import *
 
-from tomopyui._sharedvars import *
 from tomopyui.backend.io import Metadata_Prep, Projections_Child
 from tomopyui.backend.util.padding import *
 from tomopyui.widgets.imports import ShiftsUploader
