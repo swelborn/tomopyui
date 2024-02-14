@@ -87,7 +87,7 @@ def create_dashboard(institution: str):
         file_import.log_handler.out,
     ]
 
-    dashboard_titles = [
+    dashboard_titles = (
         "Import",
         "Prep",
         "Center",
@@ -95,10 +95,11 @@ def create_dashboard(institution: str):
         "Reconstruct",
         "Data Explorer",
         "Log",
-    ]
+    )
 
-    dashboard = Tab(titles=dashboard_titles)
+    dashboard = Tab()
     dashboard.children = dashboard_tabs
+    dashboard.titles = dashboard_titles
 
     # workaround for nested bqplot issue
     def update_dashboard(change):
