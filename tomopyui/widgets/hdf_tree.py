@@ -1,3 +1,6 @@
+## This is experimental
+# Mostly from https://github.com/m-rossi/hdf5widget/blob/master/hdf5widget/hdf5object.py
+
 import pathlib
 
 import h5py
