@@ -1,22 +1,22 @@
-import astra
 import os
+
+import astra
 import bqplot as bq
 import cupy as cp
 import numpy as np
-import matplotlib.pyplot as plt
-import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
-
-from tomopy.misc.corr import circ_mask
-from tomopy.recon import wrappers
+from bqplot_image_gl import ImageGL
 from cupyx.scipy import ndimage as ndi_cp
+from ipywidgets import *
+from tomopy.misc.corr import circ_mask
+from tomopy.prep.alignment import scale as scale_tomo
+from tomopy.recon import algorithm as tomopy_algorithm
+from tomopy.recon import wrappers
+
+import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
+from tomopyui.backend.util.padding import *
 from tomopyui.backend.util.registration._phase_cross_correlation_cupy import (
     phase_cross_correlation,
 )
-from tomopy.prep.alignment import scale as scale_tomo
-from tomopy.recon import algorithm as tomopy_algorithm
-from bqplot_image_gl import ImageGL
-from ipywidgets import *
-from tomopyui.backend.util.padding import *
 
 
 def align_joint(RunAlign):

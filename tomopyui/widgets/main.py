@@ -1,26 +1,16 @@
-import multiprocessing
 from ipywidgets import *
-from tomopyui.widgets.helpers import import_module_set_env
+
+from tomopyui.widgets.analysis import Align, Recon
+from tomopyui.widgets.center import Center
+from tomopyui.widgets.dataexplorer import DataExplorerTab
 from tomopyui.widgets.imports import (
-    Import_SSRL62C,
-    Import_SSRL62B,
     Import_ALS832,
     Import_APS,
+    Import_SSRL62B,
+    Import_SSRL62C,
 )
-from tomopyui.widgets.center import Center
-from tomopyui.widgets.analysis import Align, Recon
-from tomopyui.widgets.dataexplorer import DataExplorerTab
 from tomopyui.widgets.prep import Prep
-
-# checks if cupy is installed. if not, disable cuda and certain gui aspects
-# TODO: can put this somewhere else
-cuda_import_dict = {"cupy": "cuda_enabled"}
-import_module_set_env(cuda_import_dict)
-
-# checks how many cpus available for compute on CPU
-# TODO: can later add a bounded textbox for amount of CPUs user wants to use
-# for reconstruction. right now defaults to all cores being used.
-os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
+from tomopyui.widgets.helpers import check_cuda_gpus_with_cupy
 
 
 def create_dashboard(institution: str):
@@ -62,6 +52,9 @@ def create_dashboard(institution: str):
     recon = Recon(file_import, center)
     dataexplorer = DataExplorerTab(align, recon)
 
+    check_cuda_gpus_with_cupy()
+    file_import.log.info("CUDA gpus detected: " + os.environ["cuda_gpus"])
+    file_import.log.info("CUDA enabled: " + os.environ["cuda_enabled"])
     for checkbox in (
         align.astra_cuda_methods_checkboxes + recon.astra_cuda_methods_checkboxes
     ):
@@ -69,11 +62,6 @@ def create_dashboard(institution: str):
             checkbox.disabled = False
         else:
             checkbox.disabled = True
-    for checkbox in align.tomopy_methods_checkboxes:
-        if os.environ["cuda_enabled"] == "True":
-            checkbox.disabled = True
-        else:
-            checkbox.disabled = False
 
     dashboard_tabs = [
         file_import.tab,
@@ -85,7 +73,7 @@ def create_dashboard(institution: str):
         file_import.log_handler.out,
     ]
 
-    dashboard_titles = [
+    dashboard_titles = (
         "Import",
         "Prep",
         "Center",
@@ -93,10 +81,11 @@ def create_dashboard(institution: str):
         "Reconstruct",
         "Data Explorer",
         "Log",
-    ]
+    )
 
-    dashboard = Tab(titles=dashboard_titles)
+    dashboard = Tab()
     dashboard.children = dashboard_tabs
+    dashboard.titles = dashboard_titles
 
     # workaround for nested bqplot issue
     def update_dashboard(change):
@@ -113,8 +102,6 @@ def create_dashboard(institution: str):
         align.viewer_accordion,
         recon.viewer_accordion,
         dataexplorer.analysis_browser_accordion,
-        # dataexplorer.recent_alignment_accordion,
-        # dataexplorer.recent_recon_accordion,
     ]
 
     [

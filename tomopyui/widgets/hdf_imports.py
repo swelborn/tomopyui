@@ -1,14 +1,14 @@
-import pathlib
-import re
-import os
+## This is experimental
+
 import pathlib
 
 from ipywidgets import *
+
 from tomopyui.backend.hdf_handler import HDF5_Handler
-from tomopyui.widgets.imports import UploaderBase
-from tomopyui.widgets.hdf_viewer import *
 from tomopyui.backend.io import Projections_Prenormalized
+from tomopyui.widgets.hdf_viewer import *
 from tomopyui.widgets.helpers import ToggleIconButton
+from tomopyui.widgets.imports import UploaderBase
 
 
 class HDF5_GeneralUploader(UploaderBase):

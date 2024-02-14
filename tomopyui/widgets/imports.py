@@ -1,42 +1,36 @@
-import time
-import logging
-import numpy as np
-import pathlib
-import functools
-import re
-import os
-import json
-import tifffile as tf
 import copy
-import h5py
-
-from ipyfilechooser import FileChooser
-from ipyfilechooser.errors import InvalidPathError, InvalidFileNameError
-from ipywidgets import *
+import json
+import logging
+import os
+import pathlib
+import re
+import time
 from abc import ABC, abstractmethod
-from tomopyui._sharedvars import *
-from tomopyui.widgets.view import BqImViewer_Projections_Parent
+
+import h5py
+import numpy as np
+import tifffile as tf
+from ipyfilechooser import FileChooser
+from ipywidgets import *
+
+from tomopyui._sharedvars import (
+    extend_description_style,
+)
 from tomopyui.backend.io import (
+    Metadata,
+    Metadata_Align,
+    Metadata_ALS_832_Raw,
+    Metadata_APS_Raw,
+    Metadata_General_Prenorm,
+    Projections_Prenormalized,
     RawProjectionsHDF5_ALS832,
     RawProjectionsHDF5_APS,
-    RawProjectionsXRM_SSRL62C,
-    Projections_Prenormalized,
-    Metadata_Align,
-    Metadata,
-    Metadata_ALS_832_Raw,
-    Metadata_ALS_832_Prenorm,
-    Metadata_APS_Raw,
-    Metadata_APS_Prenorm,
-    Metadata_General_Prenorm,
     RawProjectionsTiff_SSRL62B,
+    RawProjectionsXRM_SSRL62C,
 )
 from tomopyui.widgets import helpers
-from tomopyui.widgets.helpers import (
-    ReactiveTextButton,
-    ReactiveIconButton,
-    SwitchOffOnIconButton,
-    ImportButton,
-)
+from tomopyui.widgets.helpers import ImportButton, ReactiveTextButton
+from tomopyui.widgets.view import BqImViewer_Projections_Parent
 
 
 class ImportBase(ABC):
@@ -134,8 +128,7 @@ class ImportBase(ABC):
         self.projections._close_hdf_file()
 
     @abstractmethod
-    def make_tab(self):
-        ...
+    def make_tab(self): ...
 
 
 class Import_SSRL62B(ImportBase):
@@ -466,14 +459,12 @@ class UploaderBase(ABC):
     # Each uploader has a method to update the filechooser from the quick search path,
     # and vice versa.
     @abstractmethod
-    def update_filechooser_from_quicksearch(self, change):
-        ...
+    def update_filechooser_from_quicksearch(self, change): ...
 
     # Each uploader has a method to import data given the filepath chosen in the
     # filechooser/quicksearch box
     @abstractmethod
-    def import_data(self):
-        ...
+    def import_data(self): ...
 
 
 class DummyChange:

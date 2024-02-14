@@ -120,4 +120,6 @@ dmypy.json
 *.sublime-workspace
 
 # Data folder
-data/
+.vscode/
+.devcontainer/
+.trunk/

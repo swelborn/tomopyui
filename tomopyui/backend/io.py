@@ -1,38 +1,33 @@
+import copy
+import datetime
+import json
+import os
+import pathlib
+import re
+import multiprocessing
+import time
+from abc import ABC, abstractmethod
+
+import dask
+import dask.array as da
+import dask_image.imread
+import dxchange
+import h5py
 import numpy as np
+import olefile
+import pandas as pd
+import scipy.ndimage as ndi
 import tifffile as tf
 import tomopy.prep.normalize as tomopy_normalize
-import os
-import json
-import dxchange
-import re
-import olefile
-import pathlib
-import tempfile
-import dask.array as da
-import dask
-import shutil
-import copy
-import multiprocessing as mp
-import pandas as pd
-import time
-import datetime
-import h5py
-import dask_image.imread
-import scipy.ndimage as ndi
-
-from abc import ABC, abstractmethod
-from tomopy.sim.project import angles as angle_maker
-from tomopyui.backend.util.dxchange.reader import read_ole_metadata, read_xrm, read_txrm
-from tomopyui.backend.util.dask_downsample import pyramid_reduce_gaussian
-from skimage.transform import rescale
-from joblib import Parallel, delayed
 from ipywidgets import *
-from functools import partial
-from skimage.util import img_as_float32
 from skimage.exposure import rescale_intensity
+from skimage.util import img_as_float32
+from tomopy.sim.project import angles as angle_maker
 
-# if os.environ["cuda_enabled"] == "True":
-#     from tomopyui.widgets.prep import shift_projections
+from tomopyui.backend.util.dask_downsample import pyramid_reduce_gaussian
+from tomopyui.backend.util.dxchange.reader import read_ole_metadata, read_txrm, read_xrm
+
+os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
 
 
 class IOBase:
@@ -384,7 +379,6 @@ class IOBase:
 
 
 class ProjectionsBase(IOBase, ABC):
-
     """
     Base class for projections data. Abstract methods include importing/exporting data
     and metadata. One can import a file directory, or a particular file within a
@@ -469,16 +463,13 @@ class ProjectionsBase(IOBase, ABC):
         self.import_savedir.mkdir()
 
     @abstractmethod
-    def import_metadata(self, filedir):
-        ...
+    def import_metadata(self, filedir): ...
 
     @abstractmethod
-    def import_filedir_projections(self, filedir):
-        ...
+    def import_filedir_projections(self, filedir): ...
 
     @abstractmethod
-    def import_file_projections(self, filepath):
-        ...
+    def import_file_projections(self, filepath): ...
 
 
 class Projections_Child(ProjectionsBase):
@@ -534,8 +525,8 @@ class Projections_Child(ProjectionsBase):
         self.sx = [sx]
         self.sy = [sy]
         for i in range(3):
-            self.sx.append([shift / (2 ** i) for shift in sx])
-            self.sy.append([shift / (2 ** i) for shift in sy])
+            self.sx.append([shift / (2**i) for shift in sx])
+            self.sy.append([shift / (2**i) for shift in sy])
         self._data = shift_projections(self.data, self.sx, self.sy)
         self.data = self._data
         data_dict = {self.hdf_key_norm_proj: self.data}
@@ -1002,7 +993,6 @@ class RawProjectionsBase(ProjectionsBase, ABC):
 
 
 class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
-
     """
     Raw data import functions associated with SSRL 6-2c. If you specify a folder filled
     with raw XRMS, a ScanInfo file, and a run script, this will automatically import
@@ -1649,7 +1639,6 @@ class RawProjectionsXRM_SSRL62C(RawProjectionsBase):
 
 
 class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
-
     """
     Raw data import functions associated with SSRL 6-2c. If you specify a folder filled
     with raw XRMS, a ScanInfo file, and a run script, this will automatically import
@@ -1703,9 +1692,9 @@ class RawProjectionsTiff_SSRL62B(RawProjectionsBase):
         self.metadata_projections.set_attributes_from_metadata(self)
         self.metadata_prenorm = Metadata_SSRL62B_Prenorm()
         self.metadata_prenorm.set_metadata(self)
-        self.metadata_prenorm.metadata[
-            "parent_metadata"
-        ] = self.metadata.metadata.copy()
+        self.metadata_prenorm.metadata["parent_metadata"] = (
+            self.metadata.metadata.copy()
+        )
         if Uploader.save_tiff_on_import_checkbox.value:
             self.status_label.value = "Saving projections as .tiff."
             self.saved_as_tiff = True
@@ -2389,9 +2378,9 @@ class Metadata_SSRL62C_Raw(Metadata):
         self.metadata["all_raw_energies_float"] = projections.energies_list_float
         self.metadata["all_raw_energies_str"] = projections.energies_list_str
         self.metadata["all_raw_pixel_sizes"] = projections.raw_pixel_sizes
-        self.metadata[
-            "pixel_size_from_scan_info"
-        ] = projections.pixel_size_from_metadata
+        self.metadata["pixel_size_from_scan_info"] = (
+            projections.pixel_size_from_metadata
+        )
         self.metadata["energy_units"] = "eV"
         self.metadata["pixel_units"] = "nm"
         self.metadata["raw_projections_dtype"] = str(projections.raw_data_type)
@@ -2644,9 +2633,9 @@ class Metadata_SSRL62C_Prenorm(Metadata_SSRL62C_Raw):
         self.metadata["normalized_projections_directory"] = str(
             projections.import_savedir
         )
-        self.metadata[
-            "normalized_projections_filename"
-        ] = projections.normalized_projections_hdf_key
+        self.metadata["normalized_projections_filename"] = (
+            projections.normalized_projections_hdf_key
+        )
         self.metadata["normalization_function"] = "dask"
         self.metadata["saved_as_tiff"] = projections.saved_as_tiff
 
