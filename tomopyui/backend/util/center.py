@@ -9,6 +9,9 @@ import numpy as np
 from tomopy.misc.corr import circ_mask
 from tomopy.recon.algorithm import recon as recon_tomo
 import tomopy.util.dtype as dtype
+import multiprocessing
+
+os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
 
 
 def write_center(

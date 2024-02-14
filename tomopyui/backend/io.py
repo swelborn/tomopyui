@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import re
+import multiprocessing
 import time
 from abc import ABC, abstractmethod
 
@@ -26,8 +27,7 @@ from tomopy.sim.project import angles as angle_maker
 from tomopyui.backend.util.dask_downsample import pyramid_reduce_gaussian
 from tomopyui.backend.util.dxchange.reader import read_ole_metadata, read_txrm, read_xrm
 
-# if os.environ["cuda_enabled"] == "True":
-#     from tomopyui.widgets.prep import shift_projections
+os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
 
 
 class IOBase:

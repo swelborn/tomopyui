@@ -32,4 +32,6 @@ tomopy_filter_names = {
     "butterworth",
 }
 
+cuda_import_dict = {"cupy": "cuda_enabled"}
+
 extend_description_style = {"description_width": "auto", "font_family": "Helvetica"}
