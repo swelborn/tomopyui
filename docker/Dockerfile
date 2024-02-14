@@ -21,7 +21,8 @@ RUN case $(uname -m) in \
 ENV PATH="/miniconda/bin:$PATH"
 
 # Create a Conda environment from environment.yml. Assuming environment.yml is at the Docker build context root
-COPY environment.yml .
+ARG ENV_FILE=environment.yml
+COPY ./${ENV_FILE} ./environment.yml
 RUN conda env create -f environment.yml
 
 # Activate the Conda environment. Any command run in this layer or subsequent layers will use the Conda environment by default
