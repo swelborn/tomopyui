@@ -116,8 +116,6 @@ def create_dashboard(institution: str):
         align.viewer_accordion,
         recon.viewer_accordion,
         dataexplorer.analysis_browser_accordion,
-        # dataexplorer.recent_alignment_accordion,
-        # dataexplorer.recent_recon_accordion,
     ]
 
     [
