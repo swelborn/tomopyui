@@ -29,7 +29,10 @@ RUN conda env create -f environment.yml
 SHELL ["conda", "run", "-n", "tomopyui", "/bin/bash", "-c"]
 
 # Set working directory
-WORKDIR /workspace
+WORKDIR /src
+COPY . /src
+RUN pip install -e .
+
 
 # Expose the port JupyterLab will run on
 EXPOSE 8888
