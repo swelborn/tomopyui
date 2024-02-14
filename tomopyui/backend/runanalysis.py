@@ -14,8 +14,7 @@ from tomopy.recon import algorithm as tomopy_algorithm
 from tomopy.prep.alignment import shift_images as shift_images_tomopy
 from tomopy.recon import wrappers
 from scipy.fft import set_backend
-
-from tomopyui._sharedvars import *
+from tomopyui._sharedvars import astra_cuda_recon_algorithm_underscores
 from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Child
 from tomopyui.backend.util.padding import *
 

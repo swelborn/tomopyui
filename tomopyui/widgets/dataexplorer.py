@@ -6,7 +6,7 @@ import numpy as np
 from ipyfilechooser import FileChooser
 from ipywidgets import *
 
-from tomopyui._sharedvars import *
+from tomopyui._sharedvars import extend_description_style
 from tomopyui.backend.io import Projections_Prenormalized
 from tomopyui.widgets.analysis import Align, Recon
 from tomopyui.widgets.view import (

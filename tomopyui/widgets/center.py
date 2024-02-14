@@ -5,7 +5,12 @@ from ipywidgets import *
 from scipy.stats import linregress
 from tomopy.recon.rotation import find_center, find_center_vo
 
-from tomopyui._sharedvars import *
+from tomopyui._sharedvars import (
+    tomopy_algorithm_kwargs,
+    tomopy_filter_names,
+    extend_description_style,
+)
+
 from tomopyui.backend.util.center import write_center
 from tomopyui.widgets.helpers import ReactiveIconButton, ReactiveTextButton
 from tomopyui.widgets.view import BqImViewer_Center, BqImViewer_Center_Recon
@@ -158,7 +163,7 @@ class Center:
             value=self.search_step,
         )
         self.algorithms_dropdown = Dropdown(
-            options=[key for key in tomopy_recon_algorithm_kwargs],
+            options=[key for key in tomopy_algorithm_kwargs],
             value=self.algorithm,
             description="Algorithm:",
         )

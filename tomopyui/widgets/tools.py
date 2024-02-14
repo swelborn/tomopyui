@@ -7,7 +7,7 @@ import dask.array as da
 import numpy as np
 from ipywidgets import *
 
-from tomopyui._sharedvars import *
+from tomopyui._sharedvars import extend_description_style
 from tomopyui.backend.io import Metadata_TwoE
 from tomopyui.backend.util.padding import *
 from tomopyui.widgets.hdf_imports import *
