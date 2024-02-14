@@ -1,5 +1,3 @@
-import copy
-import pathlib
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -13,7 +11,6 @@ from tomopyui.widgets.view import (
     BqImViewer_Projections_Child,
     BqImViewer_Projections_Parent,
 )
-
 
 class AnalysisBase(ABC):
     def init_attributes(self, Import, Center):
