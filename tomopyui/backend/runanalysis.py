@@ -12,6 +12,7 @@ from tomopy.misc.corr import circ_mask
 from tomopy.prep.alignment import align_joint as align_joint_tomopy
 from tomopy.recon import algorithm as tomopy_algorithm
 from tomopy.recon import wrappers
+from scipy.fft import set_backend
 
 from tomopyui._sharedvars import *
 from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Child
@@ -343,26 +344,25 @@ class RunAlign(RunAnalysisBase):
             else:
                 self.current_align_is_cuda = False
                 os.environ["TOMOPY_PYTHON_THREADS"] = str(os.environ["num_cpu_cores"])
-                import scipy.fft as fft
-
-                fft.set_backend("scipy")
-                if method == "gridrec" or method == "fbp":
-                    self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
-                        self.prjs,
-                        self.angles_rad,
-                        upsample_factor=self.upsample_factor,
-                        center=self.center,
-                        algorithm=method,
-                    )
-                else:
-                    self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
-                        self.prjs,
-                        self.angles_rad,
-                        upsample_factor=self.upsample_factor,
-                        center=self.center,
-                        algorithm=method,
-                        iters=self.num_iter,
-                    )
+                with set_backend("scipy"):
+                    if method == "gridrec" or method == "fbp":
+                        self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
+                            self.prjs,
+                            self.angles_rad,
+                            upsample_factor=self.upsample_factor,
+                            center=self.center,
+                            algorithm=method,
+                            iters=self.num_iter
+                        )
+                    else:
+                        self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
+                            self.prjs,
+                            self.angles_rad,
+                            upsample_factor=self.upsample_factor,
+                            center=self.center,
+                            algorithm=method,
+                            iters=self.num_iter,
+                        )
 
     def _shift_prjs_after_alignment(self):
         if self.shift_full_dataset_after:
