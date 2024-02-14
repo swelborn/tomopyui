@@ -1,8 +1,8 @@
+## This is experimental, can be used to align multiple projection sets
+
 import os
 import pathlib
-import re
 
-import dask.array as da
 import h5py
 import numpy as np
 
