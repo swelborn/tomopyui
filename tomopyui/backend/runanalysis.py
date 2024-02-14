@@ -11,6 +11,7 @@ from scipy.stats import linregress
 from tomopy.misc.corr import circ_mask
 from tomopy.prep.alignment import align_joint as align_joint_tomopy
 from tomopy.recon import algorithm as tomopy_algorithm
+from tomopy.prep.alignment import shift_images as shift_images_tomopy
 from tomopy.recon import wrappers
 from scipy.fft import set_backend
 
@@ -352,7 +353,7 @@ class RunAlign(RunAnalysisBase):
                             upsample_factor=self.upsample_factor,
                             center=self.center,
                             algorithm=method,
-                            iters=self.num_iter
+                            iters=self.num_iter,
                         )
                     else:
                         self.prjs, self.sx, self.sy, self.conv = align_joint_tomopy(
@@ -373,8 +374,9 @@ class RunAlign(RunAnalysisBase):
                 )
                 self.projections.data = self.projections._data
             else:
-                # TODO: make shift projections without cupy
-                pass
+                self.projections._data = shift_images_tomopy(
+                    self.projections.data, self.sx, self.sy
+                )
         else:
             self.projections._data = self.prjs
             self.projections.data = self.projections._data
