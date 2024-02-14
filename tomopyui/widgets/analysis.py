@@ -43,8 +43,6 @@ class AnalysisBase(ABC):
         self.use_subset_correlation = False
         self.pre_alignment_iters = 1
         self.tomopy_methods_list = [key for key in tomopy_recon_algorithm_kwargs]
-        self.tomopy_methods_list.remove("gridrec")
-        self.tomopy_methods_list.remove("fbp")
         self.astra_cuda_methods_list = [
             key for key in astra_cuda_recon_algorithm_kwargs
         ]
