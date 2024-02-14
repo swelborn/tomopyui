@@ -1,18 +1,18 @@
-import bqplot as bq
-import numpy as np
 import copy
 import pathlib
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import time
-
 from abc import ABC, abstractmethod
+
+import bqplot as bq
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
+from bqplot import PanZoom
 from bqplot_image_gl import ImageGL
+from bqplot_image_gl.interacts import MouseInteraction, keyboard_events, mouse_events
 from ipywidgets import *
 from skimage.transform import rescale  # look for better option
-from tomopyui._sharedvars import *
-from bqplot_image_gl.interacts import MouseInteraction, keyboard_events, mouse_events
-from bqplot import PanZoom
+from tomopyui._sharedvars import extend_description_style
 
 
 class BqImViewerBase(ABC):
@@ -518,12 +518,10 @@ class BqImViewerBase(ABC):
         self.all_buttons = self.init_buttons
 
     @abstractmethod
-    def plot(self, io_obj):
-        ...
+    def plot(self, io_obj): ...
 
     @abstractmethod
-    def create_app(self):
-        ...
+    def create_app(self): ...
 
 
 class BqImViewer_Projections_Parent(BqImViewerBase):

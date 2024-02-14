@@ -1,18 +1,36 @@
-import os
-import glob
-import numpy as np
-import json
-import functools
-import tifffile as tf
 import asyncio
-import logging
-import ipywidgets as widgets
 import importlib.util
+import logging
+import os
 import sys
-import time
+from abc import ABC, abstractmethod
 
 from ipywidgets import *
-from abc import ABC, abstractmethod
+
+
+def check_cuda_gpus_with_cupy() -> bool:
+    """
+    Checks for NVIDIA GPUs availability using cupy.
+    Sets environment variables based on the presence of CUDA GPUs.
+    """
+    try:
+        import cupy as cp
+
+        # Query the number of GPUs available
+        num_gpus = cp.cuda.runtime.getDeviceCount()
+        if num_gpus > 0:
+            os.environ["cuda_enabled"] = "True"
+            os.environ["cuda_gpus"] = str(num_gpus)
+            return True
+        else:
+            print("No CUDA GPUs available.")
+            os.environ["cuda_enabled"] = "False"
+            os.environ["cuda_gpus"] = "0"
+            return False
+    except Exception as e:
+        os.environ["cuda_enabled"] = "False"
+        os.environ["cuda_gpus"] = "0"
+        return False
 
 
 def import_module_set_env(import_dict):
@@ -261,8 +279,7 @@ class ReactiveButtonBase(ABC):
         self.button.icon = "exclamation-triangle"
 
     @abstractmethod
-    def run_callback(self, *args):
-        ...
+    def run_callback(self, *args): ...
 
 
 class ReactiveTextButton(ReactiveButtonBase):
