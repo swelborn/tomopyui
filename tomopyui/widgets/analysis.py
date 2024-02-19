@@ -6,7 +6,6 @@ from ipywidgets import *
 from tomopyui._sharedvars import (
     tomopy_algorithm_kwargs,
     astra_cuda_recon_algorithm_kwargs,
-    extend_description_style,
 )
 
 from tomopyui.backend.io import Metadata_Align, Metadata_Recon, Projections_Child
@@ -15,6 +14,11 @@ from tomopyui.widgets.helpers import ReactiveTextButton
 from tomopyui.widgets.view import (
     BqImViewer_Projections_Child,
     BqImViewer_Projections_Parent,
+)
+from tomopyui.widgets.styles import (
+    header_font_style,
+    button_font_style,
+    extend_description_style,
 )
 
 
@@ -53,12 +57,6 @@ class AnalysisBase(ABC):
             key for key in astra_cuda_recon_algorithm_kwargs
         ]
         self.run_list = []
-        self.header_font_style = {
-            "font_size": "22px",
-            "font_weight": "bold",
-            "font_variant": "small-caps",
-            # "text_color": "#0F52BA",
-        }
         self.accordions_open = False
         self.plot_output1 = Output()
 
@@ -66,34 +64,33 @@ class AnalysisBase(ABC):
         """
         Initializes many of the widgets in the Alignment and Recon tabs.
         """
-        self.button_font = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
 
         # -- Button to turn on tab ---------------------------------------------
         self.open_accordions_button = Button(
             icon="lock-open",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
 
         # -- Headers for plotting -------------------------------------
         self.import_plot_header = "Imported Projections"
         self.import_plot_header = Label(
-            self.import_plot_header, style=self.header_font_style
+            self.import_plot_header, style=header_font_style
         )
         self.altered_plot_header = "Altered Projections"
         self.altered_plot_header = Label(
-            self.altered_plot_header, style=self.header_font_style
+            self.altered_plot_header, style=header_font_style
         )
 
         # -- Headers for results -------------------------------------
         self.before_analysis_plot_header = "Analysis Projections"
         self.before_analysis_plot_header = Label(
-            self.before_analysis_plot_header, style=self.header_font_style
+            self.before_analysis_plot_header, style=header_font_style
         )
         self.after_analysis_plot_header = "Result"
         self.after_analysis_plot_header = Label(
-            self.after_analysis_plot_header, style=self.header_font_style
+            self.after_analysis_plot_header, style=header_font_style
         )
 
         # -- Button to load metadata ----------------------------------------------
@@ -451,7 +448,7 @@ class AnalysisBase(ABC):
         # -- Methods ----------------------------------------------------------
         self.tomopy_methods_hbox = VBox(
             [
-                Label("Tomopy", style=self.header_font_style),
+                Label("Tomopy", style=header_font_style),
                 VBox(
                     self.tomopy_methods_checkboxes,
                     layout=Layout(flex_flow="column wrap", align_content="flex-start"),
@@ -462,7 +459,7 @@ class AnalysisBase(ABC):
 
         self.astra_methods_hbox = VBox(
             [
-                Label("Astra", style=self.header_font_style),
+                Label("Astra", style=header_font_style),
                 VBox(
                     self.astra_cuda_methods_checkboxes,
                     layout=Layout(flex_flow="column wrap"),

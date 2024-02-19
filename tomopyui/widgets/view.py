@@ -12,7 +12,9 @@ from bqplot_image_gl import ImageGL
 from bqplot_image_gl.interacts import MouseInteraction, keyboard_events, mouse_events
 from ipywidgets import *
 from skimage.transform import rescale  # look for better option
+
 from tomopyui._sharedvars import extend_description_style
+from tomopyui.widgets.styles import button_font_style
 
 
 class BqImViewerBase(ABC):
@@ -111,7 +113,6 @@ class BqImViewerBase(ABC):
     def _init_widgets(self):
 
         # Styles and layouts
-        self.button_font = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
 
         # Image index slider
@@ -136,7 +137,7 @@ class BqImViewerBase(ABC):
         self.plus_button = Button(
             icon="plus",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Speed up play slider.",
         )
 
@@ -144,7 +145,7 @@ class BqImViewerBase(ABC):
         self.minus_button = Button(
             icon="minus",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Slow down play slider slider.",
         )
 
@@ -157,7 +158,7 @@ class BqImViewerBase(ABC):
         self.swap_axes_button = Button(
             icon="random",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Swap axes",
         )
 
@@ -165,7 +166,7 @@ class BqImViewerBase(ABC):
         self.rm_high_low_int_button = Button(
             icon="adjust",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Remove high and low intensities from view.",
         )
 
@@ -173,7 +174,7 @@ class BqImViewerBase(ABC):
         self.save_movie_button = Button(
             icon="file-video",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Save a movie of these images.",
         )
 
@@ -189,14 +190,14 @@ class BqImViewerBase(ABC):
         self.reset_button = Button(
             icon="redo",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Reset to original view.",
         )
 
         self.rectangle_selector_button = Button(
             icon="far square",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Select a region of interest.",
         )
         # Rectangle selector
@@ -597,7 +598,7 @@ class BqImViewer_Projections_Child(BqImViewer_Projections_Parent):
         self.copy_button = Button(
             icon="file-import",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Copy data from 'Imported Projections'.",
         )
         self.copy_button.on_click(self.copy_parent_projections)
@@ -605,7 +606,7 @@ class BqImViewer_Projections_Child(BqImViewer_Projections_Parent):
         self.link_plotted_projections_button = Button(
             icon="unlink",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             disabled=True,
             tooltip="Link the sliders together.",
         )
@@ -615,7 +616,7 @@ class BqImViewer_Projections_Child(BqImViewer_Projections_Parent):
         self.range_from_parent_button = Button(
             icon="object-ungroup",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             disabled=True,
             tooltip="Get range from 'Imported Projections'.",
         )
@@ -956,7 +957,7 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
         self.diff_button = Button(
             icon="black-tie",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Take the difference of the high and low energies.",
             disabled=False,
         )
@@ -964,7 +965,7 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             icon="unlink",
             tooltip="Link to the high energy slider.",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.link_plotted_projections_button.on_click(self.link_plotted_projections)
         self.plots_linked = False
@@ -974,7 +975,7 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             button_style="",
             disabled=True,
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.start_button = Button(
             disabled=True,
@@ -982,7 +983,7 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             tooltip="Register low energy to high energy images",
             icon="fa-running",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.save_button = Button(
             disabled=True,
@@ -990,7 +991,7 @@ class BqImViewer_TwoEnergy_Low(BqImViewer_TwoEnergy_High):
             tooltip=("Click this button to save the shifted lower energy projections."),
             icon="fa-file-export",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
 
     def add_buttons(self):
