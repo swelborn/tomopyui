@@ -212,7 +212,6 @@ class Filebrowser:
         self.quick_path_search.observe(
             self.update_filechooser_from_quicksearch, names="value"
         )
-        self.quick_path_label = Label("Quick path search")
 
         # subdirectory selector
         self.subdir_list = []
@@ -369,7 +368,7 @@ class Filebrowser:
     def create_app(self):
         quickpath = VBox(
             [
-                self.quick_path_label,
+                widgets.Label("Quick path search:"),
                 self.quick_path_search,
             ],
             layout=Layout(align_items="center"),

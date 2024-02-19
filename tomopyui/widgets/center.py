@@ -14,6 +14,7 @@ from tomopyui._sharedvars import (
 from tomopyui.backend.util.center import write_center
 from tomopyui.widgets.helpers import ReactiveIconButton, ReactiveTextButton
 from tomopyui.widgets.view import BqImViewer_Center, BqImViewer_Center_Recon
+from tomopyui.widgets.styles import header_font_style, button_font_style
 
 
 class Center:
@@ -71,11 +72,6 @@ class Center:
         self.rec_viewer = BqImViewer_Center_Recon()
         self.rec_viewer.create_app()
         self.reg = None
-        self.header_font_style = {
-            "font_size": "22px",
-            "font_weight": "bold",
-            "font_variant": "small-caps",
-        }
         self.button_font = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
         self._init_widgets()
@@ -180,21 +176,21 @@ class Center:
         )
         self.projections_plot_header = "Projections"
         self.projections_plot_header = Label(
-            self.projections_plot_header, style=self.header_font_style
+            self.projections_plot_header, style=header_font_style
         )
         self.reconstructions_plot_header = "Reconstructions"
         self.reconstructions_plot_header = Label(
-            self.reconstructions_plot_header, style=self.header_font_style
+            self.reconstructions_plot_header, style=header_font_style
         )
 
         # -- Centers display -----------------------------------------------------------
-        self.center_select_label = Label("Slice : Center", style=self.header_font_style)
+        self.center_select_label = Label("Slice : Center", style=header_font_style)
         self.center_select = Select(
             disabled=True,
             rows=10,
         )
         self.all_centers_select_label = Label(
-            "Centers for reconstruction", style=self.header_font_style
+            "Centers for reconstruction", style=header_font_style
         )
         self.all_centers_select = Select(
             disabled=True,
@@ -205,7 +201,7 @@ class Center:
             icon="fa-minus-square",
             tooltip="Remove selected center.",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.buttons_to_disable = [
             self.center_select,
@@ -217,7 +213,7 @@ class Center:
             tooltip="Add center from reconstruction of this slice.",
             skip_during=True,
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             disabled=False,
         )
         self.add_center_button.button.disabled = True
