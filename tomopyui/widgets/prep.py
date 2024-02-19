@@ -20,6 +20,9 @@ if os.environ["cuda_enabled"] == "True":
     from ..tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
     from ..tomocupy.prep.sampling import shrink_and_pad_projections
 
+from tomopyui.widgets.styles import header_font_style, button_font_style
+
+
 import tomopy.misc.corr as tomocorr
 
 
@@ -49,12 +52,6 @@ class Prep(ABC):
         """
         Initializes widgets in the Prep tab.
         """
-        self.header_font_style = {
-            "font_size": "22px",
-            "font_weight": "bold",
-            "font_variant": "small-caps",
-        }
-        self.button_font = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
 
         # -- Main viewers --------------------------------------------------------------
@@ -68,18 +65,16 @@ class Prep(ABC):
         # -- Headers for plotting -------------------------------------
         self.import_plot_header = "Imported Projections"
         self.import_plot_header = Label(
-            self.import_plot_header, style=self.header_font_style
+            self.import_plot_header, style=header_font_style
         )
         self.altered_plot_header = "Altered Projections"
         self.altered_plot_header = Label(
-            self.altered_plot_header, style=self.header_font_style
+            self.altered_plot_header, style=header_font_style
         )
 
         # -- Header for methods -------------------------------------
         self.prep_list_header = "Methods"
-        self.prep_list_header = Label(
-            self.prep_list_header, style=self.header_font_style
-        )
+        self.prep_list_header = Label(self.prep_list_header, style=header_font_style)
 
         # -- Prep List -------------------------------------
         self.prep_list_select = Select(
@@ -93,21 +88,21 @@ class Prep(ABC):
             icon="arrow-up",
             tooltip="Move method up.",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.down_button = Button(
             disabled=True,
             icon="arrow-down",
             tooltip="Move method down.",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.remove_method_button = Button(
             disabled=True,
             icon="fa-minus-square",
             tooltip="Remove selected method.",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.start_button = Button(
             disabled=True,
@@ -118,7 +113,7 @@ class Prep(ABC):
             ),
             icon="fa-running",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.preview_only_button = Button(
             disabled=True,
@@ -129,7 +124,7 @@ class Prep(ABC):
             ),
             icon="glasses",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.save_on_button = Button(
             disabled=True,
@@ -137,7 +132,7 @@ class Prep(ABC):
             tooltip=("Turn this on to save the data when you click the run button."),
             icon="fa-file-export",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
         )
         self.methods_button_box = VBox(
             [
@@ -191,14 +186,14 @@ class Prep(ABC):
         # -- Shifts uploader --------------------------------------------------------
         self.shifts_uploader = ShiftsUploader(self)
         self.shift_x_header = "Shift in X"
-        self.shift_x_header = Label(self.shift_x_header, style=self.header_font_style)
+        self.shift_x_header = Label(self.shift_x_header, style=header_font_style)
         self.shifts_sx_select = Select(
             options=[],
             rows=10,
             disabled=True,
         )
         self.shift_y_header = "Shift in Y"
-        self.shift_y_header = Label(self.shift_y_header, style=self.header_font_style)
+        self.shift_y_header = Label(self.shift_y_header, style=header_font_style)
         self.shifts_sy_select = Select(
             options=[],
             rows=10,
@@ -206,7 +201,7 @@ class Prep(ABC):
         )
         self.shifts_filechooser_label = "Filechooser"
         self.shifts_filechooser_label = Label(
-            self.shifts_filechooser_label, style=self.header_font_style
+            self.shifts_filechooser_label, style=header_font_style
         )
 
         # -- List manipulation ---------------------------------------------------------
@@ -560,7 +555,7 @@ class Prep(ABC):
             [
                 VBox(
                     [
-                        self.shifts_uploader.quick_path_label,
+                        widgets.Label("Quick path search:"),
                         self.shifts_uploader.quick_path_search,
                     ],
                 ),

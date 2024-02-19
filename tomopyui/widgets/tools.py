@@ -16,6 +16,7 @@ from tomopyui._sharedvars import cuda_import_dict
 from tomopyui.widgets.helpers import import_module_set_env
 from tomopyui.widgets.imports import TwoEnergyUploader
 from tomopyui.widgets.view import BqImViewer_TwoEnergy_High, BqImViewer_TwoEnergy_Low
+from tomopyui.widgets.styles import header_font_style, button_font_style
 
 import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
@@ -36,17 +37,11 @@ class TwoEnergyTool:
         self.metadata = Metadata_TwoE()
 
     def init_widgets(self):
-        self.header_font_style = {
-            "font_size": "22px",
-            "font_weight": "bold",
-            "font_variant": "small-caps",
-        }
-        self.button_font = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
         self.high_e_header = "Shifted High Energy Projections"
-        self.high_e_header = Label(self.high_e_header, style=self.header_font_style)
+        self.high_e_header = Label(self.high_e_header, style=header_font_style)
         self.low_e_header = "Moving Low Energy Projections"
-        self.low_e_header = Label(self.low_e_header, style=self.header_font_style)
+        self.low_e_header = Label(self.low_e_header, style=header_font_style)
         self.high_e_viewer = BqImViewer_TwoEnergy_High()
         self.low_e_viewer = BqImViewer_TwoEnergy_Low(self.high_e_viewer)
         self.low_e_viewer.scale_button.on_click(self.scale_low_e)
@@ -59,7 +54,7 @@ class TwoEnergyTool:
             [
                 VBox(
                     [
-                        self.high_e_uploader.quick_path_label,
+                        widgets.Label("Quick path search:"),
                         HBox(
                             [
                                 self.high_e_uploader.quick_path_search,
@@ -71,7 +66,7 @@ class TwoEnergyTool:
                 ),
                 VBox(
                     [
-                        self.low_e_uploader.quick_path_label,
+                        widgets.Label("Quick path search:"),
                         HBox(
                             [
                                 self.low_e_uploader.quick_path_search,
@@ -250,17 +245,11 @@ class MultiEnergyAlignmentTool:
         self.metadata = Metadata_TwoE()
 
     def init_widgets(self):
-        self.header_font_style = {
-            "font_size": "22px",
-            "font_weight": "bold",
-            "font_variant": "small-caps",
-        }
-        self.button_font = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
         self.high_e_header = "Shifted High Energy Projections"
-        self.high_e_header = Label(self.high_e_header, style=self.header_font_style)
+        self.high_e_header = Label(self.high_e_header, style=header_font_style)
         self.low_e_header = "Moving Low Energy Projections"
-        self.low_e_header = Label(self.low_e_header, style=self.header_font_style)
+        self.low_e_header = Label(self.low_e_header, style=header_font_style)
         self.uploader = HDF5_MultipleEnergyUploader()
         self.high_e_viewer = self.uploader.viewer1
         self.low_e_viewer = self.uploader.viewer2
