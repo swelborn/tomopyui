@@ -9,6 +9,7 @@ from tomopyui.backend.io import Projections_Prenormalized
 from tomopyui.widgets.hdf_viewer import *
 from tomopyui.widgets.helpers import ToggleIconButton
 from tomopyui.widgets.imports import UploaderBase
+from tomopyui.widgets.styles import button_font_style
 
 
 class HDF5_GeneralUploader(UploaderBase):
@@ -43,20 +44,19 @@ class HDF5_GeneralUploader(UploaderBase):
         self.turn_off_callbacks = False
 
     def init_widgets(self):
-        self.button_font = {"font_size": "22px"}
         self.button_layout = Layout(width="45px", height="40px")
         self.files_sel = Select()
         # Go faster on play button
         self.home_button: ipywidgets.Button = Button(
             icon="home",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Speed up play slider.",
         )
         self.reset_button: ipywidgets.Button = Button(
             icon="redo",
             layout=self.button_layout,
-            style=self.button_font,
+            style=button_font_style,
             tooltip="Reset to original.",
         )
         self.tree_output = Output()
