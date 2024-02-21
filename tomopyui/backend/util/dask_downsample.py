@@ -5,37 +5,57 @@
 # TODO: currently, spline filter does not work properly - it is also splining the z axis
 # USE multiple 1d splines
 
-import dask
-import dask.array as da
-import dask_image
-import math
-import numpy as np
-import scipy.ndimage as ndi
-import dask_image.ndfilters
-import dask_image.ndinterp
-import h5py
-import os
 
+import math
+from tomopyui.backend.hdf_manager import (
+    hdf_key_ds,
+)
+from dask.array import core as da_core
+from dask.array import routines as da_rout
+from dask.array import creation as da_create
+from tomopyui.backend.helpers import dask_hist
+from tomopyui.backend.helpers import DaskHistOutput
+from dask_image.ndfilters import gaussian_filter
+from dask_image.ndinterp import spline_filter1d
+import numpy as np
+from typing import Optional
+from tomopyui.backend.hdf_manager import HDFManager
 from numpy.lib import NumpyVersion
 from scipy import __version__ as scipy_version
 from collections.abc import Iterable
 
 
-def pyramid_reduce_gaussian(
-    image,
-    downscale=2,
-    sigma=None,
-    order=3,
-    mode="reflect",
-    cval=0.0,
-    preserve_range=False,
-    channel_axis=0,
-    pyramid_levels=3,
-    h5_filepath=None,
-    compute=False,
-    io_obj=None,
-):
+def _prepare_image(image: da_core.Array, channel_axis: int) -> da_core.Array:
+    """
+    Prepares the image for processing, including rechunking.
 
+    Parameters:
+    - image: dask.array.Array - The input image.
+    - channel_axis: int - The axis that represents color channels.
+
+    Returns:
+    - Prepared dask.array.Array.
+    """
+    if not isinstance(image, da_core.Array):
+        image = da_core.from_array(image, chunks="auto")
+    else:
+        image = image.rechunk(chunks="auto")
+    return image
+
+
+def pyramid_reduce_gaussian(
+    image: Optional[da_core.Array] = None,
+    hdf_manager: Optional["HDFManager"] = None,
+    downscale: int = 2,
+    sigma: Optional[float] = None,
+    order: int = 3,
+    mode: str = "reflect",
+    cval: float = 0.0,
+    preserve_range: bool = False,
+    channel_axis: int = 0,
+    pyramid_levels: int = 3,
+    compute: bool = False,
+) -> Optional[list[da_core.Array]]:
     """
     Wrapper for skimage.transform.pyramid_reduce_gaussian.
 
@@ -57,104 +77,112 @@ def pyramid_reduce_gaussian(
     pyramid_levels: int
         Number of levels to downscale by 2.
     """
-    from tomopyui.backend.io import IOBase
 
-    coarseneds = []
-    hists = []
-    return_da = True
-    downsample_factor = 1
-    if h5_filepath is not None:
-        compute = False
-        return_da = False
-        open_file = h5py.File(h5_filepath, "r+")
-        if IOBase.hdf_key_ds in open_file:
-            del open_file[IOBase.hdf_key_ds]
-    if io_obj is not None:
-        compute = False
-        return_da = False
-        io_obj._open_hdf_file_append()
-        io_obj._delete_downsampled_data()
-        image = io_obj.hdf_file[io_obj.hdf_key_norm_proj]
-        open_file = io_obj.hdf_file
-        h5_filepath = io_obj.filepath
+    # Initialization
+    coarsened_images = []
+    histograms = []
 
-    if compute:
-        return_da = False
-    if not isinstance(image, da.Array):
-        image = da.from_array(image, chunks = "auto")
-    else:
-        image = image.rechunk(chunks="auto")
-    for i in range(pyramid_levels):
-        pad_on_levels = _check_divisible(image, 2)
-        if pad_on_levels is not None:
-            image = da.pad(image, pad_on_levels)
-        filtered = pyramid_reduce(
+    # Delete stuff if it is already there
+    if hdf_manager is None and image is None:
+        return
+
+    data = None
+    if hdf_manager:
+        if hdf_manager.mode != "r+":
+            print("HDF5 file is not open for writing.")
+            return
+        ds_data = hdf_manager.get_ds_data(pyramid_level=0, lazy=True)
+        if ds_data is not None:
+            hdf_manager.delete_ds_data()
+        data = hdf_manager.get_normalized_data(lazy=True)
+
+    image = data if isinstance(data, da_core.Array) else image
+
+    if image is None:
+        print("No image to downsample...")
+        return None
+
+    image = _prepare_image(image, channel_axis)
+    # image.compute()
+
+    # Process pyramid levels
+    for level in range(pyramid_levels):
+        image, hist = _process_pyramid_level(
             image,
-            downscale=downscale,
-            sigma=sigma,
-            order=order,
-            mode=mode,
-            cval=cval,
-            preserve_range=preserve_range,
-            channel_axis=channel_axis,
+            downscale,
+            sigma,
+            order,
+            mode,
+            cval,
+            preserve_range,
+            channel_axis,
+            level,
+            hdf_manager,
         )
-
-        if filtered is None:
+        if image is None:
             break
-        coarsened = da.coarsen(np.mean, filtered, {0: 1, 1: 2, 2: 2}).astype(np.float32)
-        r = [da.min(coarsened), da.max(coarsened)]
-        bins = 200 if coarsened.size > 200 else coarsened.size
-        hist = da.histogram(coarsened, range=r, bins=bins)
-        percentile = da.percentile(coarsened.flatten(), q=(0.5, 99.5))
-        downsample_factor = da.from_array(np.power(2, i + 1))
+        coarsened_images.append(image)
+        histograms.append(hist)
 
-        if h5_filepath is not None:
-
-            subgrp = IOBase.hdf_key_ds + str(i) + "/"
-            r = da.from_array(r)
-            downsample_factor = downsample_factor
-            savedict = {
-                subgrp + IOBase.hdf_key_data: coarsened,
-                subgrp + IOBase.hdf_key_bin_frequency: hist[0],
-                subgrp + IOBase.hdf_key_bin_edges: hist[1],
-                subgrp + IOBase.hdf_key_image_range: r,
-                subgrp + IOBase.hdf_key_percentile: percentile,
-                subgrp + IOBase.hdf_key_ds_factor: downsample_factor,
-            }
-            da.to_hdf5(h5_filepath, savedict)
-            bin_edges = da.from_array(open_file[subgrp + IOBase.hdf_key_bin_edges])
-            bin_centers = da.from_array(
-                [
-                    (bin_edges[i] + bin_edges[i + 1]) / 2
-                    for i in range(len(bin_edges) - 1)
-                ]
-            )
-            da.to_hdf5(h5_filepath, subgrp + IOBase.hdf_key_bin_centers, bin_centers)
-            image = da.from_array(open_file[subgrp + IOBase.hdf_key_data])
-        else:
-            coarseneds.append(coarsened)
-            hists.append(hist)
-    open_file.close()
-
+    # Optionally compute results
     if compute:
-        computed_coarseneds = [coarsened.compute() for coarsened in coarsened]
-        computed_hists = [hist.compute() for hist in hists]
-        return computed_coarseneds, computed_hists
-    elif return_da:
-        return coarseneds, hists
+        coarsened_images = [img.compute() for img in coarsened_images]
+
+    return coarsened_images
+
+
+def _process_pyramid_level(
+    image: da_core.Array,
+    downscale: int,
+    sigma: Optional[float],
+    order: int,
+    mode: str,
+    cval: float,
+    preserve_range: bool,
+    channel_axis: int,
+    level: int,
+    hdf_manager: Optional[HDFManager],
+) -> tuple[Optional[da_core.Array], Optional[DaskHistOutput]]:
+
+    pad_on_levels = _check_divisible(image, 2)
+    if pad_on_levels is not None:
+        image = da_create.pad(image, pad_on_levels)
+    filtered = pyramid_reduce(
+        image,
+        downscale=downscale,
+        sigma=sigma,
+        order=order,
+        mode=mode,
+        cval=cval,
+        preserve_range=preserve_range,
+        channel_axis=channel_axis,
+    )
+
+    if filtered is None:
+        return None, None
+
+    coarsened = da_rout.coarsen(np.mean, filtered, {0: 1, 1: 2, 2: 2}).astype(
+        np.float32
+    )
+    hist_out = dask_hist(coarsened)
+
+    subgrp = hdf_key_ds + str(level) + "/"
+    if hdf_manager:
+        hdf_manager.save_hist_and_data(hist_out, coarsened, subgrp)
+
+    return coarsened, hist_out
 
 
 def pyramid_reduce(
     image,
-    downscale=2,
-    sigma=None,
-    order=3,
-    mode="reflect",
-    cval=0.0,
-    preserve_range=False,
-    channel_axis=0,
-):
-
+    downscale: int = 2,
+    sigma: Optional[float] = None,
+    order: int = 3,
+    mode: str = "reflect",
+    cval: float = 0.0,
+    preserve_range: bool = False,
+    channel_axis: int = 0,
+) -> Optional[da_core.Array]:
     """
     Wrapper for skimage.transform.pyramid_reduce.
 
@@ -200,7 +228,7 @@ def pyramid_reduce(
         return filtered
 
 
-def _check_divisible(arr, factor):
+def _check_divisible(arr: da_core.Array, factor: int):
     shape = arr.shape
     shape_mod = [dim % 2 for dim in shape]
     if any(x != 0 for x in shape_mod):
@@ -217,7 +245,13 @@ def _check_factor(factor):
         raise ValueError("scale factor must be greater than 1")
 
 
-def _smooth(image, sigma, mode, cval, channel_axis):
+def _smooth(
+    image: da_core.Array,
+    sigma: float = 1.0,
+    mode: str = "nearest",
+    cval: float = 0.0,
+    channel_axis: Optional[int] = 0,
+):
     """Return image with each channel smoothed by the Gaussian filter."""
     # apply Gaussian filter to all channels independently
     if channel_axis is not None:
@@ -230,19 +264,24 @@ def _smooth(image, sigma, mode, cval, channel_axis):
     return smoothed
 
 
-def gaussian(image, sigma=1, mode="nearest", cval=0.0, truncate=4.0, channel_axis=0):
+def gaussian(
+    image: da_core.Array,
+    sigma: tuple[float, ...] = 1,
+    mode: str = "nearest",
+    cval: float = 0.0,
+    truncate: float = 4.0,
+    channel_axis: Optional[int] = 0,
+):
     if channel_axis is not None:
         # do not filter across channels
         if len(sigma) == image.ndim - 1:
-            sigma = list(sigma)
-            sigma.insert(channel_axis % image.ndim, 0)
-    return dask_image.ndfilters.gaussian_filter(
-        image, sigma, mode=mode, cval=cval, truncate=truncate
-    )
+            sigma_list = list(sigma)
+            sigma_list.insert(channel_axis % image.ndim, 0)
+    return gaussian_filter(image, sigma_list, mode=mode, cval=cval, truncate=truncate)
 
 
 def resize(
-    image,
+    image: da_core.Array,
     output_shape,
     order=3,
     mode="reflect",
@@ -267,7 +306,7 @@ def resize(
         raise ValueError("anti_aliasing must be False for boolean images")
     factors = np.divide(input_shape, output_shape)
     # Save input value range for clip
-    # img_bounds = [da.min(image), da.max(image)] if clip else None
+    # img_bounds = [da_red.min(image), da.max(image)] if clip else None
     # Translate modes used by np.pad to those used by scipy.ndimage
     ndi_mode = _to_ndimage_mode(mode)
     if NumpyVersion(scipy_version) >= "1.6.0":
@@ -336,8 +375,8 @@ def zoom(
     output_shape = tuple([int(round(ii * jj)) for ii, jj in zip(input.shape, zoom)])
     if prefilter and order > 1:
         padded, npad = _prepad_for_spline_filter(input, mode, cval)
-        filtered = dask_image.ndinterp.spline_filter1d(padded, order, axis=1, mode=mode)
-        filtered = dask_image.ndinterp.spline_filter1d(padded, order, axis=2, mode=mode)
+        filtered = spline_filter1d(padded, order, axis=1, mode=mode)
+        filtered = spline_filter1d(padded, order, axis=2, mode=mode)
     return filtered
 
 
@@ -361,9 +400,9 @@ def _prepad_for_spline_filter(input, mode, cval):
     if mode in ["nearest", "grid-constant"]:
         npad = 12
     if mode == "grid-constant":
-        padded = da.pad(input, npad, mode="constant", constant_values=cval)
+        padded = da_create.pad(input, npad, mode="constant", constant_values=cval)
     elif mode == "nearest":
-        padded = da.pad(input, npad, mode="edge")
+        padded = da_create.pad(input, npad, mode="edge")
     else:
         # other modes have exact boundary conditions implemented so
         # no prepadding is needed
