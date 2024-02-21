@@ -1,6 +1,7 @@
 # General vars intended to be globals.
 from tomopy.recon.algorithm import allowed_recon_kwargs as tomopy_algorithm_kwargs
 
+tomopy_algorithm_kwargs  # keep here to avoid automatic removal of import
 astra_cuda_recon_algorithm_kwargs = {
     "FBP CUDA": False,
     "SIRT CUDA": False,
@@ -33,5 +34,3 @@ tomopy_filter_names = {
 }
 
 cuda_import_dict = {"cupy": "cuda_enabled"}
-
-extend_description_style = {"description_width": "auto", "font_family": "Helvetica"}
