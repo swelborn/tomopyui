@@ -58,7 +58,7 @@ class MultiEnergyProjections(IOBase):
         # Setting the shift values
         ref = Projections_Prenormalized()
         ref.filepath = hdf_for_alignment
-        ref.metadatas = Metadata.get_metadata_hierarchy(
+        ref.metadatas = Metadata.create_metadatas(
             ref.filedir / "alignment_metadata.json"
         )
         for metadata in ref.metadatas:
@@ -87,7 +87,7 @@ class MultiEnergyProjections(IOBase):
             moving = Projections_Prenormalized()
             moving.filepath = folder / "normalized_projections.hdf5"
             moving._load_hdf_normalized_data_into_memory()
-            moving.metadatas = Metadata.get_metadata_hierarchy(
+            moving.metadatas = Metadata.create_metadatas(
                 moving.filedir / "import_metadata.json"
             )
             moving.metadata = moving.metadatas[0]
