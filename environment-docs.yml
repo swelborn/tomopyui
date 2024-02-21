@@ -32,3 +32,4 @@ dependencies:
   - myst-nb
   - pip:
       - bqplot-image-gl
+      - pydantic
