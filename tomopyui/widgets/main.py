@@ -3,14 +3,15 @@ from ipywidgets import *
 from tomopyui.widgets.analysis import Align, Recon
 from tomopyui.widgets.center import Center
 from tomopyui.widgets.dataexplorer import DataExplorerTab
+from tomopyui.widgets.helpers import check_cuda_gpus_with_cupy
 from tomopyui.widgets.imports import (
     Import_ALS832,
     Import_APS,
+    Import_NxTomo,
     Import_SSRL62B,
     Import_SSRL62C,
 )
 from tomopyui.widgets.prep import Prep
-from tomopyui.widgets.helpers import check_cuda_gpus_with_cupy
 
 
 def create_dashboard(institution: str):
@@ -46,6 +47,8 @@ def create_dashboard(institution: str):
         file_import = Import_SSRL62B()
     if institution == "APS":
         file_import = Import_APS()
+    if institution == "nxtomo":
+        file_import = Import_NxTomo()
     prep = Prep(file_import)
     center = Center(file_import)
     align = Align(file_import, center)
