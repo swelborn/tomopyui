@@ -12,7 +12,7 @@ from tomopy.prep.alignment import scale as scale_tomo
 from tomopy.recon import algorithm as tomopy_algorithm
 from tomopy.recon import wrappers
 
-import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
+import tomopyui.gpu.recon.algorithm as tomocupy_algorithm
 from tomopyui.backend.util.padding import *
 from tomopyui.backend.util.registration._phase_cross_correlation_cupy import (
     phase_cross_correlation,

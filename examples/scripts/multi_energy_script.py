@@ -10,8 +10,8 @@ from tomopyui.backend.io import Metadata, Projections_Prenormalized
 
 os.environ["cuda_enabled"] = "True"
 if os.environ["cuda_enabled"] == "True":
-    from tomopyui.tomocupy.prep.alignment import batch_cross_correlation, shift_prj_cp
-    from tomopyui.tomocupy.prep.sampling import shrink_and_pad_projections
+    from tomopyui.gpu.prep.alignment import batch_cross_correlation, shift_prj_cp
+    from tomopyui.gpu.prep.sampling import shrink_and_pad_projections
     from tomopyui.widgets.prep import shift_projections
 
 
