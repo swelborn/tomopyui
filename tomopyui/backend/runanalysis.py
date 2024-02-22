@@ -23,10 +23,10 @@ from tomopyui.widgets.helpers import import_module_set_env
 
 import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
-    import tomopyui.tomocupy.recon.algorithm as tomocupy_algorithm
+    import tomopyui.gpu.recon.algorithm as tomocupy_algorithm
     from tomopyui.widgets.prep import shift_projections
 
-    from ..tomocupy.prep.alignment import align_joint as align_joint_cupy
+    from ..gpu.prep.alignment import align_joint as align_joint_cupy
 
 os.environ["num_cpu_cores"] = str(multiprocessing.cpu_count())
 
