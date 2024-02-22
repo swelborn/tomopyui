@@ -17,8 +17,8 @@ from tomopyui.widgets.view import (
 )
 
 if os.environ["cuda_enabled"] == "True":
-    from ..tomocupy.prep.alignment import shift_prj_cp, batch_cross_correlation
-    from ..tomocupy.prep.sampling import shrink_and_pad_projections
+    from ..gpu.prep.alignment import shift_prj_cp, batch_cross_correlation
+    from ..gpu.prep.sampling import shrink_and_pad_projections
 
 from tomopyui.widgets.styles import header_font_style, button_font_style
 
