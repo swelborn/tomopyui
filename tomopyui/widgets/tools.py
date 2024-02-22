@@ -22,8 +22,8 @@ import_module_set_env(cuda_import_dict)
 if os.environ["cuda_enabled"] == "True":
     from tomopyui.widgets.prep import shift_projections, shift_projections_nopad
 
-    from ..tomocupy.prep.alignment import batch_cross_correlation
-    from ..tomocupy.prep.sampling import shrink_and_pad_projections
+    from ..gpu.prep.alignment import batch_cross_correlation
+    from ..gpu.prep.sampling import shrink_and_pad_projections
 
 
 # Multiple Energy Alignment
