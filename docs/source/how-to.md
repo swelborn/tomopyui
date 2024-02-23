@@ -3,7 +3,7 @@
 For a rendering of the interface, please see {doc}`how-to`.
 
 :::{note}
-This is a tutorial as of v0.1.0.
+You will have to create your own data import widget to get raw data into tomopyui. You can look at the following pull request for prior art here: [#41](https://github.com/swelborn/tomopyui/pull/41)
 :::
 
 ## General Tutorial (latest)
