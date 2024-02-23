@@ -1,19 +1,19 @@
-name: tomopyui_docs
+name: ipywidgets_docs
 channels:
-  - astra-toolbox
   - conda-forge
-  - defaults
+  - nodefaults
 dependencies:
   - python >=3.11,<3.12
-  # build tools
+  # build
   - python-build
   - pip
   - packaging
   - jupyter-packaging
-  # Jupyter ecosystem
   - jupyterlab >=4,<5
+  - nodejs >=18,<19
+  # dependencies
   - jupyter_client
-  # documentation tools
+  # docs
   - docutils >=0.19
   - jupyterlab-myst
   - myst-nb >=0.17,<0.18
@@ -24,31 +24,13 @@ dependencies:
   - sphinx-autodoc-typehints
   - sphinx-copybutton
   - sphinxext-rediraffe
-  - sphinx-panels
-  - sphinx-thebe
-  - sphinx-togglebutton
-  - sphinx-book-theme
-  - sphinx-gallery
-  # demo and visualization
+  # demo
   - bqplot
   - ipykernel
   - ipyleaflet
+  - jupyterlite >=0.1.1,<0.2.0
   - matplotlib-base
   - numpy
   - scikit-image
-  # tomopyui specific
-  - matplotlib
-  - ffmpeg
-  - dask
-  - dask-image
-  - olefile
-  - git
-  - tomopy
-  - dxchange
-  - astropy
-  - ipyfilechooser
-  - ipywidgets
-  - astra-toolbox
-  - numpydoc
-  - pip:
-      - bqplot-image-gl
+  - scikit-learn
+  - sympy
