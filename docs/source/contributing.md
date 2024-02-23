@@ -1,6 +1,6 @@
 # Contributing
 
-Got a feature you would like to see added? Found a bug? This is a v0.0.1 project without a set plan (other than to help you out with your tomography data). You can report an issue by opening one at the [issues](https://github.com/samwelborn/tomopyui/issues) page. You can suggest an edit to the documentation you are reading right now [documentation](#documentation). You can request a new feature, or even make one yourself and submit a pull request.
+Got a feature you would like to see added? Found a bug? This is a v0.0.1 project without a set plan (other than to help you out with your tomography data). You can report an issue by opening one at the [issues](https://github.com/samwelborn/tomopyui/issues) page. You can suggest an edit to the documentation you are reading right now. You can request a new feature, or even make one yourself and submit a pull request.
 
 ## Code Improvements
 
@@ -30,7 +30,3 @@ If you are working in a Jupyter Notebook, then in order to see your code changes
 Using Git/GitHub can be [confusing](https://xkcd.com/1597), so if you're new to Git, you may find it helpful to use a program like [GitHub Desktop](https://desktop.github.com) and to follow a [guide](https://github.com/firstcontributions/first-contributions#first-contributions).
 
 Also feel free to ask for help/advice on the relevant GitHub [issue](https://github.com/samwelborn/tomopyui/issues).
-
-## Documentation
-
-[The documentation you are reading now](https://tomopyui.readthedocs.io) is built with [Sphinx](https://www.sphinx-doc.org). There's plenty to do, and you can help out. If you see something amiss, don't be afraid to suggest an edit (see the GitHub icon at the top of this page).
