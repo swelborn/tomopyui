@@ -14,12 +14,12 @@ dependencies:
   - jupyterlab >=4,<5
   - jupyter_client
   # documentation tools
-  - docutils >=0.19
+  - docutils # Removed version constraint to test compatibility
   - jupyterlab-myst
   - myst-nb >=0.17,<0.18
   - pandoc
   - pydata-sphinx-theme
-  - sphinx >=5,<6
+  - sphinx
   - sphinx-autobuild
   - sphinx-autodoc-typehints
   - sphinx-copybutton

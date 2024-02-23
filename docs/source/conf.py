@@ -1,146 +1,57 @@
 # Configuration file for the Sphinx documentation builder.
-#
-# This file only contains a selection of the most common options. For a full
-# list see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# -- Path setup --------------------------------------------------------------
 
 import inspect
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
 import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
-# import tomopyui
+from packaging.version import Version
 
-try:
-    from tomopyui import __version__ as release
-except ImportError:
-    release = "unknown"
-
+os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
+# Attempt to import tomopyui version, else default to "unknown"
+_release = {}
+exec(
+    compile(
+        open("../../tomopyui/_version.py").read(), "../../tomopyui/_version.py", "exec"
+    ),
+    _release,
+)
+v = Version(_release["__version__"])
+version = f"{v.major}.{v.minor}"
+release = _release["__version__"]
 
 # -- Project information -----------------------------------------------------
 
+master_doc = "index"
 project = "tomopyui"
-copyright = "2022, Samuel Scott Welborn"
+copyright = "2024, Samuel Scott Welborn"
 author = "Samuel Scott Welborn"
+language = "en"
 
-sys.path.insert(0, os.path.abspath("../tomopyui"))
-sys.path.insert(0, os.path.abspath("../tomopyui/widgets/"))
-sys.path.insert(0, os.path.abspath("../tomopyui/backend/"))
-sys.path.insert(0, os.path.abspath("../tomopyui/tomocupy/"))
-sys.path.insert(0, os.path.abspath("."))
-# -- Generate API ------------------------------------------------------------
-api_folder_name = "api"
-shutil.rmtree(api_folder_name, ignore_errors=True)  # in case of new or renamed modules
-subprocess.call(
-    " ".join(
-        [
-            "sphinx-apidoc",
-            f"-o {api_folder_name}/",
-            "--force",
-            "--no-toc",
-            "--templatedir _templates",
-            "--separate",
-            "--implicit-namespaces",
-            "../tomopyui/",
-            # excluded modules
-            "../tomopyui/*/main.py",
-            "../*/main.py",
-            "../tomopyui/*backend*",
-            "../tomopyui/*tomocupy*"
-            # "../*/fft_cucim.py"
-            # "../*/backend/"
-            # "../*/ipyplot.py",
-            # "../*/mpl_kwargs.py",
-            # "../*/xarray_helpers.py",
-            # "../*/tests",
-        ]
-    ),
-    shell=True,
-)
+# -- Sphinx Extensions and Configuration -------------------------------------
 
-
-# -- General configuration ---------------------------------------------------
-
-# Add any Sphinx extension module names here, as strings. They can be
-# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
-# ones.
 extensions = [
-    "jupyter_sphinx",
     "myst_nb",
-    "numpydoc",
-    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
-    "sphinx.ext.linkcode",
     "sphinx.ext.mathjax",
-    "sphinx.ext.napoleon",
+    "sphinx_autodoc_typehints",
     "sphinx_copybutton",
-    "sphinx_panels",
-    "sphinx_thebe",
-    "sphinx_togglebutton",
+    "sphinx.ext.viewcode",
 ]
 
-
-# API settings
-autodoc_default_options = {
-    "members": True,
-    "show-inheritance": True,
-    "undoc-members": True,
-}
-autodoc_mock_imports = ["tqdm", "cupy", "cupyx"]
-add_module_names = False
-napoleon_google_docstring = False
-napoleon_include_private_with_doc = False
-napoleon_include_special_with_doc = False
-napoleon_numpy_docstring = True
-napoleon_use_admonition_for_examples = False
-napoleon_use_admonition_for_notes = False
-napoleon_use_admonition_for_references = False
-napoleon_use_ivar = False
-napoleon_use_param = False
-napoleon_use_rtype = False
-numpydoc_show_class_members = False
-
-# Cross-referencing configuration
-default_role = "py:obj"
-primary_domain = "py"
-nitpicky = True  # warn if cross-references are missing
-
-# Intersphinx settings
+# Intersphinx mapping to link to the documentation of other projects
 intersphinx_mapping = {
-    "tomopy": ("https://tomopy.readthedocs.io/en/latest/", None),
-    "mpl-interactions": ("https://mpl-interactions.readthedocs.io/en/stable/", None),
-    "ipywidgets": ("https://ipywidgets.readthedocs.io/en/latest/", None),
-    "matplotlib": ("https://matplotlib.org/stable", None),
-    "numpy": ("https://numpy.org/doc/stable", None),
     "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable", None),
+    "matplotlib": ("https://matplotlib.org/stable", None),
+    "ipywidgets": ("https://ipywidgets.readthedocs.io/en/latest/", None),
+    "tomopy": ("https://tomopy.readthedocs.io/en/latest/", None),
 }
 
-# remove panels css to get wider main content
-panels_add_bootstrap_css = False
-
-# Settings for copybutton
-copybutton_prompt_is_regexp = True
-copybutton_prompt_text = r">>> |\.\.\. "  # doctest
-
-# Settings for linkcheck
-linkcheck_anchors = False
-linkcheck_ignore = []  # type: ignore
-
-execution_timeout = -1
-jupyter_execute_notebooks = "off"
-if "EXECUTE_NB" in os.environ:
-    print("\033[93;1mWill run Jupyter notebooks!\033[0m")
-    jupyter_execute_notebooks = "force"
-
-# Settings for myst-parser
+# MyST-NB settings for Jupyter notebook documentation
 myst_enable_extensions = [
     "amsmath",
     "colon_fence",
@@ -148,102 +59,57 @@ myst_enable_extensions = [
     "smartquotes",
     "substitution",
 ]
-suppress_warnings = [
-    "myst.header",
-]
 
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+nb_execution_mode = "cache"
 
-# List of patterns, relative to source directory, that match files and
-# directories to ignore when looking for source files.
-# This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = [
-    "**ipynb_checkpoints",
-    ".DS_Store",
-    "Thumbs.db",
-    "_build",
-]
+# -- HTML output --------------------------------------------------------------
 
-
-# -- Options for HTML output -------------------------------------------------
-
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-#
-html_copy_source = True  # needed for download notebook button
-html_css_files = [
-    "custom.css",
-]
-html_sourcelink_suffix = ""
+html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
-html_theme = "sphinx_book_theme"
+htmlhelp_basename = "tomopyuidoc"
 html_theme_options = {
-    "launch_buttons": {
-        "binderhub_url": "https://mybinder.org",
-        "colab_url": "https://colab.research.google.com",
-        "notebook_interface": "jupyterlab",
-        "thebe": True,
-        "thebelab": True,
-    },
-    "path_to_docs": "docs",
-    "repository_branch": "main",
-    "repository_url": "https://github.com/samwelborn/tomopyui",
-    "use_download_button": True,
+    "icon_links": [
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/tomopyui",
+            "icon": "fa-solid fa-box",
+        }
+    ],
     "use_edit_page_button": True,
-    "use_issues_button": True,
-    "use_repository_button": True,
-    "logo_only": True,
+    "github_url": "https://github.com/swelborn/tomopyui",
+    "navbar_end": [
+        # disabled until widget dark variables are available
+        # "theme-switcher",
+        "navbar-icon-links",
+    ],
 }
-html_title = "tomopyui"
+
+
+# html_theme_options = {
+#     "repository_url": "https://github.com/samwelborn/tomopyui",
+#     "use_edit_page_button": True,
+#     "use_repository_button": True,
+#     "use_issues_button": True,
+#     "path_to_docs": "docs",
+# }
+
+html_context = {
+    # disabled until widget dark variables are available
+    "default_mode": "light",
+    "doc_path": "docs",
+    "github_repo": "tomopyui",
+    "github_user": "swelborn",
+    "github_version": "main",
+}
+
 html_logo = "_static/images/logo.png"
 html_favicon = "_static/images/tomopy-favicon.svg"
-master_doc = "index"
-thebe_config = {
-    "repository_url": html_theme_options["repository_url"],
-    "repository_branch": html_theme_options["repository_branch"],
-}
+html_title = "tomopyui"
+templates_path = ["_templates"]
 
 
-# based on pandas/doc/source/conf.py
-def linkcode_resolve(domain, info):
-    """
-    Determine the URL corresponding to Python object
-    """
-    if domain != "py":
-        return None
-
-    modname = info["module"]
-    fullname = info["fullname"]
-
-    submod = sys.modules.get(modname)
-    if submod is None:
-        return None
-
-    obj = submod
-    for part in fullname.split("."):
-        try:
-            obj = getattr(obj, part)
-        except AttributeError:
-            return None
-
-    try:
-        fn = inspect.getsourcefile(inspect.unwrap(obj))
-    except TypeError:
-        fn = None
-    if not fn:
-        return None
-
-    try:
-        source, lineno = inspect.getsourcelines(obj)
-    except OSError:
-        lineno = None
-
-    if lineno:
-        linespec = f"#L{lineno}-L{lineno + len(source) - 1}"
-    else:
-        linespec = ""
-
-    fn = os.path.relpath(fn, start=os.path.dirname("../tomopyui"))
-
-    return f"https://github.com/samwelborn/tomopyui/blob/main/tomopyui/{fn}{linespec}"  # noqa
+# Define any other necessary functions
+epub_title = project
+epub_author = author
+epub_publisher = author
+epub_copyright = copyright
