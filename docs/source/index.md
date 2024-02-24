@@ -29,6 +29,5 @@ This application was developed at the Stanford Synchrotron Radiation Lightsource
 install
 usage
 how-to
-howitworks
 contributing
 ```
