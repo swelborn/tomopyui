@@ -331,6 +331,11 @@ def simulate_projections(rec, sim, center, theta, progress=None):
     for batch in range(len(rec)):
         # for batch in tnrange(len(rec), desc="Re-projection", leave=True):
         _rec = rec[batch]
+        if _rec.size == 0:
+            continue
+        if min(_rec.shape) <= 0:
+            continue
+
         vol_geom = astra.create_vol_geom(_rec.shape[1], _rec.shape[1], _rec.shape[0])
         phantom_id = astra.data3d.create("-vol", vol_geom, data=_rec)
         proj_geom = astra.create_proj_geom(
