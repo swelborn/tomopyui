@@ -34,6 +34,12 @@ Once you import your data, you can check it out and save a movie of it:
   <source src="_static/videos/center.mp4" type="video/mp4">
 </video>
 
+Multiple centers of rotation (tilted axis):
+
+<video controls width="100%">
+  <source src="_static/videos/center-multiple.webm" type="video/webm">
+</video>
+
 ## Alignment (with CUDA)
 
 <video controls width="100%">
