@@ -20,5 +20,6 @@ dependencies:
   - ipywidgets
   - astra-toolbox
   - bqplot
+  - numpy>=1.20,<2
   - pip:
       - bqplot-image-gl
