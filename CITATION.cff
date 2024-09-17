@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: 'If you use this software, please cite it using the following metadata.'
+title: 'TomoPyUI'
+version: '1.0.0'
+authors:
+  - family-names: 'Welborn'
+    given-names: 'Samuel S.'
+  - family-names: 'Preefer'
+    given-names: 'Molleigh B.'
+  - family-names: 'Nelson Weker'
+    given-names: 'Johanna'
+affiliation: 'SLAC National Accelerator Laboratory'
+date-released: 2024-07-01
+url: 'https://github.com/swelborn/TomoPyUI'
+repository-code: 'https://github.com/swelborn/TomoPyUI'
+license: 'MIT'
+doi: '10.1107/S1600577524003989'
+keywords:
+  - TomoPyUI
+  - computed tomography
+  - alignment
+  - reconstruction
+  - TomoPy
+  - Jupyter
+references:
+  - type: article
+    authors:
+      - family-names: 'Welborn'
+        given-names: 'Samuel S.'
+      - family-names: 'Preefer'
+        given-names: 'Molleigh B.'
+      - family-names: 'Nelson Weker'
+        given-names: 'Johanna'
+    title: 'TomoPyUI: a user-friendly tool for rapid tomography alignment and reconstruction'
+    journal: 'Journal of Synchrotron Radiation'
+    year: 2024
+    volume: 31
+    number: 4
+    month: Jul
+    doi: '10.1107/S1600577524003989'
+    url: 'https://doi.org/10.1107/S1600577524003989'
+    keywords:
+      - TomoPyUI
+      - computed tomography
+      - alignment
+      - reconstruction
+      - TomoPy
+      - Jupyter
