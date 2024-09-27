@@ -1,10 +1,10 @@
 import copy
 import datetime
 import json
+import multiprocessing
 import os
 import pathlib
 import re
-import multiprocessing
 import time
 from abc import ABC, abstractmethod
 
@@ -12,6 +12,7 @@ import dask
 import dask.array as da
 import dask_image.imread
 import dxchange
+import dxchange.reader as dxreader
 import h5py
 import numpy as np
 import olefile
@@ -1947,18 +1948,83 @@ class RawProjectionsHDF5_ALS832(RawProjectionsBase):
         self._check_downsampled_data(label=Uploader.import_status_label)
 
 
-class RawProjectionsHDF5_APS(RawProjectionsHDF5_ALS832):
-    """
-    See RawProjectionsHDF5_ALS832 superclass description.
-    # Francesco: you may need to edit here.
-    """
+class RawProjections_APS32ID(RawProjectionsBase):
 
     def __init__(self):
         super().__init__()
-        self.metadata = Metadata_APS_Raw()
+        self.allowed_extensions = [".hdf5, .h5"]
+        self.metadata = Metadata_APS32ID()
+
+    def import_filedir_all(self, filedir):
+        pass
+
+    def import_filedir_projections(self, filedir):
+        pass
+
+    def import_filedir_flats(self, filedir):
+        pass
+
+    def import_filedir_darks(self, filedir):
+        pass
+
+    def import_file_all(self, Uploader):
+        self.import_status_label = Uploader.import_status_label
+        self.tic = time.perf_counter()
+        self.filedir = Uploader.filedir
+        self.filename = Uploader.filename
+        self.filepath = self.filedir / self.filename
+        self.metadata = Uploader.reset_metadata_to()
+        self.metadata.load_metadata_h5(self.filepath)
+        self.metadata.set_attributes_from_metadata(self)
+        self.import_status_label.value = "Importing"
+        self._data, self.flats, self.darks, self.angles_theta = dxchange.read_aps_32id(
+            str(self.filepath)
+        )
+        self.data = self._data
+        self.metadata.set_metadata(self)
+        self.metadata.save_metadata()
+        self.imported = True
+        self.make_import_savedir("tomopyui-" + str(self.filepath.stem))
+        self.import_status_label.value = "Normalizing"
+
+        # Here is the normaliation. You can adjust this depending on what
+        # you do for normalization.
+        self.normalize()
+        if self._data is not None:
+            self._data[self._data < 0] = 0.0
+            self._data[np.isnan(self._data)] = 0.0
+            self._data[np.isinf(self._data)] = 0.0
+        self.data = self._data
+        self.data = da.from_array(self.data, chunks={0: "auto", 1: -1, 2: -1})
+        self.import_status_label.value = "Saving metadata."
+        self.save_data_and_metadata(Uploader)
+        self.data_hierarchy_level = 1
+        self.metadata.set_metadata(self)
+        self.metadata.filedir = self.import_savedir
+        self.metadata.filename = "import_metadata.json"
+        self.metadata.save_metadata()
+        self._close_hdf_file()
+
+    def import_metadata(self, filepath=None):
+        if filepath is None:
+            filepath = self.filepath
+        self.metadata.load_metadata_h5(filepath)
+        self.metadata.set_attributes_from_metadata(self)
+
+    def import_file_projections(self, filepath):
+        pass
+
+    def import_file_flats(self, filepath):
+        pass
+
+    def import_file_darks(self, filepath):
+        pass
+
+    def import_file_angles(self, filepath):
+        pass
 
     def save_normalized_metadata(self, import_time=None, parent_metadata=None):
-        metadata = Metadata_APS_Prenorm()
+        metadata = Metadata_APS32ID_Prenorm()
         metadata.filedir = self.filedir
         metadata.metadata = parent_metadata.copy()
         if parent_metadata is not None:
@@ -1968,6 +2034,25 @@ class RawProjectionsHDF5_APS(RawProjectionsHDF5_ALS832):
         metadata.set_metadata(self)
         metadata.save_metadata()
         return metadata
+
+    def save_data_and_metadata(self, Uploader):
+        """
+        Saves current data and metadata in import_savedir.
+        """
+        self.filedir = self.import_savedir
+        self._dask_hist_and_save_data()
+        self.saved_as_tiff = False
+        _metadata = self.metadata.metadata.copy()
+        if Uploader.save_tiff_on_import_checkbox.value:
+            Uploader.import_status_label.value = "Saving projections as .tiff."
+            self.saved_as_tiff = True
+            self.save_normalized_as_tiff()
+            self.metadata.metadata["saved_as_tiff"] = True
+        self.metadata.filedir = self.filedir
+        self.toc = time.perf_counter()
+        self.metadata = self.save_normalized_metadata(self.toc - self.tic, _metadata)
+        Uploader.import_status_label.value = "Checking for downsampled data."
+        self._check_downsampled_data(label=Uploader.import_status_label)
 
 
 class Metadata(ABC):
@@ -2065,6 +2150,12 @@ class Metadata(ABC):
             metadata_instance = Metadata_ALS_832_Prenorm()
         if metadata["metadata_type"] == "ALS832_Raw":
             metadata_instance = Metadata_ALS_832_Raw()
+
+        # APS Beamlines
+        if metadata["metadata_type"] == "aps32id_raw":
+            metadata_instance = Metadata_APS32ID()
+        if metadata["metadata_type"] == "aps32id_prenorm":
+            metadata_instance = Metadata_APS32ID_Prenorm()
 
         # Metadata through rest of processing pipeline
         if metadata["metadata_type"] == "Prep":
@@ -3440,102 +3531,103 @@ class Metadata_ALS_832_Prenorm(Metadata_ALS_832_Raw):
         self.metadata_vbox = Output()
 
 
-class Metadata_APS_Raw(Metadata):
-    # Francesco: you will need to edit here.
+class Metadata_APS32ID(Metadata):
     def __init__(self):
         super().__init__()
         self.filename = "raw_metadata.json"
-        self.metadata["metadata_type"] = "APS_Raw"
+        self.metadata["metadata_type"] = "aps32id_raw"
         self.metadata["data_hierarchy_level"] = 0
-        self.table_label.value = "APS Metadata"
+        self.table_label.value = "APS32-ID Metadata"
+
+    def load_metadata_h5(self, filepath):
+        num_angles = None
+        first_data_frame = None
+        first_dark_frame = None
+        first_flat_frame = None
+        px_size_x = None
+        px_size_y = None
+
+        with h5py.File(filepath, "r") as f:
+            # num_angles = f["/process/acquisition/rotation/num_angles"]
+            first_data_frame = f["/exchange/data"][0]
+            first_dark_frame = f["/exchange/data_dark"][0]
+            first_flat_frame = f["/exchange/data_white"][0]
+            theta = f["/exchange/theta"][...]
+            num_angles = len(theta)
+            px_size_x = float(
+                f["/measurement/instrument/detector/actual_pixel_size_x"][...]
+            )
+
+        first_data_shape = first_data_frame.shape
+        first_flat_shape = first_flat_frame.shape
+        first_dark_shape = first_dark_frame.shape
+
+        if first_data_shape != first_flat_shape or first_data_shape != first_dark_shape:
+            raise ValueError("Data, darks, and flats are not the same shape.")
+
+        if first_data_frame is None:
+            raise ValueError("No projections found in the file.")
+
+        if not isinstance(first_data_frame, np.ndarray):
+            raise ValueError("Frames are not numpy arrays.")
+
+        self.filedir = filepath.parent
+        self.filepath = filepath
+
+        # You can customize these, but you will need the pixels in X/Y, plus
+        # the flats locations for normalize_nf (tomopy's version of normalization).
+        # You also need the angles...
+        self.metadata["flats_locations"] = []
+        self.metadata["darks_locations"] = []
+        self.metadata["pxY"] = first_data_shape[0]
+        self.metadata["pxX"] = first_data_shape[1]
+        self.metadata["pxZ"] = num_angles
+        self.metadata["pxsize"] = px_size_x
+        self.metadata["px_size_units"] = "um"
+        # left this in in case you would like to add it
+        # self.metadata["energy_float"] = float(scan.energy) if scan.energy else 8.0
+        # self.metadata["kev"] = self.metadata["energy_float"]
+        # self.metadata["energy_str"] = str(self.metadata["energy_float"])
+        # self.metadata["energy_units"] = "keV"
+        # proj_keys = list(scan.projections.keys())
+        self.metadata["angles_deg"] = theta
+        self.metadata["angles_rad"] = angle_maker(
+            len(self.metadata["angles_deg"]),
+            self.metadata["angles_deg"][0],
+            self.metadata["angles_deg"][-1],
+        )
 
     def set_metadata(self, projections):
         """
         Sets metadata from the APS h5 filetype
         """
-        self.metadata["numslices"] = projections.pxY
-        self.metadata["numrays"] = projections.pxX
-        self.metadata["num_angles"] = projections.pxZ
+        self.metadata["pxX"] = projections.pxX
+        self.metadata["pxY"] = projections.pxY
+        self.metadata["pxZ"] = projections.pxZ
         self.metadata["pxsize"] = projections.px_size
-        self.metadata["px_size_units"] = "cm"
-        self.metadata["propagation_dist"] = projections.propagation_dist
-        self.metadata["propagation_dist_units"] = "mm"
-        self.metadata["angularrange"] = projections.angular_range
-        self.metadata["kev"] = projections.energy
-        self.metadata["energy_units"] = "keV"
+        self.metadata["px_size_units"] = "um"
+        # if projections.energy is not None:
+        #     self.metadata["kev"] = projections.energy
+        #     self.metadata["energy_units"] = "keV"
+        # else:
+        #     self.metadata["kev"] = 8000.0
+        #     self.metadata["energy_units"] = "keV"
         if projections.angles_deg is not None:
             self.metadata["angles_deg"] = list(projections.angles_deg)
             self.metadata["angles_rad"] = list(projections.angles_rad)
 
     def set_attributes_from_metadata(self, projections):
-        projections.pxY = self.metadata["numslices"]
-        projections.pxX = self.metadata["numrays"]
-        projections.pxZ = self.metadata["num_angles"]
+        projections.pxX = self.metadata["pxX"]
+        projections.pxY = self.metadata["pxY"]
+        projections.pxZ = self.metadata["pxZ"]
         projections.px_size = self.metadata["pxsize"]
         projections.px_size_units = self.metadata["px_size_units"]
-        projections.propagation_dist = self.metadata["propagation_dist"]
-        projections.propagation_dist_units = "mm"
-        projections.angular_range = self.metadata["angularrange"]
-        projections.energy = self.metadata["kev"]
-        projections.units = self.metadata["energy_units"]
+        # projections.energy = self.metadata["kev"]
+        projections.angles_rad = self.metadata["angles_rad"]
+        projections.angles_deg = self.metadata["angles_deg"]
+        # projections.flats_ind = self.metadata["flats_locations"]
 
-    def load_metadata_h5(self, h5_filepath):
-        """
-        Loads in metadata from h5 file. You can probably use your dxchange function
-        to read all the metadata in at once. Not sure how it works for you.
-
-        The keys in the self.metadata dictionary can be whatever you want, as long as
-        your set_attributes_from_metadata function above sets the values correctly.
-        """
-        # set metadata filepath to the filepath above
-        self.filedir = h5_filepath.parent
-        self.filepath = h5_filepath
-
-        # Here you will set your metadata. I have left these here from the ALS metadata
-        # class for reference. Some things are not inside the metadata (i.e.
-        # "energy_units") that I set manually.
-        self.metadata["pxY"] = int(
-            dxchange.read_hdf5(
-                h5_filepath, "/measurement/instrument/detector/dimension_y"
-            )[0]
-        )
-        self.metadata["numslices"] = self.metadata["pxY"]
-        self.metadata["pxX"] = int(
-            dxchange.read_hdf5(
-                h5_filepath, "/measurement/instrument/detector/dimension_x"
-            )[0]
-        )
-        self.metadata["numrays"] = self.metadata["pxX"]
-        self.metadata["pxZ"] = int(
-            dxchange.read_hdf5(h5_filepath, "/process/acquisition/rotation/num_angles")[
-                0
-            ]
-        )
-        self.metadata["num_angles"] = self.metadata["pxZ"]
-        self.metadata["pxsize"] = (
-            dxchange.read_hdf5(
-                h5_filepath, "/measurement/instrument/detector/pixel_size"
-            )[0]
-            / 10.0
-        )  # /10 to convert units from mm to cm
-        self.metadata["px_size_units"] = "cm"
-        self.metadata["propagation_dist"] = dxchange.read_hdf5(
-            h5_filepath,
-            "/measurement/instrument/camera_motor_stack/setup/camera_distance",
-        )[1]
-        self.metadata["energy_float"] = (
-            dxchange.read_hdf5(
-                h5_filepath, "/measurement/instrument/monochromator/energy"
-            )[0]
-            / 1000
-        )
-        self.metadata["kev"] = self.metadata["energy_float"]
-        self.metadata["energy_str"] = str(self.metadata["energy_float"])
-        self.metadata["energy_units"] = "keV"
-        self.metadata["angularrange"] = dxchange.read_hdf5(
-            h5_filepath, "/process/acquisition/rotation/range"
-        )[0]
-
+    # You can customize the metadata display here.
     def metadata_to_DataFrame(self):
 
         # create headers and data for table
@@ -3547,23 +3639,19 @@ class Metadata_APS_Raw(Metadata):
         middle_headers.append(["X Pixels", "Y Pixels", "Num. θ"])
         data.append(
             [
-                self.metadata["numrays"],
-                self.metadata["numslices"],
-                self.metadata["num_angles"],
+                self.metadata["pxX"],
+                self.metadata["pxY"],
+                self.metadata["pxZ"],
             ]
         )
 
-        top_headers.append(["Experiment Settings"])
-        middle_headers.append(
-            ["Energy (keV)", "Propagation Distance (mm)", "Angular range (deg)"]
-        )
-        data.append(
-            [
-                self.metadata["kev"],
-                self.metadata["propagation_dist"],
-                self.metadata["angularrange"],
-            ]
-        )
+        # top_headers.append(["Experiment Settings"])
+        # middle_headers.append(["Energy (keV)"])
+        # data.append(
+        #     [
+        #         self.metadata["kev"],
+        #     ]
+        # )
 
         # create dataframe with the above settings
         df = pd.DataFrame(
@@ -3582,13 +3670,11 @@ class Metadata_APS_Raw(Metadata):
                 )
                 df = df.join(newdf)
 
-        # set datatable styles
         s = df.style.hide(axis="index")
         s.set_table_styles(
             {
-                ("Experiment Settings", "Energy (keV)"): [
+                "Image Information": [
                     {"selector": "td", "props": "border-left: 1px solid white"},
-                    {"selector": "th", "props": "border-left: 1px solid white"},
                 ],
             },
             overwrite=False,
@@ -3610,27 +3696,11 @@ class Metadata_APS_Raw(Metadata):
         self.dataframe = s
 
 
-class Metadata_APS_Prenorm(Metadata_APS_Raw):
-    """
-    Prenormalized metadata class. The table produced by this function may look nearly
-    the same for you. For the SSRL version, it looks very different because there is a
-    lot of excess information that I store in the SSRL raw metadata file.
-
-    It is important to have this because "import_metadata.json" will be stored in a
-    subfolder of the parent, raw data.
-
-    Because the APS prenormalized metadata table looks identical to the raw metadata
-    table, I overloaded the create_metadata_box() function to be just an Output widget.
-
-    You can get as fancy as you want with this.
-
-    # Francesco: you will need to edit here.
-    """
-
+class Metadata_APS32ID_Prenorm(Metadata_APS32ID):
     def __init__(self):
         super().__init__()
         self.filename = "import_metadata.json"
-        self.metadata["metadata_type"] = "APS_Normalized"
+        self.metadata["metadata_type"] = "aps32id_prenorm"
         self.metadata["data_hierarchy_level"] = 1
         self.data_hierarchy_level = self.metadata["data_hierarchy_level"]
         self.table_label.value = ""
@@ -3638,17 +3708,19 @@ class Metadata_APS_Prenorm(Metadata_APS_Raw):
     def set_metadata(self, projections):
         super().set_metadata(projections)
         self.filename = "import_metadata.json"
-        self.metadata["metadata_type"] = "ALS832_Normalized"
+        self.metadata["metadata_type"] = "aps32id_prenorm"
+        # set to 1
         self.metadata["data_hierarchy_level"] = 1
 
+    # You can again change this. Some of them might not be accurate here, so double check...
     def set_attributes_from_metadata(self, projections):
-        projections.pxY = self.metadata["numslices"]
-        projections.pxX = self.metadata["numrays"]
-        projections.pxZ = self.metadata["num_angles"]
+        projections.pxY = self.metadata["pxX"]
+        projections.pxX = self.metadata["pxY"]
+        projections.pxZ = self.metadata["pxZ"]
         projections.px_size = self.metadata["pxsize"]
         projections.px_size_units = self.metadata["px_size_units"]
-        projections.energy = self.metadata["kev"] / 1000
-        projections.units = "eV"
+        # projections.energy = self.metadata["kev"] * 1000
+        # projections.units = "eV"
         projections.angles_deg = self.metadata["angles_deg"]
         projections.angles_rad = self.metadata["angles_rad"]
         projections.angle_start = projections.angles_rad[0]
